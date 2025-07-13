@@ -33,10 +33,23 @@ class Type(Enum):
     DATA_SOURCE = 'dataSource'
 
 
+class Parameter(BaseModel):
+    model_config = ConfigDict(extra='allow', populate_by_name=True)
+    name: str
+    value: str
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode='json')
+
+    @staticmethod
+    def from_dict(obj) -> 'Parameter':
+        return Parameter.model_validate(obj, from_attributes=False)
+
+
 class DataTypeMappingItem(BaseModel):
     model_config = ConfigDict(extra='allow', populate_by_name=True)
-    sourceType: Optional[str] = None
-    targetType: Optional[str] = None
+    sourceType: str
+    targetType: str
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode='json')
@@ -50,10 +63,15 @@ class DataSource(BaseModel):
     model_config = ConfigDict(extra='allow', populate_by_name=True)
     name: Optional[str] = None
     displayName: Optional[str] = None
-    purpose: Optional[str] = None
+    description: Optional[str] = None
+    tags: Optional[List[str]] = None
+    parameters: Optional[List[Parameter]] = None
     type: Optional[str] = None
     connectionString: Optional[str] = None
-    dataTypeMapping: Optional[List[DataTypeMappingItem]] = None
+    dataTypeMapping: Optional[List[DataTypeMappingItem]] = Field(
+        None,
+        description='Optional data type mappings. If not specified, uses defaults from DataSourceTypes. Individual mappings override defaults.',
+    )
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode='json')

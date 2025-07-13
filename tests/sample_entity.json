@@ -1,0 +1,84 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oraylis/datam8-model/refs/heads/main/schema/ModelDataEntity.json",
+  "type": "entity",
+  "entity": {
+    "name": "Customer",
+    "displayName": "Customer Entity",
+    "description": "Core customer information entity",
+    "tags": ["customer", "core", "business"],
+    "parameters": [
+      {
+        "name": "scd_type",
+        "value": "SCD2"
+      },
+      {
+        "name": "retention_days",
+        "value": "2555"
+      }
+    ],
+    "attribute": [
+      {
+        "name": "customer_id",
+        "displayName": "Customer ID",
+        "description": "Unique customer identifier",
+        "dataType": "int",
+        "nullable": false,
+        "tags": ["business_key"],
+        "history": "BK"
+      },
+      {
+        "name": "customer_name",
+        "displayName": "Customer Name",
+        "description": "Full customer name",
+        "dataType": "string",
+        "charLength": 255,
+        "nullable": false,
+        "tags": ["personal_data"],
+        "history": "SCD2"
+      },
+      {
+        "name": "email",
+        "displayName": "Email Address",
+        "description": "Customer email address",
+        "attributeType": "EMail",
+        "dataType": "string",
+        "charLength": 256,
+        "nullable": true,
+        "tags": ["contact", "personal_data"],
+        "history": "SCD1"
+      }
+    ]
+  },
+  "functions": {
+    "trigger": {
+      "mode": "schedule"
+    },
+    "load": {
+      "mode": "incremental"
+    },
+    "store": {
+      "mode": "history"
+    },
+    "sources": [
+      {
+        "type": "source",
+        "dataSource": "CRM_Database",
+        "sourceLocation": "customers",
+        "mapping": [
+          {
+            "sourceName": "id",
+            "name": "customer_id"
+          },
+          {
+            "sourceName": "full_name",
+            "name": "customer_name"
+          },
+          {
+            "sourceName": "email_address",
+            "name": "email"
+          }
+        ]
+      }
+    ]
+  }
+}

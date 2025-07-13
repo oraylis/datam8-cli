@@ -23,36 +23,24 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 from __future__ import annotations
 
+from typing import Optional
+
 from pydantic import BaseModel, ConfigDict, Field
-
-
-class AreaTypes(BaseModel):
-    model_config = ConfigDict(extra='allow', populate_by_name=True)
-    Raw: str
-    Stage: str
-    Core: str
-    Curated: str
-    Diagram: str
-
-    def to_dict(self) -> dict:
-        return self.model_dump(by_alias=True, exclude_unset=True, mode='json')
-
-    @staticmethod
-    def from_dict(obj) -> 'AreaTypes':
-        return AreaTypes.model_validate(obj, from_attributes=False)
 
 
 class Model(BaseModel):
     model_config = ConfigDict(extra='allow', populate_by_name=True)
+    field_schema: Optional[str] = Field(None, alias='$schema')
+    schemaVersion: str = Field(
+        ..., description='Version of the schema for validation and migration support'
+    )
+    modelPath: str = Field(
+        ..., description='Root path for model entities, replacing zone-specific paths'
+    )
     basePath: str
-    rawPath: str
-    stagingPath: str
-    corePath: str
-    curatedPath: str
     generatePath: str
     diagramPath: str
     outputPath: str
-    AreaTypes_1: AreaTypes = Field(..., alias='AreaTypes')
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode='json')

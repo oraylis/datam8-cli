@@ -1,0 +1,68 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oraylis/datam8-model/refs/heads/main/schema/DataSourceTypes.json",
+  "type": "dataSourceTypes",
+  "sourceTypes": [
+    {
+      "name": "SqlDataSource",
+      "displayName": "SQL Database",
+      "description": "Traditional SQL database connection",
+      "dataTypeMapping": [
+        {
+          "sourceType": "varchar",
+          "targetType": "string"
+        },
+        {
+          "sourceType": "int",
+          "targetType": "integer"
+        },
+        {
+          "sourceType": "datetime",
+          "targetType": "timestamp"
+        }
+      ],
+      "connectionProperties": [
+        {
+          "name": "connectionString",
+          "required": true,
+          "description": "SQL connection string"
+        },
+        {
+          "name": "timeout",
+          "required": false,
+          "description": "Connection timeout in seconds"
+        }
+      ]
+    },
+    {
+      "name": "LakeSource",
+      "displayName": "Data Lake Source",
+      "description": "Data lake file-based source",
+      "dataTypeMapping": [
+        {
+          "sourceType": "string",
+          "targetType": "string"
+        },
+        {
+          "sourceType": "long",
+          "targetType": "bigint"
+        },
+        {
+          "sourceType": "timestamp",
+          "targetType": "timestamp"
+        }
+      ],
+      "connectionProperties": [
+        {
+          "name": "path",
+          "required": true,
+          "description": "Path to data lake location"
+        },
+        {
+          "name": "format",
+          "required": true,
+          "description": "File format (parquet, delta, json, etc.)"
+        }
+      ]
+    }
+  ]
+}

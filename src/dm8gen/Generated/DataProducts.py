@@ -33,12 +33,26 @@ class Type(Enum):
     DATA_PRODUCT = 'dataProduct'
 
 
+class Parameter(BaseModel):
+    model_config = ConfigDict(extra='allow', populate_by_name=True)
+    name: str
+    value: str
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode='json')
+
+    @staticmethod
+    def from_dict(obj) -> 'Parameter':
+        return Parameter.model_validate(obj, from_attributes=False)
+
+
 class DataModule(BaseModel):
     model_config = ConfigDict(extra='allow', populate_by_name=True)
     name: Optional[str] = None
     displayName: Optional[str] = None
-    purpose: Optional[str] = None
-    explanation: Optional[str] = None
+    description: Optional[str] = None
+    tags: Optional[List[str]] = None
+    parameters: Optional[List[Parameter]] = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode='json')
@@ -52,8 +66,9 @@ class DataProduct(BaseModel):
     model_config = ConfigDict(extra='allow', populate_by_name=True)
     name: Optional[str] = None
     displayName: Optional[str] = None
-    purpose: Optional[str] = None
-    explanation: Optional[str] = None
+    description: Optional[str] = None
+    tags: Optional[List[str]] = None
+    parameters: Optional[List[Parameter]] = None
     module: Optional[List[DataModule]] = None
 
     def to_dict(self) -> dict:

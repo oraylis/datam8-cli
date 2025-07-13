@@ -1,0 +1,24 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oraylis/datam8-model/refs/heads/main/schema/Zones.json",
+  "type": "zones",
+  "zones": [
+    {
+      "name": "Raw",
+      "targeName": "Bronze",
+      "displayName": "Raw Data Layer",
+      "localFolderName": "010-Raw"
+    },
+    {
+      "name": "Core",
+      "targeName": "Silver",
+      "displayName": "Core Business Layer",
+      "localFolderName": "020-Core"
+    },
+    {
+      "name": "Curated",
+      "targeName": "Gold",
+      "displayName": "Curated Analytics Layer",
+      "localFolderName": "030-Curated"
+    }
+  ]
+}

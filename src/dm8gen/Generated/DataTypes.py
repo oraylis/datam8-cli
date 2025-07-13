@@ -33,11 +33,26 @@ class Type(Enum):
     DATA_TYPE = 'dataType'
 
 
+class Parameter(BaseModel):
+    model_config = ConfigDict(extra='allow', populate_by_name=True)
+    name: str
+    value: str
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode='json')
+
+    @staticmethod
+    def from_dict(obj) -> 'Parameter':
+        return Parameter.model_validate(obj, from_attributes=False)
+
+
 class DataType(BaseModel):
     model_config = ConfigDict(extra='allow', populate_by_name=True)
     name: str
     displayName: Optional[str] = None
-    purpose: Optional[str] = None
+    description: Optional[str] = None
+    tags: Optional[List[str]] = None
+    parameters: Optional[List[Parameter]] = None
     hasCharLen: Optional[bool] = 'False'
     hasPrecision: Optional[bool] = 'False'
     hasScale: Optional[bool] = 'False'
