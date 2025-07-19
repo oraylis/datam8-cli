@@ -142,7 +142,7 @@ class TestV2Schemas:
         """Test that purpose/explanation fields were properly migrated to description."""
         # Test with actual AttributeTypes data structure
         sample_data = {
-            "$schema": "https://raw.githubusercontent.com/oraylis/datam8-model/refs/heads/main/schema/AttributeTypes.json",
+            "$schema": "../datam8-model/schema/AttributeTypes.json",
             "type": "attributeType",
             "items": [
                 {
@@ -173,6 +173,62 @@ class TestV2Schemas:
         # Ensure old fields don't exist (would be caught by Pydantic validation)
         assert not hasattr(test_attr, 'purpose')
         assert not hasattr(test_attr, 'explanation')
+    
+    def test_json_schema_validation_all_samples(self, test_data_dir):
+        """Test JSON schema validation for all sample files using their schema references."""
+        import jsonschema
+        
+        # Define test cases: (sample_file, expected_schema_file)
+        test_cases = [
+            ("sample_solution.dm8s", "Solution.json"),
+            ("sample_zones.json", "Zones.json"),
+            ("sample_datasourcetypes.json", "DataSourceTypes.json"),
+            ("sample_entity.json", "ModelDataEntity.json")
+        ]
+        
+        for sample_file, schema_file in test_cases:
+            with self.subtest(sample_file=sample_file):
+                # Load sample data
+                sample_path = test_data_dir / sample_file
+                with open(sample_path) as f:
+                    sample_data = json.load(f)
+                
+                # Load corresponding schema
+                schema_path = test_data_dir.parent / "datam8-model" / "schema" / schema_file
+                with open(schema_path) as f:
+                    schema_data = json.load(f)
+                
+                # Validate sample against schema
+                try:
+                    jsonschema.validate(instance=sample_data, schema=schema_data)
+                except jsonschema.ValidationError as e:
+                    pytest.fail(f"Schema validation failed for {sample_file}: {e.message}")
+                except FileNotFoundError:
+                    pytest.skip(f"Schema file not found: {schema_path}")
+    
+    def test_pydantic_validation_all_samples(self, test_data_dir):
+        """Test Pydantic model validation for all sample files."""
+        # Test cases: (sample_file, pydantic_model)
+        test_cases = [
+            ("sample_solution.dm8s", Solution),
+            ("sample_zones.json", Zones),
+            ("sample_datasourcetypes.json", DataSourceTypes),
+            ("sample_entity.json", ModelDataEntity)
+        ]
+        
+        for sample_file, model_class in test_cases:
+            with self.subtest(sample_file=sample_file):
+                # Load sample data
+                sample_path = test_data_dir / sample_file
+                with open(sample_path) as f:
+                    sample_data = json.load(f)
+                
+                # Validate using Pydantic model
+                try:
+                    model_instance = model_class.model_validate(sample_data)
+                    assert model_instance is not None
+                except Exception as e:
+                    pytest.fail(f"Pydantic validation failed for {sample_file} with {model_class.__name__}: {str(e)}")
 
 
 if __name__ == "__main__":

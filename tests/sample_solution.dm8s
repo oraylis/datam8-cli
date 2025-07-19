@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/oraylis/datam8-model/refs/heads/main/schema/Solution.json",
+  "$schema": "../datam8-model/schema/Solution.json",
   "schemaVersion": "2.0.0",
   "basePath": "Base",
   "modelPath": "Model",

@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/oraylis/datam8-model/refs/heads/main/schema/DataSourceTypes.json",
+  "$schema": "../datam8-model/schema/DataSourceTypes.json",
   "type": "dataSourceTypes",
   "sourceTypes": [
     {
