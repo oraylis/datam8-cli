@@ -47,13 +47,12 @@ class Parameter(BaseModel):
         return Parameter.model_validate(obj, from_attributes=False)
 
 
-class History(Enum):
+class Type9(Enum):
     SCD0 = 'SCD0'
     SCD1 = 'SCD1'
     SCD2 = 'SCD2'
     BK = 'BK'
     SK = 'SK'
-    SCD1_TIMESTAMP = 'SCD1_TIMESTAMP'
 
 
 class Attribute(BaseModel):
@@ -63,9 +62,7 @@ class Attribute(BaseModel):
     description: Optional[str] = None
     attributeType: Optional[str] = None
     dataType: Optional[str] = None
-    businessKeyNo: Optional[int] = None
-    alternateKeyGroup: Optional[str] = None
-    alternateKeyNo: Optional[int] = None
+    ordinalNumber: Optional[int] = None
     charLength: Optional[int] = None
     charSet: Optional[str] = None
     precision: Optional[int] = None
@@ -75,7 +72,7 @@ class Attribute(BaseModel):
     parameter: Optional[List[Parameter]] = None
     tags: Optional[List[str]] = None
     refactorNames: Optional[List[str]] = None
-    history: Optional[History] = History.SCD1
+    type: Optional[Type9] = Type9.SCD1
     dateModified: Optional[str] = None
     dateDeleted: Optional[str] = None
 
@@ -87,43 +84,8 @@ class Attribute(BaseModel):
         return Attribute.model_validate(obj, from_attributes=False)
 
 
-class RelationshipField(BaseModel):
-    model_config = ConfigDict(extra='allow', populate_by_name=True)
-    dm8lAttr: str
-    dm8lKeyAttr: str
-
-    def to_dict(self) -> dict:
-        return self.model_dump(by_alias=True, exclude_unset=True, mode='json')
-
-    @staticmethod
-    def from_dict(obj) -> 'RelationshipField':
-        return RelationshipField.model_validate(obj, from_attributes=False)
-
-
-class Relationship(BaseModel):
-    model_config = ConfigDict(extra='allow', populate_by_name=True)
-    dm8lKey: str
-    role: str
-    fields: Optional[List[RelationshipField]] = None
-
-    def to_dict(self) -> dict:
-        return self.model_dump(by_alias=True, exclude_unset=True, mode='json')
-
-    @staticmethod
-    def from_dict(obj) -> 'Relationship':
-        return Relationship.model_validate(obj, from_attributes=False)
-
-
 class DataEntity(BaseModel):
     model_config = ConfigDict(extra='allow', populate_by_name=True)
-    dataModule: Optional[str] = Field(
-        None,
-        description='DEPRECATED: Will be derived from file path in v2. Kept for transition compatibility.',
-    )
-    dataProduct: Optional[str] = Field(
-        None,
-        description='DEPRECATED: Will be derived from file path in v2. Kept for transition compatibility.',
-    )
     name: str
     extensionOf: Optional[str] = None
     displayName: str
@@ -131,8 +93,6 @@ class DataEntity(BaseModel):
     parameters: Optional[List[Parameter]] = None
     tags: Optional[List[str]] = None
     attribute: Optional[List[Attribute]] = None
-    relationship: Optional[List[Relationship]] = None
-    refactorNames: Optional[List[str]] = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode='json')
@@ -149,65 +109,93 @@ class Mode(Enum):
     CHILDREN = 'children'
 
 
-class TriggerFunction(BaseModel):
+class ScheduleConfig(BaseModel):
     model_config = ConfigDict(extra='allow', populate_by_name=True)
-    mode: Optional[Mode] = None
+    cronExpression: Optional[str] = None
+    timezone: Optional[str] = None
+    maxRetries: Optional[int] = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode='json')
 
     @staticmethod
-    def from_dict(obj) -> 'TriggerFunction':
-        return TriggerFunction.model_validate(obj, from_attributes=False)
+    def from_dict(obj) -> 'ScheduleConfig':
+        return ScheduleConfig.model_validate(obj, from_attributes=False)
 
 
 class Mode1(Enum):
-    FULL = 'full'
-    INCREMENTAL = 'incremental'
-    PERIOD = 'period'
-
-
-class LoadFunction(BaseModel):
-    model_config = ConfigDict(extra='allow', populate_by_name=True)
-    mode: Optional[Mode1] = None
-
-    def to_dict(self) -> dict:
-        return self.model_dump(by_alias=True, exclude_unset=True, mode='json')
-
-    @staticmethod
-    def from_dict(obj) -> 'LoadFunction':
-        return LoadFunction.model_validate(obj, from_attributes=False)
-
-
-class Mode2(Enum):
     HISTORY = 'history'
     OVERWRITE = 'overwrite'
     SNAPSHOT = 'snapshot'
 
 
-class StoreFunction(BaseModel):
+class MergeConfig(BaseModel):
     model_config = ConfigDict(extra='allow', populate_by_name=True)
-    mode: Optional[Mode2] = None
+    business_key: Optional[List[str]] = None
+    sequential: Optional[bool] = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode='json')
 
     @staticmethod
-    def from_dict(obj) -> 'StoreFunction':
-        return StoreFunction.model_validate(obj, from_attributes=False)
+    def from_dict(obj) -> 'MergeConfig':
+        return MergeConfig.model_validate(obj, from_attributes=False)
 
 
-class Type9(Enum):
-    SOURCE = 'source'
+class LayoutConfig(BaseModel):
+    model_config = ConfigDict(extra='allow', populate_by_name=True)
+    type: Optional[str] = None
+    keys: Optional[List[str]] = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode='json')
+
+    @staticmethod
+    def from_dict(obj) -> 'LayoutConfig':
+        return LayoutConfig.model_validate(obj, from_attributes=False)
+
+
+class MaintenanceConfig(BaseModel):
+    model_config = ConfigDict(extra='allow', populate_by_name=True)
+    retention: Optional[str] = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode='json')
+
+    @staticmethod
+    def from_dict(obj) -> 'MaintenanceConfig':
+        return MaintenanceConfig.model_validate(obj, from_attributes=False)
 
 
 class Type10(Enum):
+    SOURCE = 'source'
+
+
+class Type11(Enum):
+    FULL = 'full'
+    DELTA = 'delta'
+
+
+class DeltaConfig(BaseModel):
+    model_config = ConfigDict(extra='allow', populate_by_name=True)
+    column: Optional[str] = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode='json')
+
+    @staticmethod
+    def from_dict(obj) -> 'DeltaConfig':
+        return DeltaConfig.model_validate(obj, from_attributes=False)
+
+
+class Type12(Enum):
     MODEL = 'model'
 
 
 class AttributeMapping(BaseModel):
     model_config = ConfigDict(extra='allow', populate_by_name=True)
     name: Optional[str] = None
+    targetName: Optional[str] = None
     sourceComputation: Optional[str] = None
     sourceName: str
 
@@ -255,28 +243,114 @@ class BuiltInTransformation(BaseModel):
         return BuiltInTransformation.model_validate(obj, from_attributes=False)
 
 
-class SystemSource(BaseModel):
+class Kind2(Enum):
+    FUNCTION = 'function'
+
+
+class FunctionConfig(BaseModel):
     model_config = ConfigDict(extra='allow', populate_by_name=True)
-    type: Type9
-    dataSource: str
-    sourceLocation: str
-    filter: Optional[str] = None
+    source: str
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode='json')
+
+    @staticmethod
+    def from_dict(obj) -> 'FunctionConfig':
+        return FunctionConfig.model_validate(obj, from_attributes=False)
+
+
+class TriggerFunction(BaseModel):
+    model_config = ConfigDict(extra='allow', populate_by_name=True)
+    mode: Optional[Mode] = None
+    schedule: Optional[ScheduleConfig] = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode='json')
+
+    @staticmethod
+    def from_dict(obj) -> 'TriggerFunction':
+        return TriggerFunction.model_validate(obj, from_attributes=False)
+
+
+class StoreFunction(BaseModel):
+    model_config = ConfigDict(extra='allow', populate_by_name=True)
+    mode: Optional[Mode1] = None
+    write_mode: Optional[str] = None
+    merge: Optional[MergeConfig] = None
+    layout: Optional[LayoutConfig] = None
+    maintenance: Optional[MaintenanceConfig] = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode='json')
+
+    @staticmethod
+    def from_dict(obj) -> 'StoreFunction':
+        return StoreFunction.model_validate(obj, from_attributes=False)
+
+
+class ExtractConfig(BaseModel):
+    model_config = ConfigDict(extra='allow', populate_by_name=True)
+    type: Optional[Type11] = None
+    full: Optional[Dict[str, Any]] = None
+    delta: Optional[DeltaConfig] = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode='json')
+
+    @staticmethod
+    def from_dict(obj) -> 'ExtractConfig':
+        return ExtractConfig.model_validate(obj, from_attributes=False)
+
+
+class ModelConfig(BaseModel):
+    model_config = ConfigDict(extra='allow', populate_by_name=True)
+    dm8l: str
     mapping: Optional[List[AttributeMapping]] = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode='json')
 
     @staticmethod
-    def from_dict(obj) -> 'SystemSource':
-        return SystemSource.model_validate(obj, from_attributes=False)
+    def from_dict(obj) -> 'ModelConfig':
+        return ModelConfig.model_validate(obj, from_attributes=False)
+
+
+class FunctionTransformation(BaseModel):
+    model_config = ConfigDict(extra='allow', populate_by_name=True)
+    stepNo: int
+    kind: Kind2
+    name: str
+    function: FunctionConfig
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode='json')
+
+    @staticmethod
+    def from_dict(obj) -> 'FunctionTransformation':
+        return FunctionTransformation.model_validate(obj, from_attributes=False)
+
+
+class SourceConfig(BaseModel):
+    model_config = ConfigDict(extra='allow', populate_by_name=True)
+    dataSource: str
+    sourceLocation: str
+    filter: Optional[str] = None
+    extract: Optional[ExtractConfig] = None
+    mapping: Optional[List[AttributeMapping]] = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode='json')
+
+    @staticmethod
+    def from_dict(obj) -> 'SourceConfig':
+        return SourceConfig.model_validate(obj, from_attributes=False)
 
 
 class ModelSource(BaseModel):
     model_config = ConfigDict(extra='allow', populate_by_name=True)
-    type: Type10
-    dm8l: str
+    type: Type12
+    model: ModelConfig
     filter: Optional[str] = None
-    mapping: Optional[List[AttributeMapping]] = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode='json')
@@ -286,14 +360,26 @@ class ModelSource(BaseModel):
         return ModelSource.model_validate(obj, from_attributes=False)
 
 
+class SystemSource(BaseModel):
+    model_config = ConfigDict(extra='allow', populate_by_name=True)
+    type: Type10
+    source: SourceConfig
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode='json')
+
+    @staticmethod
+    def from_dict(obj) -> 'SystemSource':
+        return SystemSource.model_validate(obj, from_attributes=False)
+
+
 class EntityFunctions(BaseModel):
     model_config = ConfigDict(extra='allow', populate_by_name=True)
     trigger: Optional[TriggerFunction] = None
-    load: Optional[LoadFunction] = None
     store: Optional[StoreFunction] = None
     sources: Optional[List[Union[SystemSource, ModelSource]]] = None
     transformations: Optional[
-        List[Union[CustomTransformation, BuiltInTransformation]]
+        List[Union[CustomTransformation, BuiltInTransformation, FunctionTransformation]]
     ] = None
 
     def to_dict(self) -> dict:

@@ -310,7 +310,19 @@ class Jinja2Factory:
             # Template Input Parameter
             cache = Cache()
             dict_modules: dict = {"cache": cache, "Hasher": Hasher}
-            dict_model: dict = {"model": self.model}
+            # Create enhanced model context with v2 unified entity support
+            dict_model: dict = {
+                "model": self.model,
+                "unified_entities": self.model.get_unified_entity_list(),
+                "unified_entities_by_layer": {
+                    "raw": self.model.get_unified_entities_by_layer("raw"),
+                    "staging": self.model.get_unified_entities_by_layer("staging"), 
+                    "core": self.model.get_unified_entities_by_layer("core"),
+                    "curated": self.model.get_unified_entities_by_layer("curated"),
+                },
+                # For v2: provide derived raw entities from staging
+                "v2_derived_raw_entities": self.model.get_raw_entity_list() if self.model.is_v2_solution() else []
+            }
             if path_modules is not None:
                 path_modules = os.path.abspath(path_modules)
                 if not os.path.isfile(path_modules):

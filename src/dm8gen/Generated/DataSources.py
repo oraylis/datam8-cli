@@ -24,7 +24,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 from __future__ import annotations
 
 from enum import Enum
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -72,6 +72,9 @@ class DataSource(BaseModel):
         None,
         description='Optional data type mappings. If not specified, uses defaults from DataSourceTypes. Individual mappings override defaults.',
     )
+    ExtendedProperties: Optional[Dict[str, str]] = Field(
+        None, description='Additional properties specific to the data source'
+    )
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode='json')
@@ -85,7 +88,7 @@ class Model(BaseModel):
     model_config = ConfigDict(extra='allow', populate_by_name=True)
     field_schema: Optional[str] = Field(None, alias='$schema')
     type: Optional[Type] = None
-    items: Optional[List[DataSource]] = None
+    dataSources: Optional[List[DataSource]] = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode='json')

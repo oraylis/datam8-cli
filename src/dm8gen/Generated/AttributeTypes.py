@@ -30,7 +30,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class Type(Enum):
-    ATTRIBUTE_TYPE = 'attributeType'
+    ATTRIBUTE_TYPES = 'attributeTypes'
 
 
 class Parameter(BaseModel):
@@ -87,7 +87,7 @@ class Model(BaseModel):
     model_config = ConfigDict(extra='allow', populate_by_name=True)
     field_schema: Optional[str] = Field(None, alias='$schema')
     type: Optional[Type] = None
-    items: Optional[List[AttributeType]] = None
+    attributeTypes: Optional[List[AttributeType]] = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode='json')

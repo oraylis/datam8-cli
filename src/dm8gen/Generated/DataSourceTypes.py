@@ -30,7 +30,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class Type(Enum):
-    DATA_SOURCE_TYPES = 'dataSourceTypes'
+    DATA_SOURCE_TYPE = 'dataSourceType'
 
 
 class ConnectionProperty(BaseModel):
@@ -87,7 +87,7 @@ class Model(BaseModel):
     model_config = ConfigDict(extra='allow', populate_by_name=True)
     field_schema: Optional[str] = Field(None, alias='$schema')
     type: Type
-    sourceTypes: List[DataSourceType]
+    dataSourceTypes: List[DataSourceType]
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode='json')

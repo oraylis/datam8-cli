@@ -30,7 +30,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class Type(Enum):
-    ZONES = 'zones'
+    ZONE = 'zone'
 
 
 class Zone(BaseModel):
