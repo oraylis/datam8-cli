@@ -768,7 +768,7 @@ class Model:
         """
         self.logger.debug("Start looking for locator: %s" % locator)
 
-        if locator.lower().startswith("/stage"):
+        if locator.lower().startswith("/stage") or locator.lower().startswith("/staging"):
             locator_index = self.get_locator(regex=locator)
             self.logger.debug("Locator Index: %s" % str(locator_index))
 

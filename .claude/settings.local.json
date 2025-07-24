@@ -8,7 +8,8 @@
       "Bash(timeout:*)",
       "Bash(rm:*)",
       "Bash(PYTHONPATH=/mnt/c/Users/f.kayser/Projects/ORAYLIS/Automation/Repos/datam8-generator/src python3 -m dm8gen.cli -a generate_template -s /mnt/c/Users/f.kayser/Projects/ORAYLIS/Automation/Repos/datam8-sample-solution/ORAYLISDatabricksSample.dm8s -src /mnt/c/Users/f.kayser/Projects/ORAYLIS/Automation/Repos/datam8-sample-solution/Generate -dest /mnt/c/Users/f.kayser/Projects/ORAYLIS/Automation/Repos/datam8-sample-solution/Output -m /mnt/c/Users/f.kayser/Projects/ORAYLIS/Automation/Repos/datam8-sample-solution/Generate/databricks-lake/__modules)",
-      "Bash(PYTHONPATH=/mnt/c/Users/f.kayser/Projects/ORAYLIS/Automation/Repos/datam8-generator/src python3 -m dm8gen.cli -a generate_template -s /mnt/c/Users/f.kayser/Projects/ORAYLIS/Automation/Repos/datam8-sample-solution/ORAYLISDatabricksSample.dm8s -src /mnt/c/Users/f.kayser/Projects/ORAYLIS/Automation/Repos/datam8-sample-solution/Generate -dest /mnt/c/Users/f.kayser/Projects/ORAYLIS/Automation/Repos/datam8-sample-solution/Output -m /mnt/c/Users/f.kayser/Projects/ORAYLIS/Automation/Repos/datam8-sample-solution/Generate/databricks-lake/__modules -l DEBUG)"
+      "Bash(PYTHONPATH=/mnt/c/Users/f.kayser/Projects/ORAYLIS/Automation/Repos/datam8-generator/src python3 -m dm8gen.cli -a generate_template -s /mnt/c/Users/f.kayser/Projects/ORAYLIS/Automation/Repos/datam8-sample-solution/ORAYLISDatabricksSample.dm8s -src /mnt/c/Users/f.kayser/Projects/ORAYLIS/Automation/Repos/datam8-sample-solution/Generate -dest /mnt/c/Users/f.kayser/Projects/ORAYLIS/Automation/Repos/datam8-sample-solution/Output -m /mnt/c/Users/f.kayser/Projects/ORAYLIS/Automation/Repos/datam8-sample-solution/Generate/databricks-lake/__modules -l DEBUG)",
+      "Bash(pyenv:*)"
     ],
     "deny": []
   }
