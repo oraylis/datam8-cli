@@ -361,60 +361,84 @@ class Model:
             raise
 
     def get_raw_entity_list(self) -> list[UnifiedEntityFactory]:
-        ls_raw_entity = []
-        index = self.get_index()
-
-        # V2: generate raw entities from staging entities
-        # Get staging entities and derive raw entities from them
-        for e in index.stageIndex.entry:
-            try:
-                unified_entity = self.get_unified_entity(path=e.absPath)
-                # Only add if the staging entity has system sources (indicating it should have a raw layer)
-                if unified_entity.system_sources:
-                    self.logger.debug(
-                        f"Added derived raw entity from staging: {e.locator} file: {e.absPath}"
-                    )
-                    ls_raw_entity.append(unified_entity)
-            except Exception as e_inner:
-                self.logger.warning(f"Error processing staging entity for raw derivation: {e_inner}")
-
-        return ls_raw_entity
+        """Get raw layer entities (DEPRECATED - use get_entity_list_by_layer('raw') instead)."""
+        import warnings
+        warnings.warn(
+            "get_raw_entity_list() is deprecated. Use get_entity_list_by_layer('raw') instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        return self.get_entity_list_by_layer('raw')
 
     def get_stage_entity_list(self) -> list[UnifiedEntityFactory]:
-        ls_stage_entity = []
-        index = self.get_index()
-
-        for e in index.stageIndex.entry:
-            self.logger.debug(
-                f"Added to stage entity list locator: {e.locator} file: {e.absPath}"
-            )
-            ls_stage_entity.append(self.get_entity_factory(path=e.absPath))
-
-        return ls_stage_entity
+        """Get stage layer entities (DEPRECATED - use get_entity_list_by_layer('stage') instead)."""
+        import warnings
+        warnings.warn(
+            "get_stage_entity_list() is deprecated. Use get_entity_list_by_layer('stage') instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        return self.get_entity_list_by_layer('stage')
 
     def get_core_entity_list(self) -> list[UnifiedEntityFactory]:
-        ls_core_entity = []
-        index = self.get_index()
-
-        for e in index.coreIndex.entry:
-            self.logger.debug(
-                f"Added to core entity list locator: {e.locator} file: {e.absPath}"
-            )
-            ls_core_entity.append(self.get_entity_factory(path=e.absPath))
-
-        return ls_core_entity
+        """Get core layer entities (DEPRECATED - use get_entity_list_by_layer('core') instead)."""
+        import warnings
+        warnings.warn(
+            "get_core_entity_list() is deprecated. Use get_entity_list_by_layer('core') instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        return self.get_entity_list_by_layer('core')
 
     def get_curated_entity_list(self) -> list[UnifiedEntityFactory]:
-        ls_curated_entity = []
+        """Get curated layer entities (DEPRECATED - use get_entity_list_by_layer('curated') instead)."""
+        import warnings
+        warnings.warn(
+            "get_curated_entity_list() is deprecated. Use get_entity_list_by_layer('curated') instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        return self.get_entity_list_by_layer('curated')
+
+    def get_entity_list_by_layer(self, layer: str) -> list[UnifiedEntityFactory]:
+        """Get entities for a specific layer using unified factory.
+        
+        Args:
+            layer (str): Layer name ("raw", "stage", "core", "curated").
+            
+        Returns:
+            list[UnifiedEntityFactory]: List of unified entity factories for the layer.
+        """
+        ls_entity = []
         index = self.get_index()
+        
+        # Special handling for raw layer - derive from staging entities
+        if layer.lower() == "raw":
+            for e in index.stageIndex.entry:
+                try:
+                    unified_entity = self.get_unified_entity(path=e.absPath)
+                    # Only add if the staging entity has system sources (indicating it should have a raw layer)
+                    if unified_entity.system_sources:
+                        self.logger.debug(
+                            f"Added derived raw entity from staging: {e.locator} file: {e.absPath}"
+                        )
+                        ls_entity.append(unified_entity)
+                except Exception as e_inner:
+                    self.logger.warning(f"Error processing staging entity for raw derivation: {e_inner}")
+        else:
+            # Standard handling for other layers
+            layer_index_name = f"{layer.lower()}Index"
+            if hasattr(index, layer_index_name):
+                layer_index = getattr(index, layer_index_name)
+                for e in layer_index.entry:
+                    self.logger.debug(
+                        f"Added to {layer} entity list locator: {e.locator} file: {e.absPath}"
+                    )
+                    ls_entity.append(self.get_entity_factory(path=e.absPath))
+            else:
+                raise ValueError(f"Unknown layer: {layer}. Valid layers are: raw, stage, core, curated")
 
-        for e in index.curatedIndex.entry:
-            self.logger.debug(
-                f"Added to curated entity list locator: {e.locator} file: {e.absPath}"
-            )
-            ls_curated_entity.append(self.get_entity_factory(path=e.absPath))
-
-        return ls_curated_entity
+        return ls_entity
 
     def get_entity_list(
         self,
