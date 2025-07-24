@@ -9,6 +9,8 @@ from .DataSourceFactory import DataSourceFactory
 from .AttributeTypesFactory import AttributeTypesFactory
 from .DataModuleFactory import DataModuleFactory
 from .DataTypesFactory import DataTypesFactory
+from .DataSourceTypesFactory import DataSourceTypesFactory
+from .ZonesFactory import ZonesFactory
 from .UnifiedEntityFactory import UnifiedEntityFactory
 from ..Generated.Solution import Model as Solution
 from ..Generated.Index import Model as Index
@@ -23,6 +25,8 @@ class Model:
     CACHE_ATTRIBUTE_TYPES: dict = {}
     CACHE_DATA_MODULE: dict = {}
     CACHE_DATA_TYPES: dict = {}
+    CACHE_DATA_SOURCE_TYPES: dict = {}
+    CACHE_ZONES: dict = {}
 
     path_solution: str = None
     dict_solution: str = None
@@ -222,6 +226,54 @@ class Model:
             )
 
             return data_types_factory
+        except Exception as e:
+            self.__error_handler(e)
+
+    @property
+    def data_source_types(self) -> DataSourceTypesFactory:
+        path_data_source_types: str = os.path.join(
+            self.__get_dict_path(self.path_base), "DataSourceTypes.json"
+        )
+        if path_data_source_types in Model.CACHE_DATA_SOURCE_TYPES:
+            self.logger.debug(
+                "Cached DataSourceTypesFactory for %s" % path_data_source_types
+            )
+            return Model.CACHE_DATA_SOURCE_TYPES[path_data_source_types]
+
+        try:
+            data_source_types_factory = DataSourceTypesFactory(
+                path=path_data_source_types, log_level=self.log_level
+            )
+            Model.CACHE_DATA_SOURCE_TYPES[path_data_source_types] = data_source_types_factory
+            self.logger.info(
+                "Successfully init Data Source Types Factory from %s" % path_data_source_types
+            )
+
+            return data_source_types_factory
+        except Exception as e:
+            self.__error_handler(e)
+
+    @property
+    def zones(self) -> ZonesFactory:
+        path_zones: str = os.path.join(
+            self.__get_dict_path(self.path_base), "Zones.json"
+        )
+        if path_zones in Model.CACHE_ZONES:
+            self.logger.debug(
+                "Cached ZonesFactory for %s" % path_zones
+            )
+            return Model.CACHE_ZONES[path_zones]
+
+        try:
+            zones_factory = ZonesFactory(
+                path=path_zones, log_level=self.log_level
+            )
+            Model.CACHE_ZONES[path_zones] = zones_factory
+            self.logger.info(
+                "Successfully init Zones Factory from %s" % path_zones
+            )
+
+            return zones_factory
         except Exception as e:
             self.__error_handler(e)
 
