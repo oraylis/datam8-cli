@@ -65,7 +65,7 @@ class DataSourceFactory:
         try:
             __source_item = None
             __source_item = [
-                i for i in self.source_object.items if i.name == source_name
+                i for i in self.source_object.dataSources if i.name == source_name
             ][0]
 
             if __source_item is None:
@@ -85,7 +85,7 @@ class DataSourceFactory:
             list[DataSource]: A list of data sources.
         """
         try:
-            return self.source_object.items
+            return self.source_object.dataSources
         except Exception as e:
             self.__error_handler(e)
 

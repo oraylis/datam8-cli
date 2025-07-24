@@ -38,7 +38,7 @@ class AttributeTypesFactory:
         try:
             __attribute_item = None
             __attribute_item = [
-                i for i in self.attribute_types_object.items if i.name == attribute_name
+                i for i in self.attribute_types_object.attributeTypes if i.name == attribute_name
             ][0]
 
             if __attribute_item is None:

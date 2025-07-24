@@ -61,7 +61,7 @@ class DataproductFactory:
         try:
             __data_product_item = None
             __data_product_item = [
-                i for i in self.data_product_object.items if i.name == data_product_name
+                i for i in self.data_product_object.dataProducts if i.name == data_product_name
             ][0]
 
             if __data_product_item is None:

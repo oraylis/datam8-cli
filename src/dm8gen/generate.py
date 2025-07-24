@@ -6,7 +6,6 @@ from .Factory.Jinja2Factory import Jinja2Factory
 from .Factory.Model import Model
 from .Generated.Solution import Model as Solution
 from .Helper.Helper import Helper
-from .migrate_to_v2 import migrate_solution_to_v2
 import logging
 
 logger = logging.getLogger(__name__)
@@ -20,13 +19,11 @@ class GenerateOptionEnum(str, Enum):
         VALIDATE_INDEX: Action to validate the index.
         GENERATE_TEMPLATE: Action to generate templates.
         REFRESH_GENERATE: Action to refresh and generate templates.
-        MIGRATE_TO_V2: Action to migrate V1 solution to V2 format.
     """
 
     VALIDATE_INDEX = "validate_index"
     GENERATE_TEMPLATE = "generate_template"
     REFRESH_GENERATE = "refresh_generate"
-    MIGRATE_TO_V2 = "migrate_to_v2"
 
 
 def generate(
@@ -145,14 +142,6 @@ def generate(
     # Execute actions based on the provided action argument
     if action == GenerateOptionEnum.VALIDATE_INDEX:
         model.validate_index(full_index_scan=full_index_scan)
-    elif action == GenerateOptionEnum.MIGRATE_TO_V2:
-        # Migrate V1 solution to V2 format
-        if path_template_destination is None:
-            raise Exception("--path-template-destination (-dest) is required for migration")
-        
-        success = migrate_solution_to_v2(path_solution, path_template_destination)
-        if not success:
-            raise Exception("Migration failed. Check console output for details.")
     elif action in {
         GenerateOptionEnum.GENERATE_TEMPLATE,
         GenerateOptionEnum.REFRESH_GENERATE,

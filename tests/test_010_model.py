@@ -1,12 +1,6 @@
-from dm8gen.Generated.RawModelEntry import Model as Raw
-from dm8gen.Generated.StageModelEntry import Model as Stage
-from dm8gen.Generated.CoreModelEntry import Model as Core
-from dm8gen.Generated.CuratedModelEntry import Model as Curated
+from dm8gen.Generated.ModelDataEntity import Model as UnifiedModel
 from dm8gen.Factory.Model import Model
-from dm8gen.Factory.RawEntityFactory import RawEntityFactory
-from dm8gen.Factory.StageEntityFactory import StageEntityFactory
-from dm8gen.Factory.CoreEntityFactory import CoreEntityFactory
-from dm8gen.Factory.CuratedEntityFactory import CuratedEntityFactory
+from dm8gen.Factory.UnifiedEntityFactory import UnifiedEntityFactory
 from dm8gen.Factory.Model import (
     LocatorNotFoundException,
     MultipleLocatorsFoundException,
@@ -48,18 +42,8 @@ def test_lookup_entity__valid(locator, config, model):
     model_object = entity_factory.model_object
 
     assert entity_factory is not None, "Return factory is None."
-    assert type(entity_factory) in (
-        StageEntityFactory,
-        RawEntityFactory,
-        CoreEntityFactory,
-        CuratedEntityFactory,
-    ), "Return factory is of an unkown type: %s" % str(type(entity_factory))
-    assert type(model_object) in (
-        Raw,
-        Stage,
-        Core,
-        Curated,
-    ), "Model_object is of unkown type: %s" % str(type(model_object))
+    assert type(entity_factory) == UnifiedEntityFactory, "Return factory is of an unknown type: %s" % str(type(entity_factory))
+    assert type(model_object) == UnifiedModel, "Model_object is of unknown type: %s" % str(type(model_object))
     assert (
         entity_factory.locator.lower() == locator.lower()
         if locator.startswith("/")

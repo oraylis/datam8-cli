@@ -65,10 +65,9 @@ class DataTypesFactory:
             __data_type_item = None
             __ls_mapping = [
                 i
-                for i in self.data_types_object.items
+                for i in self.data_types_object.dataTypes
                 if getattr(i, "name") == datatype_name
             ]
-            __data_type_item = __ls_mapping[0]
 
             if len(__ls_mapping) == 0:
                 self.__error_handler(
@@ -102,7 +101,7 @@ class DataTypesFactory:
             __ls_mapping: list[DataTypes] = None
             __ls_mapping = [
                 i
-                for i in self.data_types_object.items
+                for i in self.data_types_object.dataTypes
                 if getattr(i, property_key) == property_value
             ]
 

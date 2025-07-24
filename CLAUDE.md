@@ -50,12 +50,9 @@ datam8-generator/
 
 ### Design Patterns
 
-#### 1. Factory Pattern
-Each entity type has specialized processing:
-- **RawEntityFactory**: Source data ingestion
-- **StageEntityFactory**: Data cleansing and standardization
-- **CoreEntityFactory**: Business logic and relationships
-- **CuratedEntityFactory**: Analytics and aggregation
+#### 1. Unified Factory Pattern
+All entity processing uses the unified factory:
+- **UnifiedEntityFactory**: Handles all entity types (Raw, Stage, Core, Curated) with v2 schema
 
 #### 2. Template Engine
 - **Jinja2-based**: Flexible template inheritance
@@ -477,9 +474,9 @@ generator = Generate(solution_path, action, source_path, destination_path)
 from dm8gen.Factory.Model import Model
 model = Model(solution_path)
 
-# Entity factories
-from dm8gen.Factory.CoreEntityFactory import CoreEntityFactory
-factory = CoreEntityFactory(model)
+# Unified entity factory
+from dm8gen.Factory.UnifiedEntityFactory import UnifiedEntityFactory
+factory = UnifiedEntityFactory(entity_path, log_level)
 
 # Template engine
 from dm8gen.Factory.Jinja2Factory import Jinja2Factory

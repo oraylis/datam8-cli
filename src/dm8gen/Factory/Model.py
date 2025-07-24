@@ -5,15 +5,10 @@ import sys
 from typing import Union
 from dataclasses import dataclass
 import textwrap
-from .RawEntityFactory import RawEntityFactory
-from .StageEntityFactory import StageEntityFactory
-from .CoreEntityFactory import CoreEntityFactory
-from .CuratedEntityFactory import CuratedEntityFactory
 from .DataSourceFactory import DataSourceFactory
 from .AttributeTypesFactory import AttributeTypesFactory
 from .DataModuleFactory import DataModuleFactory
 from .DataTypesFactory import DataTypesFactory
-from .EntityFactory import EntityFactory
 from .UnifiedEntityFactory import UnifiedEntityFactory
 from ..Generated.Solution import Model as Solution
 from ..Generated.Index import Model as Index
@@ -56,23 +51,6 @@ class Model:
         except Exception as e:
             self.__error_handler(e)
 
-    def is_v2_solution(self) -> bool:
-        """Check if the solution uses v2 schema format.
-        
-        Returns:
-            bool: True if solution uses v2 schema, False otherwise.
-        """
-        try:
-            solution_data = Helper.read_json(self.path_solution)
-            # Check for v2 indicators
-            if "schemaVersion" in solution_data:
-                version = solution_data["schemaVersion"]
-                return version.startswith("2.")
-            if "modelPath" in solution_data:
-                return True
-            return False
-        except Exception:
-            return False
 
     @property
     def path_base(self) -> str:
@@ -86,13 +64,9 @@ class Model:
     @property
     def path_raw(self) -> str:
         try:
-            if self.is_v2_solution():
-                # V2: use modelPath + Raw subdirectory
-                model_path = self.__get_dict_path(dict_item=self.solution.modelPath)
-                raw_path = os.path.join(model_path, "Raw")
-            else:
-                # V1: use dedicated rawPath
-                raw_path = self.__get_dict_path(dict_item=self.solution.rawPath)
+            # V2 only: use modelPath + Raw subdirectory
+            model_path = self.__get_dict_path(dict_item=self.solution.modelPath)
+            raw_path = os.path.join(model_path, "Raw")
             self.logger.debug(f"Requested raw path: {raw_path}")
             return raw_path
         except Exception as e:
@@ -101,14 +75,9 @@ class Model:
     @property
     def path_stage(self) -> str:
         try:
-            if self.is_v2_solution():
-                # V2: use modelPath + Staging subdirectory
-                model_path = self.__get_dict_path(dict_item=self.solution.modelPath)
-                stage_path = os.path.join(model_path, "Staging")
-            else:
-                # V1: use dedicated stagingPath
-                stage_path = self.__get_dict_path(dict_item=self.solution.stagingPath)
-            # self.logger.info(f'Requested stage path: {stage_path}')
+            # V2 only: use modelPath + Staging subdirectory
+            model_path = self.__get_dict_path(dict_item=self.solution.modelPath)
+            stage_path = os.path.join(model_path, "Staging")
             return stage_path
         except Exception as e:
             self.__error_handler(e)
@@ -116,14 +85,9 @@ class Model:
     @property
     def path_core(self) -> str:
         try:
-            if self.is_v2_solution():
-                # V2: use modelPath + Core subdirectory
-                model_path = self.__get_dict_path(dict_item=self.solution.modelPath)
-                core_path = os.path.join(model_path, "Core")
-            else:
-                # V1: use dedicated corePath
-                core_path = self.__get_dict_path(dict_item=self.solution.corePath)
-            # self.logger.info(f'Requested core path: {core_path}')
+            # V2 only: use modelPath + Core subdirectory
+            model_path = self.__get_dict_path(dict_item=self.solution.modelPath)
+            core_path = os.path.join(model_path, "Core")
             return core_path
         except Exception as e:
             self.__error_handler(e)
@@ -131,13 +95,9 @@ class Model:
     @property
     def path_curated(self) -> str:
         try:
-            if self.is_v2_solution():
-                # V2: use modelPath + Curated subdirectory
-                model_path = self.__get_dict_path(dict_item=self.solution.modelPath)
-                curated_path = os.path.join(model_path, "Curated")
-            else:
-                # V1: use dedicated curatedPath
-                curated_path = self.__get_dict_path(dict_item=self.solution.curatedPath)
+            # V2 only: use modelPath + Curated subdirectory
+            model_path = self.__get_dict_path(dict_item=self.solution.modelPath)
+            curated_path = os.path.join(model_path, "Curated")
             return curated_path
         except Exception as e:
             self.__error_handler(e)
@@ -278,35 +238,10 @@ class Model:
         _idx = Index.model_validate_json(json.dumps(idx_json))
         return _idx
 
-    def get_raw_entity(self, path: str) -> RawEntityFactory:
-        try:
-            return RawEntityFactory(path=path, log_level=self.log_level)
-        except Exception as e:
-            self.__error_handler(e)
 
-    def get_stage_entity(self, path: str) -> StageEntityFactory:
-        try:
-            return StageEntityFactory(path=path, log_level=self.log_level)
-        except Exception as e:
-            self.__error_handler(e)
 
-    def get_core_entity(self, path: str) -> CoreEntityFactory:
-        try:
-            return CoreEntityFactory(path=path, log_level=self.log_level)
-        except Exception as e:
-            self.__error_handler(e)
 
-    def get_curated_entity(self, path: str) -> CuratedEntityFactory:
-        try:
-            return CuratedEntityFactory(path=path, log_level=self.log_level)
-        except Exception as e:
-            self.__error_handler(e)
 
-    def get_entity(self, path: str) -> EntityFactory:
-        try:
-            return EntityFactory(path=path, log_level=self.log_level)
-        except Exception as e:
-            self.__error_handler(e)
 
     def get_unified_entity(self, path: str) -> UnifiedEntityFactory:
         """Get a unified entity factory for v2 schema entities.
@@ -322,94 +257,78 @@ class Model:
         except Exception as e:
             self.__error_handler(e)
 
-    def is_v2_schema(self, entity_json: dict) -> bool:
-        """Detect if an entity uses v2 schema format.
+    def detect_v1_schema(self, entity_json: dict) -> bool:
+        """Detect if an entity uses deprecated v1 schema format.
         
         Args:
             entity_json (dict): The entity JSON data.
             
         Returns:
-            bool: True if entity uses v2 schema, False otherwise.
+            bool: True if entity uses v1 schema (now unsupported), False otherwise.
         """
-        # Check for v2 schema indicators
-        schema_url = entity_json.get("$schema", "")
-        if "ModelDataEntity.json" in schema_url:
-            return True
-            
-        # Check for v2 structure: has 'entity' and 'functions' at root level
-        if "entity" in entity_json and "functions" in entity_json:
-            return True
-            
-        # Check entity type - v2 uses 'entity' instead of layer names
+        # Check for v1 schema indicators
         entity_type = entity_json.get("type", "")
-        if entity_type == "entity":
+        if entity_type in ["raw", "stage", "core", "curated"]:
             return True
             
+        # Check for v1 structure patterns
+        if "function" in entity_json and "entity" in entity_json:
+            # This could be v1 if type is not "entity"
+            if entity_type != "entity":
+                return True
+                
         return False
 
-    def get_entity_factory(self, path: str) -> Union[EntityFactory, UnifiedEntityFactory, RawEntityFactory, StageEntityFactory, CoreEntityFactory, CuratedEntityFactory]:
-        """Get the appropriate entity factory based on schema version.
+    def get_entity_factory(self, path: str) -> UnifiedEntityFactory:
+        """Get the unified entity factory for v2 schema entities.
         
         Args:
             path (str): The path to the entity file.
             
         Returns:
-            Union[EntityFactory, UnifiedEntityFactory, ...]: The appropriate entity factory.
+            UnifiedEntityFactory: The unified entity factory.
+            
+        Raises:
+            ValueError: If the entity uses deprecated v1 schema format.
         """
         try:
             entity_json = Helper.read_json(path)
             
-            if self.is_v2_schema(entity_json):
-                return self.get_unified_entity(path)
-            else:
-                # Use legacy factory routing for v1 schemas
-                entity_type = entity_json.get("type", "").lower()
-                if entity_type == "raw":
-                    return self.get_raw_entity(path)
-                elif entity_type == "stage":
-                    return self.get_stage_entity(path)
-                elif entity_type == "core":
-                    return self.get_core_entity(path)
-                elif entity_type == "curated":
-                    return self.get_curated_entity(path)
-                else:
-                    return self.get_entity(path)
+            if self.detect_v1_schema(entity_json):
+                entity_type = entity_json.get("type", "unknown")
+                raise ValueError(
+                    f"Entity at {path} uses deprecated v1 schema format (type: {entity_type}). "
+                    "Please migrate to v2 schema using ModelDataEntity.json. "
+                    "See documentation for migration guide."
+                )
+            
+            return self.get_unified_entity(path)
                     
         except Exception as e:
             self.__error_handler(e)
+            raise
 
-    def get_raw_entity_list(self) -> list[Union[RawEntityFactory, UnifiedEntityFactory]]:
+    def get_raw_entity_list(self) -> list[UnifiedEntityFactory]:
         ls_raw_entity = []
         index = self.get_index()
 
-        # For v2 solutions, generate raw entities from staging entities
-        if self.is_v2_solution():
-            # Get staging entities and derive raw entities from them
-            for e in index.stageIndex.entry:
-                try:
-                    entity_json = Helper.read_json(e.absPath)
-                    if self.is_v2_schema(entity_json):
-                        unified_entity = self.get_unified_entity(path=e.absPath)
-                        # Only add if the staging entity has system sources (indicating it should have a raw layer)
-                        if unified_entity.system_sources:
-                            self.logger.debug(
-                                f"Added derived raw entity from staging: {e.locator} file: {e.absPath}"
-                            )
-                            ls_raw_entity.append(unified_entity)
-                except Exception as e_inner:
-                    self.logger.warning(f"Error processing staging entity for raw derivation: {e_inner}")
-        else:
-            # V1 behavior: use actual raw entities
-            for e in index.rawIndex.entry:
-                self.logger.debug(
-                    f"Added to raw entity list locator: {e.locator} file: {e.absPath}"
-                )
-                # Use schema-aware factory method
-                ls_raw_entity.append(self.get_entity_factory(path=e.absPath))
+        # V2: generate raw entities from staging entities
+        # Get staging entities and derive raw entities from them
+        for e in index.stageIndex.entry:
+            try:
+                unified_entity = self.get_unified_entity(path=e.absPath)
+                # Only add if the staging entity has system sources (indicating it should have a raw layer)
+                if unified_entity.system_sources:
+                    self.logger.debug(
+                        f"Added derived raw entity from staging: {e.locator} file: {e.absPath}"
+                    )
+                    ls_raw_entity.append(unified_entity)
+            except Exception as e_inner:
+                self.logger.warning(f"Error processing staging entity for raw derivation: {e_inner}")
 
         return ls_raw_entity
 
-    def get_stage_entity_list(self) -> list[Union[StageEntityFactory, UnifiedEntityFactory]]:
+    def get_stage_entity_list(self) -> list[UnifiedEntityFactory]:
         ls_stage_entity = []
         index = self.get_index()
 
@@ -417,12 +336,11 @@ class Model:
             self.logger.debug(
                 f"Added to stage entity list locator: {e.locator} file: {e.absPath}"
             )
-            # Use schema-aware factory method
             ls_stage_entity.append(self.get_entity_factory(path=e.absPath))
 
         return ls_stage_entity
 
-    def get_core_entity_list(self) -> list[Union[CoreEntityFactory, UnifiedEntityFactory]]:
+    def get_core_entity_list(self) -> list[UnifiedEntityFactory]:
         ls_core_entity = []
         index = self.get_index()
 
@@ -430,12 +348,11 @@ class Model:
             self.logger.debug(
                 f"Added to core entity list locator: {e.locator} file: {e.absPath}"
             )
-            # Use schema-aware factory method
             ls_core_entity.append(self.get_entity_factory(path=e.absPath))
 
         return ls_core_entity
 
-    def get_curated_entity_list(self) -> list[Union[CuratedEntityFactory, UnifiedEntityFactory]]:
+    def get_curated_entity_list(self) -> list[UnifiedEntityFactory]:
         ls_curated_entity = []
         index = self.get_index()
 
@@ -443,7 +360,6 @@ class Model:
             self.logger.debug(
                 f"Added to curated entity list locator: {e.locator} file: {e.absPath}"
             )
-            # Use schema-aware factory method
             ls_curated_entity.append(self.get_entity_factory(path=e.absPath))
 
         return ls_curated_entity
@@ -451,13 +367,13 @@ class Model:
     def get_entity_list(
         self,
         regex: str = r"^([A-Za-z]*)\/([A-Za-z]*)\/([A-Za-z]*)\/([A-Za-z]*)",
-    ) -> list[EntityFactory]:
+    ) -> list[UnifiedEntityFactory]:
         ls_entity = []
         for e in self.get_locator(regex=regex):
             self.logger.debug(
-                f"Added to raw entity list locator: {e.locator} file: {e.absPath}"
+                f"Added to entity list locator: {e.locator} file: {e.absPath}"
             )
-            ls_entity.append(self.get_entity(path=e.absPath))
+            ls_entity.append(self.get_entity_factory(path=e.absPath))
 
         return ls_entity
 
@@ -476,7 +392,7 @@ class Model:
             for entry in layer_index.entry:
                 try:
                     entity_json = Helper.read_json(entry.absPath)
-                    if self.is_v2_schema(entity_json):
+                    if not self.detect_v1_schema(entity_json):
                         self.logger.debug(
                             f"Added unified entity: {entry.locator} file: {entry.absPath}"
                         )
@@ -504,7 +420,7 @@ class Model:
             for entry in layer_index.entry:
                 try:
                     entity_json = Helper.read_json(entry.absPath)
-                    if self.is_v2_schema(entity_json):
+                    if not self.detect_v1_schema(entity_json):
                         self.logger.debug(
                             f"Added unified {layer} entity: {entry.locator} file: {entry.absPath}"
                         )
@@ -537,20 +453,17 @@ class Model:
                     self.__error_handler(e)
                     continue
 
-                # Handle both v1 and v2 schema formats
-                if self.is_v2_schema(_js):
-                    # V2 schema: extract layer from path and entity info from entity object
-                    unified_factory = UnifiedEntityFactory(abspath, log_level=self.log_level)
-                    entity_type = unified_factory.entity_layer.lower()
-                    data_module = unified_factory.data_module
-                    data_product = unified_factory.data_product
-                    entity_name = unified_factory.entity_name
-                else:
-                    # V1 schema: use traditional structure
-                    entity_type = _js["type"]
-                    data_module = _js["entity"]["dataModule"]
-                    data_product = _js["entity"]["dataProduct"]
-                    entity_name = _js["entity"]["name"]
+                # Check for deprecated v1 schema and provide helpful error
+                if self.detect_v1_schema(_js):
+                    self.logger.error(f"Found deprecated v1 schema in {abspath}. Please migrate to v2 schema format.")
+                    continue
+                
+                # V2 schema only: extract layer from path and entity info from entity object
+                unified_factory = UnifiedEntityFactory(abspath, log_level=self.log_level)
+                entity_type = unified_factory.entity_layer.lower()
+                data_module = unified_factory.data_module
+                data_product = unified_factory.data_product
+                entity_name = unified_factory.entity_name
 
                 locator = Helper.get_locator(
                     entity_type=entity_type,
@@ -626,20 +539,17 @@ class Model:
                     if file_change_time > idx_change_time:
                         _js = Helper.read_json(abspath)
                         
-                        # Handle both v1 and v2 schema formats
-                        if self.is_v2_schema(_js):
-                            # V2 schema: extract layer from path and entity info from entity object
-                            unified_factory = UnifiedEntityFactory(abspath, log_level=self.log_level)
-                            entity_type = unified_factory.entity_layer.lower()
-                            data_module = unified_factory.data_module
-                            data_product = unified_factory.data_product
-                            entity_name = unified_factory.entity_name
-                        else:
-                            # V1 schema: use traditional structure
-                            entity_type = _js["type"]
-                            data_module = _js["entity"]["dataModule"]
-                            data_product = _js["entity"]["dataProduct"]
-                            entity_name = _js["entity"]["name"]
+                        # Check for deprecated v1 schema and skip
+                        if self.detect_v1_schema(_js):
+                            self.logger.warning(f"Skipping deprecated v1 schema file: {file_name}")
+                            continue
+                        
+                        # V2 schema only: extract layer from path and entity info from entity object
+                        unified_factory = UnifiedEntityFactory(abspath, log_level=self.log_level)
+                        entity_type = unified_factory.entity_layer.lower()
+                        data_module = unified_factory.data_module
+                        data_product = unified_factory.data_product
+                        entity_name = unified_factory.entity_name
                         
                         locator = Helper.get_locator(
                             entity_type=entity_type,
@@ -776,15 +686,7 @@ class Model:
 
         return ls_locators
 
-    def lookup_entity(
-        self, locator: str
-    ) -> Union[
-        RawEntityFactory,
-        StageEntityFactory,
-        CoreEntityFactory,
-        CuratedEntityFactory,
-        UnifiedEntityFactory,
-    ]:
+    def lookup_entity(self, locator: str) -> UnifiedEntityFactory:
         """
         Lookup an entity object by locator
 
@@ -805,7 +707,7 @@ class Model:
             # Use the schema-aware factory method to get the appropriate factory
             return self.get_entity_factory(path=locator_index.absPath)
 
-    def lookup_stage_entity(self, locator: str) -> StageEntityFactory:
+    def lookup_stage_entity(self, locator: str) -> UnifiedEntityFactory:
         """
         Lookup a Stage entity object by locator
 
@@ -819,7 +721,7 @@ class Model:
             self.logger.debug("Locator Index: %s" % str(locator_index))
 
             for locator_index in self.get_locator(regex=locator):
-                return self.get_stage_entity(path=locator_index.absPath)
+                return self.get_entity_factory(path=locator_index.absPath)
         else:
             self.logger.warning(
                 f"Can not return stage object as the locatore {locator} is not a stage location"
@@ -872,24 +774,10 @@ class Model:
         )
 
         for entity in core_entities:
-            # Handle both v1 and v2 entity structures
-            if hasattr(entity, 'model_object') and entity.model_object:
-                # V1 entity structure
-                table = entity.model_object.entity
-                if hasattr(entity.model_object, 'function') and entity.model_object.function:
-                    function = entity.model_object.function
-                    sources: list = filter(lambda x: x.dm8l != "#", function.source)
-                else:
-                    sources = []
-                table_name = table.name
-            elif hasattr(entity, 'entity'):
-                # V2 unified entity structure
-                table = entity.entity
-                sources = entity.model_sources if hasattr(entity, 'model_sources') else []
-                table_name = table.name
-            else:
-                self.logger.warning(f"Unknown entity structure: {type(entity)}")
-                continue
+            # V2 unified entity structure only
+            table = entity.entity
+            sources = entity.model_sources if hasattr(entity, 'model_sources') else []
+            table_name = table.name
 
             self.logger.debug("Core Table: %s" % table_name)
 
@@ -905,12 +793,7 @@ class Model:
                 self.logger.debug("Source Entity Locator: %s" % source_locator)
                 try:
                     stage_entity = self.lookup_entity(source_locator)
-                    if hasattr(stage_entity, 'model_object') and stage_entity.model_object:
-                        entity_name = stage_entity.model_object.entity.name
-                    elif hasattr(stage_entity, 'entity_name'):
-                        entity_name = stage_entity.entity_name
-                    else:
-                        entity_name = "Unknown"
+                    entity_name = stage_entity.entity_name
                     self.logger.debug("Source Entity: %s" % entity_name)
                 except Exception as e:
                     self.logger.warning(f"Could not lookup source entity {source_locator}: {e}")
@@ -922,56 +805,24 @@ class Model:
         )
 
         for entity in curated_entities:
-            # Handle both v1 and v2 entity structures
-            if hasattr(entity, 'model_object') and entity.model_object:
-                # V1 entity structure
-                table = entity.model_object.entity
-                functions = entity.model_object.function
-                table_name = table.name
-            elif hasattr(entity, 'entity'):
-                # V2 unified entity structure
-                table = entity.entity
-                sources = entity.model_sources if hasattr(entity, 'model_sources') else []
-                table_name = table.name
-            else:
-                self.logger.warning(f"Unknown curated entity structure: {type(entity)}")
-                continue
+            # V2 unified entity structure only
+            table = entity.entity
+            sources = entity.model_sources if hasattr(entity, 'model_sources') else []
+            table_name = table.name
 
             self.logger.debug("Curated Table: %s" % table_name)
 
-            # Handle v1 vs v2 source validation
-            if hasattr(entity, 'model_object') and entity.model_object:
-                # V1: iterate through functions
-                for function in functions:
-                    # validate source locators
-                    for source in function.source:
-                        self.logger.debug("Source Entity Locator: %s" % source.dm8l)
-                        try:
-                            core_entity = self.lookup_entity(source.dm8l)
-                            if hasattr(core_entity, 'model_object') and core_entity.model_object:
-                                entity_name = core_entity.model_object.entity.name
-                            elif hasattr(core_entity, 'entity_name'):
-                                entity_name = core_entity.entity_name
-                            else:
-                                entity_name = "Unknown"
-                            self.logger.debug("Source Entity: %s" % entity_name)
-                        except Exception as e:
-                            self.logger.warning(f"Could not lookup source entity {source.dm8l}: {e}")
-            else:
-                # V2: iterate through model sources
-                for source in sources:
-                    if hasattr(source, 'model') and hasattr(source.model, 'dm8l'):
-                        source_locator = source.model.dm8l
-                        self.logger.debug("Source Entity Locator: %s" % source_locator)
-                        try:
-                            core_entity = self.lookup_entity(source_locator)
-                            if hasattr(core_entity, 'entity_name'):
-                                entity_name = core_entity.entity_name
-                            else:
-                                entity_name = "Unknown"
-                            self.logger.debug("Source Entity: %s" % entity_name)
-                        except Exception as e:
-                            self.logger.warning(f"Could not lookup source entity {source_locator}: {e}")
+            # V2: iterate through model sources
+            for source in sources:
+                if hasattr(source, 'model') and hasattr(source.model, 'dm8l'):
+                    source_locator = source.model.dm8l
+                    self.logger.debug("Source Entity Locator: %s" % source_locator)
+                    try:
+                        core_entity = self.lookup_entity(source_locator)
+                        entity_name = core_entity.entity_name
+                        self.logger.debug("Source Entity: %s" % entity_name)
+                    except Exception as e:
+                        self.logger.warning(f"Could not lookup source entity {source_locator}: {e}")
 
     class ModelParseException(Exception):
         def __init__(
