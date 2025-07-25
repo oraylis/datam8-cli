@@ -937,10 +937,10 @@ class Model:
 
     def lookup_entity(self, locator: str) -> UnifiedEntityFactory:
         """
-        Lookup an entity object by locator
+        Lookup an entity object by locator with dynamic zone validation
 
         Arguments:
-            locator(str): Locator to lookup in the index, e.g. "/Raw/Sales/Customer/Customer_DE"
+            locator(str): Locator to lookup in the index, e.g. "/010-staging/Sales/Customer/Customer_DE"
         """
         self.logger.debug("Start looking for locator: %s" % locator)
 
@@ -948,6 +948,22 @@ class Model:
             locator = "/" + locator
 
         layer = locator.lower().split("/")[1]
+        
+        # Dynamic zone validation using Zones.json
+        valid_zones = []
+        for zone in self.zones.get_zone_list():
+            # Add logical zone name (e.g., "stage", "core", "curated")
+            valid_zones.append(zone.name.lower())
+            # Add physical folder name (e.g., "010-staging", "020-core", "030-curated")
+            if hasattr(zone, 'localFolderName') and zone.localFolderName:
+                valid_zones.append(zone.localFolderName.lower())
+        
+        # Special case for raw zone (uses "Raw" folder)
+        valid_zones.extend(["raw", "000-raw"])
+        
+        if layer not in valid_zones:
+            available_zones = ", ".join(sorted(set(valid_zones)))
+            raise ValueError(f"Invalid zone '{layer}' in locator '{locator}'. Valid zones from Zones.json: {available_zones}")
 
         locator_index = self.get_locator(regex=locator)
         self.logger.debug("Locator Index: %s" % str(locator_index))
@@ -958,23 +974,20 @@ class Model:
 
     def lookup_stage_entity(self, locator: str) -> UnifiedEntityFactory:
         """
-        Lookup a Stage entity object by locator
+        Lookup a Stage entity object by locator (DEPRECATED - use lookup_entity instead)
 
         Parameters:
-            locator: str = Stage locator to lookup in index (e.g "Stage/Sales/Customer/Customer_DE")
+            locator: str = Stage locator to lookup in index (e.g "/010-staging/Sales/Customer/Customer_DE")
         """
-        self.logger.debug("Start looking for locator: %s" % locator)
-
-        if locator.lower().startswith("/stage") or locator.lower().startswith("/staging"):
-            locator_index = self.get_locator(regex=locator)
-            self.logger.debug("Locator Index: %s" % str(locator_index))
-
-            for locator_index in self.get_locator(regex=locator):
-                return self.get_entity_factory(path=locator_index.absPath)
-        else:
-            self.logger.warning(
-                f"Can not return stage object as the locatore {locator} is not a stage location"
-            )
+        import warnings
+        warnings.warn(
+            "lookup_stage_entity() is deprecated. Use lookup_entity() instead for zone-agnostic lookup.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        
+        # Delegate to the enhanced zone-agnostic lookup_entity method
+        return self.lookup_entity(locator)
 
     def perform_initial_checks(self, *layers) -> int:
         """Performs some simple checks to validate the model before actually
