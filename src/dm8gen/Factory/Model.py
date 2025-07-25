@@ -43,6 +43,9 @@ class Model:
         self.path_solution = os.path.abspath(path_solution)
         self.dict_solution = os.path.dirname(self.path_solution)
         self.path_index = os.path.join(self.dict_solution, "index.json")
+        
+        # Validate zones configuration on initialization
+        self._validate_zones_configuration()
 
     @property
     def solution(self) -> Solution:
@@ -68,43 +71,29 @@ class Model:
     @property
     def path_raw(self) -> str:
         try:
-            # V2 only: use modelPath + Raw subdirectory
+            # Raw zone special case: path uses dynamic zone system but entities derived from staging
             model_path = self.__get_dict_path(dict_item=self.solution.modelPath)
+            # Use "Raw" folder for backward compatibility - raw entities are derived from staging
             raw_path = os.path.join(model_path, "Raw")
-            self.logger.debug(f"Requested raw path: {raw_path}")
+            self.logger.debug(f"Requested raw path (entities derived from staging): {raw_path}")
             return raw_path
         except Exception as e:
             self.__error_handler(e)
 
     @property
     def path_stage(self) -> str:
-        try:
-            # V2 only: use modelPath + Staging subdirectory
-            model_path = self.__get_dict_path(dict_item=self.solution.modelPath)
-            stage_path = os.path.join(model_path, "Staging")
-            return stage_path
-        except Exception as e:
-            self.__error_handler(e)
+        """Get stage path using dynamic zone system."""
+        return self.get_zone_path("stage")
 
     @property
     def path_core(self) -> str:
-        try:
-            # V2 only: use modelPath + Core subdirectory
-            model_path = self.__get_dict_path(dict_item=self.solution.modelPath)
-            core_path = os.path.join(model_path, "Core")
-            return core_path
-        except Exception as e:
-            self.__error_handler(e)
+        """Get core path using dynamic zone system."""
+        return self.get_zone_path("core")
 
     @property
     def path_curated(self) -> str:
-        try:
-            # V2 only: use modelPath + Curated subdirectory
-            model_path = self.__get_dict_path(dict_item=self.solution.modelPath)
-            curated_path = os.path.join(model_path, "Curated")
-            return curated_path
-        except Exception as e:
-            self.__error_handler(e)
+        """Get curated path using dynamic zone system."""
+        return self.get_zone_path("curated")
 
     @property
     def path_generate(self) -> str:
@@ -127,6 +116,190 @@ class Model:
             return output_path
         except Exception as e:
             self.__error_handler(e)
+
+    def get_zone_path(self, zone_name: str) -> str:
+        """Get the full path for a specific zone using dynamic zone system.
+        
+        Args:
+            zone_name (str): The logical zone name from Zones.json.
+            
+        Returns:
+            str: The full path to the zone directory.
+            
+        Raises:
+            ValueError: If the zone is not found in Zones.json.
+        """
+        return self.get_zone_path_dynamic(zone_name)
+
+    def get_zone_folder(self, zone_name: str) -> str:
+        """Get the local folder name for a specific zone.
+        
+        Args:
+            zone_name (str): The logical zone name (e.g., 'stage', 'core', 'curated').
+            
+        Returns:
+            str: The local folder name (e.g., '010-Staging', '020-Core').
+            
+        Raises:
+            ValueError: If the zone is not found in Zones.json.
+        """
+        try:
+            zone_folder = self.zones.get_folder_structure(zone_name)
+            if not zone_folder:
+                raise ValueError(f"Zone '{zone_name}' not found in Zones.json - zone configuration is required")
+            return zone_folder
+        except Exception as e:
+            self.__error_handler(e)
+            raise
+
+    def get_zone_target_name(self, zone_name: str) -> str:
+        """Get the target platform name for a specific zone.
+        
+        Args:
+            zone_name (str): The logical zone name (e.g., 'stage', 'core', 'curated').
+            
+        Returns:
+            str: The target platform name (e.g., 'bronze', 'silver', 'gold').
+            
+        Raises:
+            ValueError: If the zone is not found in Zones.json.
+        """
+        try:
+            target_name = self.zones.get_target_name(zone_name)
+            if not target_name:
+                raise ValueError(f"Zone '{zone_name}' not found in Zones.json - zone configuration is required")
+            return target_name
+        except Exception as e:
+            self.__error_handler(e)
+            raise
+
+    def get_zone_display_name(self, zone_name: str) -> str:
+        """Get the display name for a specific zone.
+        
+        Args:
+            zone_name (str): The logical zone name (e.g., 'stage', 'core', 'curated').
+            
+        Returns:
+            str: The display name (e.g., 'Staging Data Layer', 'Core Business Layer').
+            
+        Raises:
+            ValueError: If the zone is not found in Zones.json.
+        """
+        try:
+            display_name = self.zones.get_display_name(zone_name)
+            if not display_name:
+                raise ValueError(f"Zone '{zone_name}' not found in Zones.json - zone configuration is required")
+            return display_name
+        except Exception as e:
+            self.__error_handler(e)
+            raise
+
+    def _validate_zones_configuration(self) -> None:
+        """Validate that all zones in Zones.json are properly configured.
+        
+        Raises:
+            ValueError: If zones are missing required fields or misconfigured.
+        """
+        try:
+            missing_zones = []
+            
+            # Dynamic validation - check all zones defined in Zones.json
+            for zone in self.zones.get_zone_list():
+                zone_name = zone.name
+                try:
+                    zone_target = self.zones.get_target_name(zone_name)
+                    zone_display = self.zones.get_display_name(zone_name)
+                    
+                    if not zone_target:
+                        missing_zones.append(f"{zone_name} (missing targeName)")
+                    if not zone_display:
+                        missing_zones.append(f"{zone_name} (missing displayName)")
+                    
+                    # Validate localFolderName for all zones
+                    zone_folder = self.zones.get_folder_structure(zone_name)
+                    if not zone_folder:
+                        missing_zones.append(f"{zone_name} (missing localFolderName)")
+                        
+                except Exception:
+                    missing_zones.append(f"{zone_name} (zone validation failed)")
+            
+            if missing_zones:
+                raise ValueError(
+                    f"Zones configuration validation failed. Missing or incomplete zones: {', '.join(missing_zones)}. "
+                    "Please ensure all zones are properly defined in Zones.json"
+                )
+                
+            self.logger.info(f"Zones configuration validation passed for {len(self.zones.get_zone_list())} zones")
+            
+        except Exception as e:
+            self.logger.error(f"Zones validation failed: {e}")
+            raise
+
+    @property
+    def zone_paths(self) -> dict[str, str]:
+        """Get all configured zone paths dynamically.
+        
+        Returns:
+            dict[str, str]: Dictionary mapping zone names to their full paths.
+        """
+        try:
+            paths = {}
+            model_path = self.__get_dict_path(dict_item=self.solution.modelPath)
+            
+            for zone in self.zones.get_zone_list():
+                zone_name = zone.name
+                
+                # Special case for raw zone - uses "Raw" folder for entity discovery
+                if zone_name == "raw":
+                    paths[zone_name] = os.path.join(model_path, "Raw")
+                else:
+                    # Other zones use their localFolderName
+                    if hasattr(zone, 'localFolderName') and zone.localFolderName:
+                        paths[zone_name] = os.path.join(model_path, zone.localFolderName)
+                    else:
+                        raise ValueError(f"Zone '{zone_name}' missing localFolderName in Zones.json")
+                        
+            return paths
+        except Exception as e:
+            self.__error_handler(e)
+            raise
+
+    def get_zone_path_dynamic(self, zone_name: str) -> str:
+        """Universal zone path lookup that works for any zone in Zones.json.
+        
+        Args:
+            zone_name (str): The logical zone name from Zones.json.
+            
+        Returns:
+            str: The full path to the zone directory.
+            
+        Raises:
+            ValueError: If the zone is not found or misconfigured.
+        """
+        try:
+            model_path = self.__get_dict_path(dict_item=self.solution.modelPath)
+            
+            # Special case for raw zone
+            if zone_name == "raw":
+                zone_path = os.path.join(model_path, "Raw")
+                self.logger.debug(f"Requested {zone_name} zone path (special case): {zone_path}")
+                return zone_path
+            
+            # Standard zones use localFolderName
+            zone = self.zones.get_zone(zone_name)
+            if not zone:
+                raise ValueError(f"Zone '{zone_name}' not found in Zones.json")
+                
+            if not hasattr(zone, 'localFolderName') or not zone.localFolderName:
+                raise ValueError(f"Zone '{zone_name}' missing localFolderName in Zones.json")
+                
+            zone_path = os.path.join(model_path, zone.localFolderName)
+            self.logger.debug(f"Requested {zone_name} zone path: {zone_path}")
+            return zone_path
+            
+        except Exception as e:
+            self.__error_handler(e)
+            raise
 
     @property
     def data_sources(self) -> DataSourceFactory:
