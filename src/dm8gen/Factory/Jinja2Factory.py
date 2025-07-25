@@ -321,7 +321,7 @@ class Jinja2Factory:
                     "curated": self.model.get_unified_entities_by_layer("curated"),
                 },
                 # Provide derived raw entities from staging (v2 only now)
-                "v2_derived_raw_entities": self.model.get_raw_entity_list()
+                "v2_derived_raw_entities": self.model.get_entity_list_by_layer("raw")
             }
             if path_modules is not None:
                 path_modules = os.path.abspath(path_modules)

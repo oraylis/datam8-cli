@@ -533,45 +533,6 @@ class Model:
             self.__error_handler(e)
             raise
 
-    def get_raw_entity_list(self) -> list[UnifiedEntityFactory]:
-        """Get raw layer entities (DEPRECATED - use get_entity_list_by_layer('raw') instead)."""
-        import warnings
-        warnings.warn(
-            "get_raw_entity_list() is deprecated. Use get_entity_list_by_layer('raw') instead.",
-            DeprecationWarning,
-            stacklevel=2
-        )
-        return self.get_entity_list_by_layer('raw')
-
-    def get_stage_entity_list(self) -> list[UnifiedEntityFactory]:
-        """Get stage layer entities (DEPRECATED - use get_entity_list_by_layer('stage') instead)."""
-        import warnings
-        warnings.warn(
-            "get_stage_entity_list() is deprecated. Use get_entity_list_by_layer('stage') instead.",
-            DeprecationWarning,
-            stacklevel=2
-        )
-        return self.get_entity_list_by_layer('stage')
-
-    def get_core_entity_list(self) -> list[UnifiedEntityFactory]:
-        """Get core layer entities (DEPRECATED - use get_entity_list_by_layer('core') instead)."""
-        import warnings
-        warnings.warn(
-            "get_core_entity_list() is deprecated. Use get_entity_list_by_layer('core') instead.",
-            DeprecationWarning,
-            stacklevel=2
-        )
-        return self.get_entity_list_by_layer('core')
-
-    def get_curated_entity_list(self) -> list[UnifiedEntityFactory]:
-        """Get curated layer entities (DEPRECATED - use get_entity_list_by_layer('curated') instead)."""
-        import warnings
-        warnings.warn(
-            "get_curated_entity_list() is deprecated. Use get_entity_list_by_layer('curated') instead.",
-            DeprecationWarning,
-            stacklevel=2
-        )
-        return self.get_entity_list_by_layer('curated')
 
     def get_entity_list_by_layer(self, layer: str) -> list[UnifiedEntityFactory]:
         """Get entities for a specific layer using unified factory.
@@ -635,9 +596,9 @@ class Model:
         ls_unified_entity = []
         index = self.get_index()
         
-        # Check all layers for v2 entities
-        for layer_name in ["rawIndex", "stageIndex", "coreIndex", "curatedIndex"]:
-            layer_index = getattr(index, layer_name)
+        # Check all configured zones for v2 entities dynamically
+        for index_name, _ in self.__get_index_items():
+            layer_index = getattr(index, index_name)
             for entry in layer_index.entry:
                 try:
                     entity_json = Helper.read_json(entry.absPath)
@@ -680,12 +641,14 @@ class Model:
         return ls_unified_entity
 
     def __get_index_items(self) -> list[tuple[str, str]]:
-        ls_index_items: list[tuple[str, str]] = [
-            ("rawIndex", self.path_raw),
-            ("stageIndex", self.path_stage),
-            ("coreIndex", self.path_core),
-            ("curatedIndex", self.path_curated),
-        ]
+        """Get index items dynamically from Zones.json configuration."""
+        ls_index_items: list[tuple[str, str]] = []
+        
+        # Generate index items dynamically from configured zones
+        for zone_name, zone_path in self.zone_paths.items():
+            index_name = f"{zone_name}Index"
+            ls_index_items.append((index_name, zone_path))
+            
         return ls_index_items
 
     def __get_index_entry(self, path: str) -> dict:
@@ -838,17 +801,25 @@ class Model:
                     ls_locators.append(i.locator)
 
     def check_zone_for_entities(self, zone: str) -> bool:
-        if zone == "raw":
-            path_to_check = self.path_raw
-        elif zone == "stage":
-            path_to_check = self.path_stage
-        elif zone == "core":
-            path_to_check = self.path_core
-        elif zone == "curated":
-            path_to_check = self.path_curated
-        else:
-            raise ValueError("Unknown zone name: %s" % zone)
-
+        """Check if a specific zone contains any entities using dynamic zone validation.
+        
+        Args:
+            zone (str): Zone name to check (from Zones.json configuration).
+            
+        Returns:
+            bool: True if zone contains entities, False otherwise.
+            
+        Raises:
+            ValueError: If zone is not found in Zones.json configuration.
+        """
+        # Validate zone exists in configuration
+        valid_zones = list(self.zone_paths.keys())
+        if zone not in valid_zones:
+            raise ValueError(f"Unknown zone name: {zone}. Valid zones from Zones.json: {', '.join(valid_zones)}")
+        
+        # Get path for the zone dynamically
+        path_to_check = self.zone_paths[zone]
+        
         return len(self.__get_index_entry(path_to_check)["entry"]) > 0
 
     def validate_index(self, full_index_scan=True):
@@ -856,24 +827,20 @@ class Model:
             if full_index_scan or not os.path.exists(self.path_index):
                 self.logger.info("Start full index generating")
 
-                raw: dict = self.__get_index_entry(self.path_raw)
-                stage: dict = self.__get_index_entry(self.path_stage)
-                core: dict = self.__get_index_entry(self.path_core)
-                curated: dict = self.__get_index_entry(self.path_curated)
+                # Create Index dynamically from configured zones
+                idx_dict: dict = {
+                    "type": "Index",
+                }
+                
+                # Generate index entries for each configured zone
+                for index_name, zone_path in self.__get_index_items():
+                    zone_entries: dict = self.__get_index_entry(zone_path)
+                    idx_dict[index_name] = zone_entries
 
                 if self.errors:
                     raise Model.ModelParseException(
                         inner_exceptions=self.errors
                     )
-
-                # Create Index
-                idx_dict: dict = {
-                    "type": "Index",
-                    "rawIndex": raw,
-                    "stageIndex": stage,
-                    "coreIndex": core,
-                    "curatedIndex": curated,
-                }
 
                 # Validate duplicate locators
                 __idx = Index.model_validate_json(json.dumps(idx_dict))
@@ -972,22 +939,6 @@ class Model:
             # Use the schema-aware factory method to get the appropriate factory
             return self.get_entity_factory(path=locator_index.absPath)
 
-    def lookup_stage_entity(self, locator: str) -> UnifiedEntityFactory:
-        """
-        Lookup a Stage entity object by locator (DEPRECATED - use lookup_entity instead)
-
-        Parameters:
-            locator: str = Stage locator to lookup in index (e.g "/010-staging/Sales/Customer/Customer_DE")
-        """
-        import warnings
-        warnings.warn(
-            "lookup_stage_entity() is deprecated. Use lookup_entity() instead for zone-agnostic lookup.",
-            DeprecationWarning,
-            stacklevel=2
-        )
-        
-        # Delegate to the enhanced zone-agnostic lookup_entity method
-        return self.lookup_entity(locator)
 
     def perform_initial_checks(self, *layers) -> int:
         """Performs some simple checks to validate the model before actually
@@ -998,91 +949,64 @@ class Model:
         work.
 
         Arguments:
-            *layers: The names of layers to perform checks on, e.g. `raw`.
+            *layers: The names of layers to perform checks on using configured zones from Zones.json.
         """
         self.logger.debug("Start performing initial model checks")
 
-        if "raw" in layers:
-            self.__perform_raw_checks()
-
-        if "stage" in layers:
-            self.__perform_stage_checks()
-
-        if "core" in layers:
-            self.__perform_core_checks()
-
-        if "curated" in layers:
-            self.__perform_curated_checks()
+        # Get available zones dynamically
+        available_zones = list(self.zone_paths.keys())
+        
+        for layer in layers:
+            if layer not in available_zones:
+                self.logger.warning(f"Layer '{layer}' not found in Zones.json configuration. Available zones: {', '.join(available_zones)}")
+                continue
+                
+            # Perform checks for the layer using get_entity_list_by_layer
+            try:
+                entities = self.get_entity_list_by_layer(layer)
+                self.logger.info(f"{layer.title()} Entities to process: {len(entities)}")
+                
+                # Perform entity-specific checks for core and curated layers
+                if layer in ["core", "curated"]:
+                    self.__perform_source_validation_checks(entities, layer)
+                    
+            except Exception as e:
+                self.logger.error(f"Error performing checks for layer '{layer}': {e}")
 
         self.logger.info("Finished initial model checks")
 
         return 0
 
-    def __perform_raw_checks(self) -> None:
-        raw_entities: list = self.get_raw_entity_list()
-
-        self.logger.info("Raw Entities to process: %s" % str(len(raw_entities)))
-
-    def __perform_stage_checks(self) -> None:
-        stage_entities: list = self.get_stage_entity_list()
-        self.logger.info(
-            "Stage Entities to process: %s" % str(len(stage_entities))
-        )
-
-    def __perform_core_checks(self) -> None:
-        core_entities: list = self.get_core_entity_list()
-        self.logger.info(
-            "Core Entities to process: %s" % str(len(core_entities))
-        )
-
-        for entity in core_entities:
+    def __perform_source_validation_checks(self, entities: list[UnifiedEntityFactory], layer_name: str) -> None:
+        """Perform source validation checks for entities that have source dependencies.
+        
+        Args:
+            entities: List of entities to validate
+            layer_name: Name of the layer being checked (for logging)
+        """
+        for entity in entities:
             # V2 unified entity structure only
             table = entity.entity
             sources = entity.model_sources if hasattr(entity, 'model_sources') else []
             table_name = table.name
 
-            self.logger.debug("Core Table: %s" % table_name)
+            self.logger.debug(f"{layer_name.title()} Table: {table_name}")
 
-            # validate source locators
+            # Validate source locators
             for source in sources:
+                source_locator = None
+                
                 if hasattr(source, 'dm8l'):
                     source_locator = source.dm8l
                 elif hasattr(source, 'model') and hasattr(source.model, 'dm8l'):
                     source_locator = source.model.dm8l
-                else:
-                    continue
-                    
-                self.logger.debug("Source Entity Locator: %s" % source_locator)
-                try:
-                    stage_entity = self.lookup_entity(source_locator)
-                    entity_name = stage_entity.entity_name
-                    self.logger.debug("Source Entity: %s" % entity_name)
-                except Exception as e:
-                    self.logger.warning(f"Could not lookup source entity {source_locator}: {e}")
-
-    def __perform_curated_checks(self) -> None:
-        curated_entities: list = self.get_curated_entity_list()
-        self.logger.info(
-            "Curated Entities to process: %s" % str(len(curated_entities))
-        )
-
-        for entity in curated_entities:
-            # V2 unified entity structure only
-            table = entity.entity
-            sources = entity.model_sources if hasattr(entity, 'model_sources') else []
-            table_name = table.name
-
-            self.logger.debug("Curated Table: %s" % table_name)
-
-            # V2: iterate through model sources
-            for source in sources:
-                if hasattr(source, 'model') and hasattr(source.model, 'dm8l'):
-                    source_locator = source.model.dm8l
-                    self.logger.debug("Source Entity Locator: %s" % source_locator)
+                
+                if source_locator:
+                    self.logger.debug(f"Source Entity Locator: {source_locator}")
                     try:
-                        core_entity = self.lookup_entity(source_locator)
-                        entity_name = core_entity.entity_name
-                        self.logger.debug("Source Entity: %s" % entity_name)
+                        source_entity = self.lookup_entity(source_locator)
+                        entity_name = source_entity.entity_name
+                        self.logger.debug(f"Source Entity: {entity_name}")
                     except Exception as e:
                         self.logger.warning(f"Could not lookup source entity {source_locator}: {e}")
 
