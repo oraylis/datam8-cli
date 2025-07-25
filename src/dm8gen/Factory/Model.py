@@ -68,32 +68,6 @@ class Model:
         except Exception as e:
             self.__error_handler(e)
 
-    @property
-    def path_raw(self) -> str:
-        try:
-            # Raw zone special case: path uses dynamic zone system but entities derived from staging
-            model_path = self.__get_dict_path(dict_item=self.solution.modelPath)
-            # Use "Raw" folder for backward compatibility - raw entities are derived from staging
-            raw_path = os.path.join(model_path, "Raw")
-            self.logger.debug(f"Requested raw path (entities derived from staging): {raw_path}")
-            return raw_path
-        except Exception as e:
-            self.__error_handler(e)
-
-    @property
-    def path_stage(self) -> str:
-        """Get stage path using dynamic zone system."""
-        return self.get_zone_path("stage")
-
-    @property
-    def path_core(self) -> str:
-        """Get core path using dynamic zone system."""
-        return self.get_zone_path("core")
-
-    @property
-    def path_curated(self) -> str:
-        """Get curated path using dynamic zone system."""
-        return self.get_zone_path("curated")
 
     @property
     def path_generate(self) -> str:
@@ -491,10 +465,18 @@ class Model:
         Returns:
             bool: True if entity uses v1 schema (now unsupported), False otherwise.
         """
-        # Check for v1 schema indicators
+        # Check for v1 schema indicators - entity type matches configured zone names
         entity_type = entity_json.get("type", "")
-        if entity_type in ["raw", "stage", "core", "curated"]:
-            return True
+        
+        # Get configured zone names dynamically
+        try:
+            configured_zone_names = [zone.name for zone in self.zones.get_zone_list()]
+            if entity_type in configured_zone_names:
+                return True
+        except Exception:
+            # Fallback to traditional zone names if zones configuration is not available
+            if entity_type in ["raw", "stage", "core", "curated"]:
+                return True
             
         # Check for v1 structure patterns
         if "function" in entity_json and "entity" in entity_json:
@@ -689,9 +671,15 @@ class Model:
                     "locator": locator,
                 }
 
-                # Add references field to core and curated objects
-                if entity_type in ["core", "curated"]:
-                    entry["references"] = []
+                # Add references field to zones that might have entity relationships
+                # This is determined by checking if the entity has source dependencies
+                try:
+                    if hasattr(unified_factory, 'model_sources') and unified_factory.model_sources:
+                        entry["references"] = []
+                except Exception:
+                    # Fallback: add references field for traditional higher-level zones
+                    if entity_type in ["core", "curated"]:
+                        entry["references"] = []
 
                 ls_idx_entry.append(entry)
 
@@ -924,9 +912,10 @@ class Model:
             # Add physical folder name (e.g., "010-staging", "020-core", "030-curated")
             if hasattr(zone, 'localFolderName') and zone.localFolderName:
                 valid_zones.append(zone.localFolderName.lower())
-        
-        # Special case for raw zone (uses "Raw" folder)
-        valid_zones.extend(["raw", "000-raw"])
+            
+            # Special case for raw zone - add common raw folder variations
+            if zone.name.lower() == "raw":
+                valid_zones.extend(["raw", "000-raw"])
         
         if layer not in valid_zones:
             available_zones = ", ".join(sorted(set(valid_zones)))
@@ -966,8 +955,9 @@ class Model:
                 entities = self.get_entity_list_by_layer(layer)
                 self.logger.info(f"{layer.title()} Entities to process: {len(entities)}")
                 
-                # Perform entity-specific checks for core and curated layers
-                if layer in ["core", "curated"]:
+                # Perform entity-specific checks for layers that have source dependencies
+                # This is determined by checking if any entities in the layer have model sources
+                if entities and self.__layer_needs_source_validation(entities):
                     self.__perform_source_validation_checks(entities, layer)
                     
             except Exception as e:
@@ -976,6 +966,26 @@ class Model:
         self.logger.info("Finished initial model checks")
 
         return 0
+
+    def __layer_needs_source_validation(self, entities: list[UnifiedEntityFactory]) -> bool:
+        """Determine if a layer needs source validation by checking if any entities have source dependencies.
+        
+        Args:
+            entities: List of entities in the layer
+            
+        Returns:
+            bool: True if layer needs source validation, False otherwise
+        """
+        for entity in entities:
+            try:
+                if hasattr(entity, 'model_sources') and entity.model_sources:
+                    return True
+            except Exception:
+                continue
+        
+        # Fallback: if we can't determine dynamically, assume validation is needed
+        # This is conservative and ensures we don't miss validation
+        return True
 
     def __perform_source_validation_checks(self, entities: list[UnifiedEntityFactory], layer_name: str) -> None:
         """Perform source validation checks for entities that have source dependencies.
