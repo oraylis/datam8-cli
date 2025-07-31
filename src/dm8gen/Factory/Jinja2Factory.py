@@ -9,6 +9,7 @@ import textwrap
 from .Model import Model
 from autopep8 import fix_code
 import importlib
+import importlib.util
 from ..Helper.Helper import Helper, Path, Cache, Hasher
 import logging
 
@@ -46,6 +47,42 @@ class Jinja2Factory:
         __ls_errors: list = self.errors + self.model.errors
 
         return __ls_errors
+
+    def _load_template_helper_modules(self, path_template_source: str, dict_modules: dict):
+        """Load helper modules from template source __modules directories.
+        
+        Args:
+            path_template_source (str): The template source directory path.
+            dict_modules (dict): Dictionary to add loaded modules to.
+        """
+        try:
+            # Look for __modules directories in the template source tree
+            for root, dirs, files in os.walk(path_template_source):
+                if os.path.basename(root) == "__modules":
+                    self.logger.debug(f"Found helper modules directory: {root}")
+                    for file in files:
+                        if file.endswith(".py") and file != "__init__.py":
+                            module_path = os.path.join(root, file)
+                            module_name = Path(file).stem
+                            
+                            try:
+                                spec = importlib.util.spec_from_file_location(module_name, module_path)
+                                module = importlib.util.module_from_spec(spec)
+                                spec.loader.exec_module(module)
+                                
+                                # Check if module has get_dict_modules function
+                                if hasattr(module, 'get_dict_modules'):
+                                    dict_module: dict = module.get_dict_modules()
+                                    dict_modules.update(dict_module)
+                                    self.logger.info(f"Loaded helper module: {module_name} from {module_path}")
+                                else:
+                                    self.logger.debug(f"Module {module_name} does not have get_dict_modules function")
+                                    
+                            except Exception as e:
+                                self.logger.warning(f"Failed to load helper module {module_path}: {e}")
+                                
+        except Exception as e:
+            self.logger.warning(f"Error loading template helper modules: {e}")
 
     def __error_handler(self, msg: str):
         """Handle errors.
@@ -310,6 +347,9 @@ class Jinja2Factory:
             # Template Input Parameter
             cache = Cache()
             dict_modules: dict = {"cache": cache, "Hasher": Hasher}
+            
+            # Load helper modules from template source __modules directories
+            self._load_template_helper_modules(path_template_source, dict_modules)
             # Create enhanced model context with v2 unified entity support
             dict_model: dict = {
                 "model": self.model,

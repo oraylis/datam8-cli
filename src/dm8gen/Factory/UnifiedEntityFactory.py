@@ -353,6 +353,126 @@ class UnifiedEntityFactory:
             return store.layout.keys
         return []
 
+    def get_columns_by_type(self, type_name: str) -> list[str]:
+        """Get column names filtered by attribute type.
+        
+        Args:
+            type_name (str): The attribute type to filter by (e.g., 'BK', 'SCD0', 'SCD1', 'SCD2', 'SK').
+            
+        Returns:
+            list[str]: List of column names matching the specified type.
+        """
+        return [attr.name for attr in self.attributes 
+                if attr.type and attr.type.value == type_name]
+
+    def get_columns_by_tag(self, tag_name: str) -> list[str]:
+        """Get column names filtered by attribute tag.
+        
+        Args:
+            tag_name (str): The tag to filter by (e.g., 'partitions').
+            
+        Returns:
+            list[str]: List of column names that have the specified tag.
+        """
+        return [attr.name for attr in self.attributes 
+                if attr.tags and tag_name in attr.tags]
+
+    def get_source_extract_config(self, source_index: int = 0):
+        """Get extract configuration for a specific source.
+        
+        Args:
+            source_index (int): Index of the source (default: 0 for first source).
+            
+        Returns:
+            ExtractConfig or None: The extract configuration for the source.
+        """
+        if source_index < len(self.system_sources):
+            source = self.system_sources[source_index]
+            if hasattr(source, 'source') and hasattr(source.source, 'extract'):
+                return source.source.extract
+        return None
+
+    def get_source_filter(self, source_index: int = 0) -> str:
+        """Get SQL filter expression for a specific source.
+        
+        Args:
+            source_index (int): Index of the source (default: 0 for first source).
+            
+        Returns:
+            str: SQL filter expression or empty string.
+        """
+        if source_index < len(self.system_sources):
+            source = self.system_sources[source_index]
+            if hasattr(source, 'source') and hasattr(source.source, 'filter'):
+                return source.source.filter or ""
+        return ""
+
+    def has_delta_extraction(self) -> bool:
+        """Check if any source uses delta extraction mode.
+        
+        Returns:
+            bool: True if any source has delta extraction configured.
+        """
+        for source in self.system_sources:
+            if hasattr(source, 'source') and hasattr(source.source, 'extract'):
+                extract_config = source.source.extract
+                if extract_config and hasattr(extract_config, 'type') and extract_config.type:
+                    if extract_config.type.value == 'delta':
+                        return True
+        return False
+
+    def get_entity_parameters(self) -> list:
+        """Get entity-level parameters.
+        
+        Returns:
+            list: List of entity parameters.
+        """
+        if self.entity.parameters:
+            return self.entity.parameters
+        return []
+
+    def get_attribute_parameters(self, attr_name: str) -> list:
+        """Get parameters for a specific attribute.
+        
+        Args:
+            attr_name (str): Name of the attribute.
+            
+        Returns:
+            list: List of parameters for the attribute.
+        """
+        for attr in self.attributes:
+            if attr.name == attr_name and attr.parameter:
+                return attr.parameter
+        return []
+
+    def get_attribute_refactor_names(self, attr_name: str) -> list[str]:
+        """Get refactor names for a specific attribute.
+        
+        Args:
+            attr_name (str): Name of the attribute.
+            
+        Returns:
+            list[str]: List of refactor names for the attribute.
+        """
+        for attr in self.attributes:
+            if attr.name == attr_name and attr.refactorNames:
+                return attr.refactorNames
+        return []
+
+    def get_attribute_unit(self, attr_name: str) -> str:
+        """Get unit attribute for a specific attribute.
+        
+        Args:
+            attr_name (str): Name of the attribute.
+            
+        Returns:
+            str: Unit attribute or empty string.
+        """
+        for attr in self.attributes:
+            if attr.name == attr_name and attr.unitAttribute:
+                return attr.unitAttribute
+        return ""
+
     def __error_handler(self, msg: str):
         """Handle errors.
 
