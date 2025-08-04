@@ -28,45 +28,18 @@ from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .common import DataModule as DataModule_1
+
 
 class Type(Enum):
     DATA_MODULE = 'dataModule'
-
-
-class Parameter(BaseModel):
-    model_config = ConfigDict(extra='allow', populate_by_name=True)
-    name: str
-    value: str
-
-    def to_dict(self) -> dict:
-        return self.model_dump(by_alias=True, exclude_unset=True, mode='json')
-
-    @staticmethod
-    def from_dict(obj) -> 'Parameter':
-        return Parameter.model_validate(obj, from_attributes=False)
-
-
-class DataModule(BaseModel):
-    model_config = ConfigDict(extra='allow', populate_by_name=True)
-    name: Optional[str] = None
-    displayName: Optional[str] = None
-    description: Optional[str] = None
-    tags: Optional[List[str]] = None
-    parameters: Optional[List[Parameter]] = None
-
-    def to_dict(self) -> dict:
-        return self.model_dump(by_alias=True, exclude_unset=True, mode='json')
-
-    @staticmethod
-    def from_dict(obj) -> 'DataModule':
-        return DataModule.model_validate(obj, from_attributes=False)
 
 
 class Model(BaseModel):
     model_config = ConfigDict(extra='allow', populate_by_name=True)
     field_schema: Optional[str] = Field(None, alias='$schema')
     type: Optional[Type] = None
-    items: Optional[List[DataModule]] = None
+    items: Optional[List[DataModule_1.Model]] = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode='json')

@@ -216,11 +216,11 @@ class UnifiedEntityFactory:
         for attr in self.attributes:
             raw_attr = {
                 "name": attr.name,
-                "type": attr.dataType,
-                "charLength": attr.charLength,
-                "precision": attr.precision,
-                "scale": attr.scale,
-                "nullable": attr.nullable,
+                "type": attr.targetDataType.type,
+                "charLength": attr.targetDataType.charLen,
+                "precision": attr.targetDataType.precision,
+                "scale": attr.targetDataType.scale,
+                "nullable": attr.targetDataType.nullable,
                 "tags": attr.tags or []
             }
             raw_entity["attributes"].append(raw_attr)
@@ -248,7 +248,7 @@ class UnifiedEntityFactory:
                 "name": attr.name,
                 "displayName": attr.displayName,
                 "attributeType": attr.attributeType,
-                "dataType": attr.dataType,
+                "targetDataType": attr.targetDataType.to_dict(),
                 "ordinalNumber": attr.ordinalNumber,
                 "charLength": attr.charLength,
                 "precision": attr.precision,
@@ -257,6 +257,9 @@ class UnifiedEntityFactory:
                 "type": attr.type.value if attr.type else "SCD1",
                 "tags": attr.tags or []
             }
+            # Add sourceDataType if available
+            if attr.sourceDataType:
+                stage_attr["sourceDataType"] = attr.sourceDataType.to_dict()
             stage_entity["attributes"].append(stage_attr)
             
         return stage_entity

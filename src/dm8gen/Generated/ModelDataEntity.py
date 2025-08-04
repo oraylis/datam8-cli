@@ -28,78 +28,36 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel
 
+from .common import AttributeMapping as AttributeMapping_1
+from .common import Parameter as Parameter_1
+
 
 class Type(Enum):
     ENTITY = 'entity'
 
 
-class Parameter(BaseModel):
+class DataTypeObject(BaseModel):
     model_config = ConfigDict(extra='allow', populate_by_name=True)
-    name: str
-    value: str
-    custom: Optional[Dict[str, Any]] = None
+    type: str
+    nullable: bool
+    charLen: Optional[int] = None
+    precision: Optional[int] = None
+    scale: Optional[int] = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode='json')
 
     @staticmethod
-    def from_dict(obj) -> 'Parameter':
-        return Parameter.model_validate(obj, from_attributes=False)
+    def from_dict(obj) -> 'DataTypeObject':
+        return DataTypeObject.model_validate(obj, from_attributes=False)
 
 
-class Type9(Enum):
+class Type7(Enum):
     SCD0 = 'SCD0'
     SCD1 = 'SCD1'
     SCD2 = 'SCD2'
     BK = 'BK'
     SK = 'SK'
-
-
-class Attribute(BaseModel):
-    model_config = ConfigDict(extra='allow', populate_by_name=True)
-    name: str
-    displayName: Optional[str] = None
-    description: Optional[str] = None
-    attributeType: Optional[str] = None
-    dataType: Optional[str] = None
-    ordinalNumber: Optional[int] = None
-    charLength: Optional[int] = None
-    charSet: Optional[str] = None
-    precision: Optional[int] = None
-    scale: Optional[int] = None
-    nullable: Optional[bool] = None
-    unitAttribute: Optional[str] = None
-    parameter: Optional[List[Parameter]] = None
-    tags: Optional[List[str]] = None
-    refactorNames: Optional[List[str]] = None
-    type: Optional[Type9] = Type9.SCD1
-    dateModified: Optional[str] = None
-    dateDeleted: Optional[str] = None
-
-    def to_dict(self) -> dict:
-        return self.model_dump(by_alias=True, exclude_unset=True, mode='json')
-
-    @staticmethod
-    def from_dict(obj) -> 'Attribute':
-        return Attribute.model_validate(obj, from_attributes=False)
-
-
-class DataEntity(BaseModel):
-    model_config = ConfigDict(extra='allow', populate_by_name=True)
-    name: str
-    extensionOf: Optional[str] = None
-    displayName: str
-    description: Optional[str] = None
-    parameters: Optional[List[Parameter]] = None
-    tags: Optional[List[str]] = None
-    attribute: Optional[List[Attribute]] = None
-
-    def to_dict(self) -> dict:
-        return self.model_dump(by_alias=True, exclude_unset=True, mode='json')
-
-    @staticmethod
-    def from_dict(obj) -> 'DataEntity':
-        return DataEntity.model_validate(obj, from_attributes=False)
 
 
 class Mode(Enum):
@@ -167,11 +125,11 @@ class MaintenanceConfig(BaseModel):
         return MaintenanceConfig.model_validate(obj, from_attributes=False)
 
 
-class Type10(Enum):
+class Type8(Enum):
     SOURCE = 'source'
 
 
-class Type11(Enum):
+class Type9(Enum):
     FULL = 'full'
     DELTA = 'delta'
 
@@ -188,23 +146,8 @@ class DeltaConfig(BaseModel):
         return DeltaConfig.model_validate(obj, from_attributes=False)
 
 
-class Type12(Enum):
+class Type10(Enum):
     MODEL = 'model'
-
-
-class AttributeMapping(BaseModel):
-    model_config = ConfigDict(extra='allow', populate_by_name=True)
-    name: Optional[str] = None
-    targetName: Optional[str] = None
-    sourceComputation: Optional[str] = None
-    sourceName: str
-
-    def to_dict(self) -> dict:
-        return self.model_dump(by_alias=True, exclude_unset=True, mode='json')
-
-    @staticmethod
-    def from_dict(obj) -> 'AttributeMapping':
-        return AttributeMapping.model_validate(obj, from_attributes=False)
 
 
 class Kind(Enum):
@@ -259,6 +202,54 @@ class FunctionConfig(BaseModel):
         return FunctionConfig.model_validate(obj, from_attributes=False)
 
 
+class Attribute(BaseModel):
+    model_config = ConfigDict(extra='allow', populate_by_name=True)
+    name: str
+    displayName: Optional[str] = None
+    description: Optional[str] = None
+    attributeType: Optional[str] = None
+    targetDataType: DataTypeObject
+    sourceDataType: Optional[DataTypeObject] = None
+    ordinalNumber: Optional[int] = None
+    charLength: Optional[int] = None
+    charSet: Optional[str] = None
+    precision: Optional[int] = None
+    scale: Optional[int] = None
+    nullable: Optional[bool] = None
+    unitAttribute: Optional[str] = None
+    parameter: Optional[List[Parameter_1.Model]] = None
+    tags: Optional[List[str]] = None
+    refactorNames: Optional[List[str]] = None
+    type: Optional[Type7] = Type7.SCD1
+    dateModified: Optional[str] = None
+    dateDeleted: Optional[str] = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode='json')
+
+    @staticmethod
+    def from_dict(obj) -> 'Attribute':
+        return Attribute.model_validate(obj, from_attributes=False)
+
+
+class DataEntity(BaseModel):
+    model_config = ConfigDict(extra='allow', populate_by_name=True)
+    name: str
+    extensionOf: Optional[str] = None
+    displayName: str
+    description: Optional[str] = None
+    parameters: Optional[List[Parameter_1.Model]] = None
+    tags: Optional[List[str]] = None
+    attribute: Optional[List[Attribute]] = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode='json')
+
+    @staticmethod
+    def from_dict(obj) -> 'DataEntity':
+        return DataEntity.model_validate(obj, from_attributes=False)
+
+
 class TriggerFunction(BaseModel):
     model_config = ConfigDict(extra='allow', populate_by_name=True)
     mode: Optional[Mode] = None
@@ -290,7 +281,7 @@ class StoreFunction(BaseModel):
 
 class ExtractConfig(BaseModel):
     model_config = ConfigDict(extra='allow', populate_by_name=True)
-    type: Optional[Type11] = None
+    type: Optional[Type9] = None
     full: Optional[Dict[str, Any]] = None
     delta: Optional[DeltaConfig] = None
 
@@ -305,7 +296,7 @@ class ExtractConfig(BaseModel):
 class ModelConfig(BaseModel):
     model_config = ConfigDict(extra='allow', populate_by_name=True)
     dm8l: str
-    mapping: Optional[List[AttributeMapping]] = None
+    mapping: Optional[List[AttributeMapping_1.Model]] = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode='json')
@@ -336,7 +327,7 @@ class SourceConfig(BaseModel):
     sourceLocation: str
     filter: Optional[str] = None
     extract: Optional[ExtractConfig] = None
-    mapping: Optional[List[AttributeMapping]] = None
+    mapping: Optional[List[AttributeMapping_1.Model]] = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode='json')
@@ -348,7 +339,7 @@ class SourceConfig(BaseModel):
 
 class ModelSource(BaseModel):
     model_config = ConfigDict(extra='allow', populate_by_name=True)
-    type: Type12
+    type: Type10
     model: ModelConfig
     filter: Optional[str] = None
 
@@ -362,7 +353,7 @@ class ModelSource(BaseModel):
 
 class SystemSource(BaseModel):
     model_config = ConfigDict(extra='allow', populate_by_name=True)
-    type: Type10
+    type: Type8
     source: SourceConfig
 
     def to_dict(self) -> dict:
