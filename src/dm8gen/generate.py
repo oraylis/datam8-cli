@@ -19,11 +19,13 @@ class GenerateOptionEnum(str, Enum):
         VALIDATE_INDEX: Action to validate the index.
         GENERATE_TEMPLATE: Action to generate templates.
         REFRESH_GENERATE: Action to refresh and generate templates.
+        REVERSE_GENERATE: Action to reverse generate staging entities from data sources.
     """
 
     VALIDATE_INDEX = "validate_index"
     GENERATE_TEMPLATE = "generate_template"
     REFRESH_GENERATE = "refresh_generate"
+    REVERSE_GENERATE = "reverse_generate"
 
 
 def generate(
@@ -82,6 +84,49 @@ def generate(
             help="Directory path to Jinja2 collections (templates for blocks and includes).",
         ),
     ] = None,
+    # Reverse generate specific parameters
+    data_source: Annotated[
+        Optional[str],
+        typer.Option(
+            "--data-source",
+            help="Name of the data source for reverse generation (required for reverse_generate).",
+        ),
+    ] = None,
+    data_product: Annotated[
+        Optional[str],
+        typer.Option(
+            "--data-product",
+            help="Data product name for output path (required for reverse_generate).",
+        ),
+    ] = None,
+    data_module: Annotated[
+        Optional[str],
+        typer.Option(
+            "--data-module",
+            help="Data module name for output path (required for reverse_generate).",
+        ),
+    ] = None,
+    tables: Annotated[
+        Optional[str],
+        typer.Option(
+            "--tables",
+            help="Comma-separated list of table names to reverse generate (required for reverse_generate).",
+        ),
+    ] = None,
+    entity_names: Annotated[
+        Optional[str],
+        typer.Option(
+            "--entity-names",
+            help="Comma-separated list of entity names corresponding to tables (optional for reverse_generate).",
+        ),
+    ] = None,
+    interactive: Annotated[
+        bool,
+        typer.Option(
+            "--interactive",
+            help="Enable interactive mode for reverse generation with user prompts.",
+        ),
+    ] = False,
     log_level: Annotated[
         str,
         typer.Option(
@@ -95,13 +140,19 @@ def generate(
     Main function to execute different actions based on user input.
 
     Args:
-        action (GenerateOptionEnum): The action to perform (validate_index, generate_template, refresh_generate).
+        action (GenerateOptionEnum): The action to perform (validate_index, generate_template, refresh_generate, reverse_generate).
         path_solution (str): The file path to the solution JSON file.
         path_template_source (Optional[str]): The directory or file path to the template(s) source.
         path_template_destination (Optional[str]): The directory for template output.
         full_index_scan (bool): Flag to indicate whether to perform a full index scan or just refresh it.
         path_modules (Optional[str]): The directory or file path to modules that can be registered.
         path_collections (Optional[str]): The directory path to Jinja2 collections.
+        data_source (Optional[str]): Name of the data source for reverse generation (required for reverse_generate).
+        data_product (Optional[str]): Data product name for output path (required for reverse_generate).
+        data_module (Optional[str]): Data module name for output path (required for reverse_generate).
+        tables (Optional[str]): Comma-separated list of table names to reverse generate (required for reverse_generate).
+        entity_names (Optional[str]): Comma-separated list of entity names corresponding to tables (optional for reverse_generate).
+        interactive (bool): Enable interactive mode for reverse generation with user prompts.
         log_level (str): The log level for the application (default is "INFO").
 
     Raises:
@@ -169,3 +220,56 @@ def generate(
             path_collections=path_collections,
             path_solution=path_solution,
         )
+    elif action == GenerateOptionEnum.REVERSE_GENERATE:
+        # Import reverse generator components
+        from .Factory.ReverseGenerator import ReverseGenerator
+        
+        # Parameter validation
+        validation_errors = []
+        
+        # Check required parameters
+        if not data_source:
+            validation_errors.append("--data-source parameter is required for reverse_generate action")
+        if not data_product:
+            validation_errors.append("--data-product parameter is required for reverse_generate action")
+        if not data_module:
+            validation_errors.append("--data-module parameter is required for reverse_generate action")
+        if not tables:
+            validation_errors.append("--tables parameter is required for reverse_generate action")
+        
+        # Validate table/entity name count match
+        if tables and entity_names:
+            table_list = [t.strip() for t in tables.split(',')]
+            entity_list = [e.strip() for e in entity_names.split(',')]
+            
+            if len(table_list) != len(entity_list):
+                validation_errors.append(f"Number of entity names ({len(entity_list)}) must match number of tables ({len(table_list)})")
+        
+        if validation_errors:
+            error_message = "Reverse generation parameter validation failed:\n" + "\n".join(validation_errors)
+            raise Exception(error_message)
+        
+        # Parse comma-separated lists
+        table_list = [t.strip() for t in tables.split(',')]
+        entity_list = []
+        if entity_names:
+            entity_list = [e.strip() for e in entity_names.split(',')]
+            if len(entity_list) != len(table_list):
+                raise Exception("Number of entity names must match number of tables")
+        
+        # Create and execute reverse generator
+        reverse_generator = ReverseGenerator(
+            solution_path=path_solution,
+            log_level=log_level_int
+        )
+        
+        reverse_generator.generate_staging_entities(
+            data_source_name=data_source,
+            data_product=data_product,
+            data_module=data_module,
+            tables=table_list,
+            entity_names=entity_list if entity_list else None,
+            interactive=interactive
+        )
+    else:
+        raise Exception(f"Unknown action: {action}")
