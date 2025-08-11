@@ -1,7 +1,5 @@
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional
 import logging
-import re
-from urllib.parse import urlparse, parse_qs
 
 from .BaseSourceConnector import BaseSourceConnector, ColumnMetadata, TableMetadata, ConnectionInfo
 
@@ -39,14 +37,14 @@ class OracleConnector(BaseSourceConnector):
         """
         try:
             # Use SQLAlchemy with Oracle driver
-            from sqlalchemy import create_engine, text
+            from sqlalchemy import create_engine
             
             # Parse Oracle connection string and convert to SQLAlchemy format
             oracle_url = self._parse_oracle_connection_string()
             
             self._engine = create_engine(oracle_url)
             self._connection = self._engine.connect()
-            self.logger.info(f"Connected to Oracle database using SQLAlchemy")
+            self.logger.info("Connected to Oracle database using SQLAlchemy")
             return True
                     
         except Exception as e:

@@ -19,7 +19,9 @@
       "Bash(grep:*)",
       "Bash(PYTHONPATH=src python -m dm8gen.cli -a reverse_generate -s \"C:\\Users\\f.kayser\\Projects\\ORAYLIS\\Automation\\Repos\\datam8-sample-solution\\ORAYLISDatabricksSample.dm8s\" --data-source AdventureWorks --data-product Sales --data-module Customer --tables \"Customer,Address\" --entity-names \"Customer_Staging,Address_Staging\" --log-level DEBUG)",
       "Bash($env:PYTHONPATH=\"src\")",
-      "Bash(powershell:*)"
+      "Bash(powershell:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(uv tool run ruff check:*)"
     ],
     "deny": []
   }

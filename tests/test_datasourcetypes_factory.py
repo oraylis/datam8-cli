@@ -153,19 +153,19 @@ class TestDataSourceTypesFactory:
             "connectionString": "server=localhost;database=test",
             "timeout": "30"
         }
-        assert factory.validate_connection_config("SqlDataSource", valid_config) == True
+        assert factory.validate_connection_config("SqlDataSource", valid_config)
         
         # Test missing required property
         invalid_config = {
             "timeout": "30"
         }
-        assert factory.validate_connection_config("SqlDataSource", invalid_config) == False
+        assert not factory.validate_connection_config("SqlDataSource", invalid_config)
         
         # Test minimal valid configuration
         minimal_config = {
             "connectionString": "server=localhost;database=test"
         }
-        assert factory.validate_connection_config("SqlDataSource", minimal_config) == True
+        assert factory.validate_connection_config("SqlDataSource", minimal_config)
 
     def test_get_required_properties(self, temp_json_file):
         """Test getting required properties list."""

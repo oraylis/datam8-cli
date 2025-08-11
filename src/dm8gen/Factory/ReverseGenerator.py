@@ -79,18 +79,18 @@ class ReverseGenerator:
         
         try:
             # Step 0: Validate connection to data source
-            self.logger.info(f"Validating data source connection...")
+            self.logger.info("Validating data source connection...")
             is_valid, error_msg = self._validate_data_source_connection(data_source_name)
             if not is_valid:
                 raise ValueError(f"Data source validation failed: {error_msg}")
             
             # Validate table existence if not in interactive mode
             if not interactive:
-                self.logger.info(f"Validating table existence...")
+                self.logger.info("Validating table existence...")
                 tables_valid, table_errors = self._validate_table_existence(data_source_name, tables)
                 if not tables_valid:
                     error_messages = [f"{table}: {error}" for table, error in table_errors.items() if error]
-                    raise ValueError(f"Table validation failed:\n" + "\n".join(error_messages))
+                    raise ValueError("Table validation failed:\n" + "\n".join(error_messages))
             # Step 1: Get data source information and create connector
             data_source_info = self.type_mapping_engine.get_data_source_info(data_source_name)
             if not data_source_info:

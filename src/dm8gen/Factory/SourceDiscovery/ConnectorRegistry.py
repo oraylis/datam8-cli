@@ -1,6 +1,5 @@
 from typing import Dict, Type, Optional, List
 import logging
-from pathlib import Path
 
 from .BaseSourceConnector import BaseSourceConnector, ConnectionInfo
 
@@ -116,8 +115,7 @@ class ConnectorRegistry:
         """
         Automatically discover and register connectors in the current module and connectors subdirectory.
         """
-        # Get the directory containing this module
-        current_dir = Path(__file__).parent
+        # Auto-discover connectors
         
         
         # Manually register known connectors to ensure they are available

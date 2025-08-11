@@ -7,7 +7,6 @@ implementation before integration testing with the sample solution.
 """
 
 import sys
-import os
 import logging
 from pathlib import Path
 
@@ -21,12 +20,12 @@ def test_basic_imports():
     
     try:
         # Test core components
-        from dm8gen.Factory.SourceDiscovery.BaseSourceConnector import BaseSourceConnector
-        from dm8gen.Factory.SourceDiscovery.ConnectorRegistry import ConnectorRegistry
-        from dm8gen.Factory.SourceDiscovery.SqlServerConnector import SqlServerConnector
-        from dm8gen.Factory.TypeMappingEngine import TypeMappingEngine
-        from dm8gen.Factory.ReverseGenerator import ReverseGenerator
-        from dm8gen.Factory.ReverseGeneratorValidation import ReverseGeneratorValidation
+        from dm8gen.Factory.SourceDiscovery.BaseSourceConnector import BaseSourceConnector  # noqa: F401
+        from dm8gen.Factory.SourceDiscovery.ConnectorRegistry import ConnectorRegistry  # noqa: F401
+        from dm8gen.Factory.SourceDiscovery.SqlServerConnector import SqlServerConnector  # noqa: F401
+        from dm8gen.Factory.TypeMappingEngine import TypeMappingEngine  # noqa: F401
+        from dm8gen.Factory.ReverseGenerator import ReverseGenerator  # noqa: F401
+        from dm8gen.Factory.ReverseGeneratorValidation import ReverseGeneratorValidation  # noqa: F401
         
         print("[OK] All imports successful")
         return True
@@ -41,7 +40,6 @@ def test_connector_registry():
     
     try:
         from dm8gen.Factory.SourceDiscovery.ConnectorRegistry import ConnectorRegistry
-        from dm8gen.Factory.SourceDiscovery.SqlServerConnector import SqlServerConnector
         
         registry = ConnectorRegistry()
         
@@ -86,7 +84,7 @@ def test_type_mapping_engine_structure():
         # Test attribute type detection patterns
         engine_class = TypeMappingEngine
         if hasattr(engine_class, '_attribute_patterns'):
-            print(f"[OK] Attribute detection patterns defined")
+            print("[OK] Attribute detection patterns defined")
         
         return True
         

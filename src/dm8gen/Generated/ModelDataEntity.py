@@ -26,7 +26,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field, RootModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from .common import AttributeMapping as AttributeMapping_1
 from .common import Parameter as Parameter_1

@@ -2,7 +2,6 @@ import os.path
 import json
 import re
 import sys
-from typing import Union
 from dataclasses import dataclass
 import textwrap
 from .DataSourceFactory import DataSourceFactory

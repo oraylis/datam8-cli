@@ -1,5 +1,4 @@
 import json
-import os
 from ..Generated.ModelDataEntity import Model as UnifiedEntity
 from ..Helper.Helper import Helper
 import logging

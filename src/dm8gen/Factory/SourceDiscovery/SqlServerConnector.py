@@ -1,7 +1,5 @@
 from typing import Dict, List, Optional, Any
 import logging
-import re
-from urllib.parse import urlparse, parse_qs
 
 from .BaseSourceConnector import BaseSourceConnector, ColumnMetadata, TableMetadata, ConnectionInfo
 
@@ -39,12 +37,12 @@ class SqlServerConnector(BaseSourceConnector):
         """
         try:
             # Use SQLAlchemy with pymssql driver
-            from sqlalchemy import create_engine, text
+            from sqlalchemy import create_engine
             
             # Use connection string directly (should be in SQLAlchemy format)
             self._engine = create_engine(self.connection_info.connection_string)
             self._connection = self._engine.connect()
-            self.logger.info(f"Connected to SQL Server database using SQLAlchemy + pymssql")
+            self.logger.info("Connected to SQL Server database using SQLAlchemy + pymssql")
             return True
                     
         except Exception as e:

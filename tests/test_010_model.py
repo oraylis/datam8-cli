@@ -42,8 +42,8 @@ def test_lookup_entity__valid(locator, config, model):
     model_object = entity_factory.model_object
 
     assert entity_factory is not None, "Return factory is None."
-    assert type(entity_factory) == UnifiedEntityFactory, "Return factory is of an unknown type: %s" % str(type(entity_factory))
-    assert type(model_object) == UnifiedModel, "Model_object is of unknown type: %s" % str(type(model_object))
+    assert isinstance(entity_factory, UnifiedEntityFactory), "Return factory is of an unknown type: %s" % str(type(entity_factory))
+    assert isinstance(model_object, UnifiedModel), "Model_object is of unknown type: %s" % str(type(model_object))
     assert (
         entity_factory.locator.lower() == locator.lower()
         if locator.startswith("/")
