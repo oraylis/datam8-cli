@@ -2,7 +2,7 @@ from pytest_cases import parametrize
 
 
 class CasesLayer:
-    @parametrize("layer", ["raw", "stage", "core", "curated"])
+    @parametrize("layer", ["stage", "core", "curated"])
     def case_layer_valid(self, layer):
         return layer
 
@@ -12,15 +12,12 @@ class CasesLocator:
         "locator",
         [
             # tuple consisting of a zone name and a valid locator
-            ("raw", "/Raw/Sales/Customer/Customer_DE"),
-            ("stage", "/stage/Sales/Product/Product"),
-            ("stage", "stage/Sales/Product/Product"),
-            ("raw", "/raw/Sales/Product/Product"),
-            ("stage", "/stage/Sales/Customer/Customer_DE"),
-            ("core", "/core/Sales/Customer/Customer"),
-            ("curated", "/Curated/Sales/Customer/DimCustomer"),
-            ("curated", "/curated/Sales/Customer/DimCustomer"),
-            ("curated", "curated/Sales/Customer/DimCustomer"),
+            ("stage", "/010-staging/Sales/Product/Product"),
+            ("stage", "/010-staging/Sales/Customer/Customer_DE"),
+            ("core", "/020-core/Sales/Customer/Customer"),
+            ("curated", "/030-curated/Sales/Customer/DimCustomer"),
+            ("curated", "/030-curated/Sales/Customer/DimCustomer"),
+            ("curated", "030-curated/Sales/Customer/DimCustomer"),
         ],
     )
     def case_locator_valid(self, locator):
@@ -30,8 +27,8 @@ class CasesLocator:
         "locator",
         [
             "//Sales/Product/Product",
-            "/raw",
-            "|raw|Sales|Pdouct|Product",
+            "/010-staging",
+            "|010-staging|Sales|Product|Product",
         ],
     )
     def case_locator_invalid(self, locator):
@@ -41,7 +38,7 @@ class CasesLocator:
         return "/"
 
     def case_locator_unkown(self):
-        return "/stage/Sales/Delivery/Product"
+        return "/010-staging/Sales/Delivery/Product"
 
 
 class CasesModel:

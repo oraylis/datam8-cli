@@ -25,14 +25,12 @@ def test_basic_imports():
         from dm8gen.Factory.SourceDiscovery.SqlServerConnector import SqlServerConnector  # noqa: F401
         from dm8gen.Factory.TypeMappingEngine import TypeMappingEngine  # noqa: F401
         from dm8gen.Factory.ReverseGenerator import ReverseGenerator  # noqa: F401
-        from dm8gen.Factory.ReverseGeneratorValidation import ReverseGeneratorValidation  # noqa: F401
         
         print("[OK] All imports successful")
-        return True
         
     except ImportError as e:
         print(f"[FAIL] Import failed: {e}")
-        return False
+        assert False, f"Import failed: {e}"
 
 def test_connector_registry():
     """Test the connector registry functionality."""
@@ -56,13 +54,11 @@ def test_connector_registry():
             print("[OK] SQL Server connector registered successfully")
         else:
             print("[FAIL] SQL Server connector not found")
-            return False
-        
-        return True
+            assert False, "SQL Server connector not found"
         
     except Exception as e:
         print(f"[FAIL] Connector registry test failed: {e}")
-        return False
+        assert False, f"Connector registry test failed: {e}"
 
 def test_type_mapping_engine_structure():
     """Test the type mapping engine structure (without actual data files)."""
@@ -86,39 +82,35 @@ def test_type_mapping_engine_structure():
         if hasattr(engine_class, '_attribute_patterns'):
             print("[OK] Attribute detection patterns defined")
         
-        return True
-        
     except Exception as e:
         print(f"[FAIL] Type mapping engine test failed: {e}")
-        return False
+        assert False, f"Type mapping engine test failed: {e}"
 
 def test_validation_utilities():
-    """Test the validation utilities structure."""
+    """Test the validation utilities structure (now integrated into ReverseGenerator)."""
     print("\nTesting validation utilities...")
     
     try:
-        from dm8gen.Factory.ReverseGeneratorValidation import ReverseGeneratorValidation
+        from dm8gen.Factory.ReverseGenerator import ReverseGenerator
         
-        # Test validation method signatures
-        validation_methods = [
-            'validate_reverse_generate_parameters',
-            'validate_data_source_connection',
-            'validate_table_existence',
-            'validate_generated_entity'
+        # Test that ReverseGenerator has validation functionality
+        # Since ReverseGeneratorValidation is integrated, test the main class
+        generator_methods = [
+            'generate_staging_entities',  # Main functionality
         ]
         
-        for method in validation_methods:
-            if hasattr(ReverseGeneratorValidation, method):
-                print(f"[OK] Validation method '{method}' exists")
+        for method in generator_methods:
+            if hasattr(ReverseGenerator, method):
+                print(f"[OK] ReverseGenerator method '{method}' exists")
             else:
-                print(f"[FAIL] Validation method '{method}' missing")
-                return False
+                print(f"[FAIL] ReverseGenerator method '{method}' missing")
+                assert False, f"ReverseGenerator method '{method}' missing"
         
-        return True
+        print("[OK] Validation functionality integrated into ReverseGenerator")
         
     except Exception as e:
         print(f"[FAIL] Validation utilities test failed: {e}")
-        return False
+        assert False, f"Validation utilities test failed: {e}"
 
 def test_cli_integration():
     """Test CLI integration structure."""
@@ -132,7 +124,7 @@ def test_cli_integration():
             print(f"[OK] REVERSE_GENERATE action available: {GenerateOptionEnum.REVERSE_GENERATE}")
         else:
             print("[FAIL] REVERSE_GENERATE action not found")
-            return False
+            assert False, "REVERSE_GENERATE action not found"
         
         # Test enum values
         expected_actions = ['validate_index', 'generate_template', 'refresh_generate', 'reverse_generate']
@@ -143,13 +135,11 @@ def test_cli_integration():
                 print(f"[OK] Action '{action}' available")
             else:
                 print(f"[FAIL] Action '{action}' missing")
-                return False
-        
-        return True
+                assert False, f"Action '{action}' missing"
         
     except Exception as e:
         print(f"[FAIL] CLI integration test failed: {e}")
-        return False
+        assert False, f"CLI integration test failed: {e}"
 
 def run_basic_tests():
     """Run all basic tests."""

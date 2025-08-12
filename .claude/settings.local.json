@@ -21,7 +21,9 @@
       "Bash($env:PYTHONPATH=\"src\")",
       "Bash(powershell:*)",
       "WebFetch(domain:github.com)",
-      "Bash(uv tool run ruff check:*)"
+      "Bash(uv tool run ruff check:*)",
+      "Bash(export DATAM8_SOLUTION_PATH=datam8-sample-solution/)",
+      "Bash(export DATAM8_SOLUTION_PATH=\"../datam8-sample-solution\")"
     ],
     "deny": []
   }
