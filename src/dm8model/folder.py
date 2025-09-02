@@ -23,7 +23,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 from __future__ import annotations
 
-from typing import Annotated, List, Optional
+from pathlib import Path
+from typing import Annotated, List, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -31,17 +32,30 @@ from . import property
 
 
 class Folder(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    id: Annotated[int, Field(description="Internal id of an entity.", gt=0)]
-    name: Optional[str] = None
-    displayName: Optional[str] = None
-    description: Optional[str] = None
-    path: Annotated[
-        Optional[str],
-        Field(
-            description="Path of this folder, if not set the current directory will be used."
-        ),
-    ] = None
-    properties: Optional[List[property.PropertyReference]] = None
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    id: Annotated[int, Field(gt=0)]
+    """
+    Internal id of an entity.
+    """
+    name: str
+    displayName: str | None = None
+    description: str | None = None
+    path: str | None = None
+    """
+    Path of this folder, if not set the current directory will be used.
+    """
+    properties: List[property.PropertyReference] | None = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "Folder":
+        return Folder.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "Folder":
+        with open(path, "r") as file:
+            model = Folder.model_validate_json(file.read())
+
+        return model

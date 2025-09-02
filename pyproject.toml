@@ -22,7 +22,7 @@ classifiers = [
 ]
 
 [project.scripts]
-dm8gen = "dm8gen.cli:app"
+dm8gen = "dm8gen.app:app"
 
 [project.urls]
 Homepage = "https://github.com/oraylis/datam8-generator"

@@ -1,6 +1,7 @@
 from pytest_cases import fixture
 from typing import Union
 import os
+import dataclasses
 
 from dm8gen.Factory import Model
 
@@ -19,10 +20,10 @@ def pytest_addoption(parser):
     )
 
 
-def pytest_configure(config: dict):
+def pytest_configure(config):
     """Pre run."""
-    config.target: str = __get_variable(config, "target", "databricks-lake")
-    config.solution_path: str = __get_variable(config, "solution-path")
+    config.target  = __get_variable(config, "target", "databricks-lake")
+    config.solution_path  = __get_variable(config, "solution-path")
     config.log_level = __get_variable(config, "log-level", "INFO")
 
     if not config.solution_path:
@@ -48,39 +49,57 @@ def pytest_configure(config: dict):
     model.validate_index(full_index_scan=True)
 
 
+@dataclasses.dataclass
+class TestConfig:
+    solution_path: str
+    solution_file_path: str
+    source_path_stage: str
+    source_path_output: str
+    source_path_curated: str
+    target_path_stage: str
+    target_path_output: str
+    target_path_curated: str
+    generate_path: str
+    modules_path: str
+    collections_path: str
+    log_level: str
+
+
 @fixture
-def config(request) -> dict:
+def config(request) -> TestConfig:
     """DataM8 Solution configuration."""
 
-    return {
-        "solution_path": request.config.solution_path,
-        "solution_file_path": request.config.solution_file_path,
-        "source_path_stage": request.config.source_path_stage,
-        "source_path_output": request.config.source_path_output,
-        "source_path_curated": request.config.source_path_curated,
-        "target_path_stage": request.config.target_path_stage,
-        "target_path_output": request.config.target_path_output,
-        "target_path_curated": request.config.target_path_curated,
-        "generate_path": request.config.generate_path,
-        "modules_path": "%s/%s/__modules"
+    return TestConfig(
+        solution_path= request.config.solution_path,
+        solution_file_path= request.config.solution_file_path,
+        source_path_stage= request.config.source_path_stage,
+        source_path_output= request.config.source_path_output,
+        source_path_curated= request.config.source_path_curated,
+        target_path_stage= request.config.target_path_stage,
+        target_path_output= request.config.target_path_output,
+        target_path_curated= request.config.target_path_curated,
+        generate_path= request.config.generate_path,
+        modules_path= "%s/%s/__modules"
         % (
             request.config.generate_path,
             request.config.target,
         ),
-        "collections_path": "%s/__collections" % request.config.source_path_output,
-        "log_level": request.config.log_level,
-    }
+        collections_path= "%s/__collections" % request.config.source_path_output,
+        log_level= request.config.log_level,
+        )
 
 
 @fixture
-def model(config: dict) -> Model:
+def model(config: TestConfig) -> Model:
     """Initialized Model object."""
-    return Model(
-        path_solution=config["solution_file_path"], log_level=config["log_level"]
+    model = Model(
+        path_solution=config.solution_file_path, log_level=config.log_level
     )
+    # model.validate_index(full_index_scan=True)
+    return model
 
 
-def __get_variable(config, variable: str, default: str = None) -> str:
+def __get_variable(config, variable: str, default: str | None = None) -> str | None:
     variable_from_env = __get_variable_from_env(variable)
     variable_from_cli = __get_variable_from_cli(config, variable)
 

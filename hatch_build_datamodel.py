@@ -1,4 +1,3 @@
-import enum
 import pathlib
 import datamodel_code_generator as dcg
 from hatchling.builders.hooks.plugin import interface
@@ -23,7 +22,8 @@ class GenerateDatamodelHook(interface.BuildHookInterface):
             output=self.__output_dir,
             output_model_type=dcg.DataModelType.PydanticV2BaseModel,
             output_datetime_class=dcg.DatetimeClassType.Datetime,
-            # # custom_template_dir=self.__template_dir,
+            custom_template_dir=self.__template_dir,
+            additional_imports=["typing.TypeAlias", "pathlib.Path"],
             disable_timestamp=True,
             set_default_enum_member=True,
             capitalise_enum_members=True,
@@ -32,8 +32,10 @@ class GenerateDatamodelHook(interface.BuildHookInterface):
             use_annotated=True,
             field_constraints=True,
             use_schema_description=True,
+            use_field_description=True,
             use_double_quotes=True,
             use_title_as_name=True,
+            use_union_operator=True,
         )
 
         self.prepend_license_to_files()

@@ -23,7 +23,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 from __future__ import annotations
 
-from typing import Annotated, List, Optional
+from pathlib import Path
+from typing import Annotated, List, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -33,11 +34,23 @@ class PropertyReference(BaseModel):
     Used to reference from any entity to a `Property`.
     """
 
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    type: str
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    property: str
     value: str
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "PropertyReference":
+        return PropertyReference.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "PropertyReference":
+        with open(path, "r") as file:
+            model = PropertyReference.model_validate_json(file.read())
+
+        return model
 
 
 class PropertyScope(BaseModel):
@@ -45,43 +58,80 @@ class PropertyScope(BaseModel):
     Defines for which type of entities a `PropertyType` is available for assignment.
     """
 
-    model_config = ConfigDict(
-        extra="forbid",
-    )
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
     type: str
-    singleUsage: Annotated[
-        Optional[bool],
-        Field(
-            description="Defines if the `PropertyType` can only be assigned once to entities in this scope."
-        ),
-    ] = True
-    mandatory: Optional[bool] = False
-
-
-class PropertyType(BaseModel):
+    singleUsage: bool | None = True
     """
-    Defines a group of Properties that are grouped together for selection purposes.
+    Defines if the `PropertyType` can only be assigned once to entities in this scope.
+    """
+    mandatory: bool | None = False
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "PropertyScope":
+        return PropertyScope.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "PropertyScope":
+        with open(path, "r") as file:
+            model = PropertyScope.model_validate_json(file.read())
+
+        return model
+
+
+class PropertyValue(BaseModel):
+    """
+    A single globally available static property value that can be referenced from other entities.
     """
 
-    model_config = ConfigDict(
-        extra="forbid",
-    )
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
     name: str
-    displayName: Optional[str] = None
-    schema_: Annotated[Optional[str], Field(alias="schema")] = None
-    scopes: Optional[List[PropertyScope]] = []
+    displayName: str | None = None
+    default: bool | None = False
+    property: str | None = None
+    """
+    The name of the associated property.
+    """
+    properties: List[PropertyReference] | None = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "PropertyValue":
+        return PropertyValue.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "PropertyValue":
+        with open(path, "r") as file:
+            model = PropertyValue.model_validate_json(file.read())
+
+        return model
 
 
 class Property(BaseModel):
     """
-    A single globally available static attribute that can be referenced from other entities.
+    Defines properties for which specific pre-selectable values can created.
     """
 
-    model_config = ConfigDict(
-        extra="allow",
-    )
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
     name: str
-    displayName: Optional[str] = None
-    default: Optional[bool] = False
-    type: str
-    properties: Optional[List[PropertyReference]] = None
+    displayName: str
+    schema_: Annotated[str | None, Field(alias="schema")] = None
+    scopes: List[PropertyScope] | None = []
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "Property":
+        return Property.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "Property":
+        with open(path, "r") as file:
+            model = Property.model_validate_json(file.read())
+
+        return model
