@@ -23,23 +23,48 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 from __future__ import annotations
 
-from typing import List, Optional
+from pathlib import Path
+from typing import List, TypeAlias
 
 from pydantic import BaseModel, ConfigDict
 
 
 class DiagramOption(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
     name: str
     value: str
 
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "DiagramOption":
+        return DiagramOption.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "DiagramOption":
+        with open(path, "r") as file:
+            model = DiagramOption.model_validate_json(file.read())
+
+        return model
+
 
 class Diagram(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    diagramType: Optional[str] = None
-    coreEntities: Optional[List[str]] = None
-    diagramOptions: Optional[List[DiagramOption]] = None
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    diagramType: str | None = None
+    coreEntities: List[str] | None = None
+    diagramOptions: List[DiagramOption] | None = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "Diagram":
+        return Diagram.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "Diagram":
+        with open(path, "r") as file:
+            model = Diagram.model_validate_json(file.read())
+
+        return model

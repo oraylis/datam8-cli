@@ -23,9 +23,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 from __future__ import annotations
 
-from typing import Annotated, Optional
+from pathlib import Path
+from typing import TypeAlias
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 
 class Zone(BaseModel):
@@ -33,20 +34,34 @@ class Zone(BaseModel):
     Defines a high-level layer or zone, typically used to clearly seperate different states of data processing, e.g. bronze, silver, gold, semantic.
     """
 
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    name: Annotated[
-        str, Field(description="Logical name of the zone (e.g., Raw, Core, Curated)")
-    ]
-    targetName: Annotated[
-        str,
-        Field(
-            description="Target system name for the zone (e.g., Bronze, Silver, Gold)"
-        ),
-    ]
-    displayName: Annotated[str, Field(description="Human-readable display name")]
-    localFolderName: Annotated[
-        Optional[str],
-        Field(description="Local folder name used in file system structure"),
-    ] = None
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    name: str
+    """
+    Logical name of the zone (e.g., Raw, Core, Curated)
+    """
+    targetName: str
+    """
+    Target system name for the zone (e.g., Bronze, Silver, Gold)
+    """
+    displayName: str
+    """
+    Human-readable display name
+    """
+    localFolderName: str | None = None
+    """
+    Local folder name used in file system structure
+    """
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "Zone":
+        return Zone.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "Zone":
+        with open(path, "r") as file:
+            model = Zone.model_validate_json(file.read())
+
+        return model

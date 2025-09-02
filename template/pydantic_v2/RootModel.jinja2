@@ -5,12 +5,19 @@
 {%- endif -%}
 {%- endmacro -%}
 
-
 {% for decorator in decorators -%}
 {{ decorator }}
 {% endfor -%}
 
-class {{ class_name }}({{ base_class }}[{{get_type_hint(fields)}}]):{% if comment is defined %}  # {{ comment }}{% endif %}
+{{ class_name }}Type: TypeAlias = {{ get_type_hint(fields) }}
+{%- if fields[0].docstring %}
+"""
+{{ fields[0].docstring | indent(4) }}
+"""
+{%- endif %}
+
+
+class {{ class_name }}({{ base_class }}{%- if fields -%}[{{get_type_hint(fields)}}]{%- endif -%}):{% if comment is defined %}  # {{ comment }}{% endif %}
 {%- if description %}
     """
     {{ description | indent(4) }}
@@ -42,4 +49,11 @@ class {{ class_name }}({{ base_class }}[{{get_type_hint(fields)}}]):{% if commen
     {{ field.docstring | indent(4) }}
     """
     {%- endif %}
+
+    @staticmethod
+    def from_json_file(path: Path) -> "{{ class_name }}":
+        with open(path, "r") as file:
+          model = {{ class_name }}.model_validate_json(file.read())
+
+        return model
 {%- endif %}

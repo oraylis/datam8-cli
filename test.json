@@ -1,0 +1,15 @@
+{
+  "type": "zones",
+  "zones": [
+    {
+      "name": "raw",
+      "targetName": "raw",
+      "displayName": "Bronze"
+    },
+    {
+      "name": "stage",
+      "targetName": "stage",
+      "displayName": "Silver"
+    }
+  ]
+}

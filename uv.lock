@@ -121,7 +121,7 @@ requires-dist = [
     { name = "jsonschema", specifier = "==4.23.0" },
     { name = "pydantic", specifier = "==2.8.2" },
     { name = "sqlparse", specifier = "==0.5.1" },
-    { name = "typer", specifier = "==0.12.4" },
+    { name = "typer", specifier = "==0.17.3" },
 ]
 
 [package.metadata.requires-dev]
@@ -726,7 +726,7 @@ wheels = [
 
 [[package]]
 name = "typer"
-version = "0.12.4"
+version = "0.17.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
@@ -734,9 +734,9 @@ dependencies = [
     { name = "shellingham" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d4/f7/f174a1cae84848ae8b27170a96187b91937b743f0580ff968078fe16930a/typer-0.12.4.tar.gz", hash = "sha256:c9c1613ed6a166162705b3347b8d10b661ccc5d95692654d0fb628118f2c34e6", size = 97945, upload-time = "2024-08-17T03:33:12.974Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/dd/82/f4bfed3bc18c6ebd6f828320811bbe4098f92a31adf4040bee59c4ae02ea/typer-0.17.3.tar.gz", hash = "sha256:0c600503d472bcf98d29914d4dcd67f80c24cc245395e2e00ba3603c9332e8ba", size = 103517, upload-time = "2025-08-30T12:35:24.05Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ae/cc/15083dcde1252a663398b1b2a173637a3ec65adadfb95137dc95df1e6adc/typer-0.12.4-py3-none-any.whl", hash = "sha256:819aa03699f438397e876aa12b0d63766864ecba1b579092cc9fe35d886e34b6", size = 47402, upload-time = "2024-08-17T03:33:11.25Z" },
+    { url = "https://files.pythonhosted.org/packages/ca/e8/b3d537470e8404659a6335e7af868e90657efb73916ef31ddf3d8b9cb237/typer-0.17.3-py3-none-any.whl", hash = "sha256:643919a79182ab7ac7581056d93c6a2b865b026adf2872c4d02c72758e6f095b", size = 46494, upload-time = "2025-08-30T12:35:22.391Z" },
 ]
 
 [[package]]

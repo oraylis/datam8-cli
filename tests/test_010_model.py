@@ -18,7 +18,7 @@ def target():
 
 
 @parametrize_with_cases("layers", cases=CasesLayer, glob="*_valid")
-def test_perform_initial_checks(config, model, layers):
+def test_perform_initial_checks(config, model: Model, layers):
     assert isinstance(model, Model)
 
     model.perform_initial_checks(layers)

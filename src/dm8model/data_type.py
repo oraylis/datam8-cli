@@ -23,7 +23,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 from __future__ import annotations
 
-from typing import Annotated, Optional
+from pathlib import Path
+from typing import Annotated, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -33,14 +34,26 @@ class DataType(BaseModel):
     An datam8 abstract internal data type.
     """
 
-    model_config = ConfigDict(
-        extra="forbid",
-    )
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
     type: str
     nullable: bool
-    charLen: Annotated[Optional[int], Field(gt=0)] = None
-    precision: Annotated[Optional[int], Field(gt=0)] = None
-    scale: Annotated[Optional[int], Field(gt=0)] = None
+    charLen: Annotated[int | None, Field(gt=0)] = None
+    precision: Annotated[int | None, Field(gt=0)] = None
+    scale: Annotated[int | None, Field(gt=0)] = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "DataType":
+        return DataType.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "DataType":
+        with open(path, "r") as file:
+            model = DataType.model_validate_json(file.read())
+
+        return model
 
 
 class DataTypeDefinition(BaseModel):
@@ -48,24 +61,32 @@ class DataTypeDefinition(BaseModel):
     Defines a class of data type to configure which `DataType` properties are relevant for a specific type.
     """
 
-    model_config = ConfigDict(
-        extra="forbid",
-    )
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
     name: str
-    displayName: Optional[str] = None
-    description: Optional[str] = None
-    hasCharLen: Optional[bool] = False
-    hasPrecision: Optional[bool] = False
-    hasScale: Optional[bool] = False
-    parquetType: Annotated[
-        str,
-        Field(
-            description="The actual parquet data type that this datam8 internal type will map to."
-        ),
-    ]
-    sqlType: Annotated[
-        str,
-        Field(
-            description="The atual sql data type that this datam8 internal type will map to."
-        ),
-    ]
+    displayName: str | None = None
+    description: str | None = None
+    hasCharLen: bool | None = False
+    hasPrecision: bool | None = False
+    hasScale: bool | None = False
+    parquetType: str
+    """
+    The actual parquet data type that this datam8 internal type will map to.
+    """
+    sqlType: str
+    """
+    The atual sql data type that this datam8 internal type will map to.
+    """
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "DataTypeDefinition":
+        return DataTypeDefinition.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "DataTypeDefinition":
+        with open(path, "r") as file:
+            model = DataTypeDefinition.model_validate_json(file.read())
+
+        return model

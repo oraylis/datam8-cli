@@ -23,7 +23,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 from __future__ import annotations
 
-from typing import Annotated, Dict, List, Optional
+from pathlib import Path
+from typing import Annotated, Dict, List, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -35,11 +36,29 @@ class SourceDataTypeMapping(BaseModel):
     A mapping of datatypes name in the source to datam8 internal datatype names.
     """
 
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    sourceType: Annotated[str, Field(description="Source system data type")]
-    targetType: Annotated[str, Field(description="Target system data type")]
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    sourceType: str
+    """
+    Source system data type
+    """
+    targetType: str
+    """
+    Target system data type
+    """
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "SourceDataTypeMapping":
+        return SourceDataTypeMapping.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "SourceDataTypeMapping":
+        with open(path, "r") as file:
+            model = SourceDataTypeMapping.model_validate_json(file.read())
+
+        return model
 
 
 class ConnectionProperty(BaseModel):
@@ -49,7 +68,21 @@ class ConnectionProperty(BaseModel):
 
     name: str
     required: bool
-    description: Optional[str] = None
+    description: str | None = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "ConnectionProperty":
+        return ConnectionProperty.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "ConnectionProperty":
+        with open(path, "r") as file:
+            model = ConnectionProperty.model_validate_json(file.read())
+
+        return model
 
 
 class DataSourceType(BaseModel):
@@ -57,31 +90,41 @@ class DataSourceType(BaseModel):
     Defines groups of data sources that base on their technology, e.g. `SqlServer` or `Oracle`
     """
 
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    name: Annotated[
-        str,
-        Field(
-            description="Name of the data source type (e.g., SqlDataSource, LakeSource)"
-        ),
-    ]
-    displayName: Annotated[
-        Optional[str], Field(description="Human-readable display name")
-    ] = None
-    description: Annotated[
-        Optional[str], Field(description="Description of the data source type")
-    ] = None
-    dataTypeMapping: Annotated[
-        List[SourceDataTypeMapping],
-        Field(
-            description="Default data type mappings for this source type", min_length=1
-        ),
-    ]
-    connectionProperties: Annotated[
-        Optional[List[ConnectionProperty]],
-        Field(description="Required connection properties for this source type"),
-    ] = None
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    name: str
+    """
+    Name of the data source type (e.g., SqlDataSource, LakeSource)
+    """
+    displayName: str | None = None
+    """
+    Human-readable display name
+    """
+    description: str | None = None
+    """
+    Description of the data source type
+    """
+    dataTypeMapping: Annotated[List[SourceDataTypeMapping], Field(min_length=1)]
+    """
+    Default data type mappings for this source type
+    """
+    connectionProperties: List[ConnectionProperty] | None = None
+    """
+    Required connection properties for this source type
+    """
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "DataSourceType":
+        return DataSourceType.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "DataSourceType":
+        with open(path, "r") as file:
+            model = DataSourceType.model_validate_json(file.read())
+
+        return model
 
 
 class DataSource(BaseModel):
@@ -89,22 +132,32 @@ class DataSource(BaseModel):
     Defines an external source of data to be loaded with datam8.
     """
 
-    model_config = ConfigDict(
-        extra="forbid",
-    )
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
     name: str
-    displayName: Optional[str] = None
-    description: Optional[str] = None
-    properties: Optional[List[property.PropertyReference]] = None
+    displayName: str | None = None
+    description: str | None = None
+    properties: List[property.PropertyReference] | None = None
     type: str
-    connectionString: Optional[str] = None
-    dataTypeMapping: Annotated[
-        Optional[List[SourceDataTypeMapping]],
-        Field(
-            description="Optional data type mappings. If not specified, uses defaults from DataSourceTypes. Individual mappings override defaults."
-        ),
-    ] = None
-    extendedProperties: Annotated[
-        Optional[Dict[str, str]],
-        Field(description="Additional properties specific to the data source"),
-    ] = None
+    connectionString: str | None = None
+    dataTypeMapping: List[SourceDataTypeMapping] | None = None
+    """
+    Optional data type mappings. If not specified, uses defaults from DataSourceTypes. Individual mappings override defaults.
+    """
+    extendedProperties: Dict[str, str] | None = None
+    """
+    Additional properties specific to the data source
+    """
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "DataSource":
+        return DataSource.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "DataSource":
+        with open(path, "r") as file:
+            model = DataSource.model_validate_json(file.read())
+
+        return model

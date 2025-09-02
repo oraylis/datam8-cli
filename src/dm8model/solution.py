@@ -23,9 +23,40 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 from __future__ import annotations
 
-from typing import Annotated, Optional
+from pathlib import Path
+from typing import Annotated, List, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+class GeneratorTarget(BaseModel):
+    """
+    Defines a target that can be selected when using the generator.
+    """
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    sourcePath: Path
+    """
+    A path relative to the folder where the the solution file lies.
+    """
+    outputPath: Path
+    """
+    A path relative to the folder where the the solution file lies.
+    """
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "GeneratorTarget":
+        return GeneratorTarget.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "GeneratorTarget":
+        with open(path, "r") as file:
+            model = GeneratorTarget.model_validate_json(file.read())
+
+        return model
 
 
 class Solution(BaseModel):
@@ -33,32 +64,38 @@ class Solution(BaseModel):
     A definition to hold various settings for use in the frontend or the generator.
     """
 
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    schemaVersion: Annotated[
-        str,
-        Field(
-            description="Version of the schema for validation and migration support."
-        ),
-    ]
-    modelPath: Annotated[
-        Optional[str],
-        Field(
-            description="Root path for model entities, replacing zone-specific paths."
-        ),
-    ] = "Model"
-    basePath: Annotated[
-        Optional[str],
-        Field(description="Path where base entity files like DataSources are stored."),
-    ] = "Base"
-    generatePath: Annotated[
-        Optional[str],
-        Field(
-            description="Path containing templates and additional code for their rendering."
-        ),
-    ] = "Generate"
-    diagramPath: Annotated[Optional[str], Field(description="tbd")] = "Diagram"
-    outputPath: Annotated[
-        Optional[str], Field(description="Path for storing generated output.")
-    ] = "Output"
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    schemaVersion: str
+    """
+    Version of the schema for validation and migration support.
+    """
+    modelPath: Path
+    """
+    Root path for model entities, replacing zone-specific paths.
+    """
+    basePath: Path
+    """
+    Path where base entity files like DataSources are stored.
+    """
+    diagramPath: Path | None = None
+    """
+    tbd
+    """
+    generatorTargets: Annotated[List[GeneratorTarget], Field(min_length=1)]
+    """
+    Targets available to the generator when not explicitly specifying it.
+    """
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "Solution":
+        return Solution.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "Solution":
+        with open(path, "r") as file:
+            model = Solution.model_validate_json(file.read())
+
+        return model
