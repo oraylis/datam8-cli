@@ -24,10 +24,15 @@ classifiers = [
 [project.scripts]
 dm8gen = "dm8gen.cli:app"
 
+[project.urls]
+Homepage = "https://github.com/oraylis/datam8-generator"
+Issues = "https://github.com/oraylis/datam8/issues"
+
 [dependency-groups]
 dev = [
     "pytest>=8.3.4",
     "pytest-cases>=3.8.6",
+  "datamodel-code-generator>=0.33.0",
 ]
 
 [build-system]
@@ -55,12 +60,12 @@ quote-style = "double"
 ##############
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/dm8gen"]
+packages = ["src/dm8gen", "src/dm8model"]
 
 [tool.hatch.build.hooks.custom]
 path = "hatch_build_datamodel.py"
 dependencies = [
-  "datamodel-code-generator>=0.28.1",
+  "datamodel-code-generator>=0.33.0",
 ]
 
 ###############
@@ -69,3 +74,7 @@ dependencies = [
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
+
+[tool.pyright]
+venvPath = ".venv"
+venv = "."
