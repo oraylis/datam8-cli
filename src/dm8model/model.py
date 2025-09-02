@@ -24,7 +24,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Annotated, Any, Dict, List, Optional, Union
+from pathlib import Path
+from typing import Annotated, Any, Dict, List, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -36,23 +37,33 @@ class Locator(BaseModel):
     Describes an abstract way to point to and find entities with datam8.
     """
 
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    id: Annotated[int, Field(description="Internal id of an entity.", gt=0)]
-    zone: Annotated[
-        str,
-        Field(description="Reference to the top-level folder within the model folder."),
-    ]
-    folders: Annotated[
-        List[str],
-        Field(
-            description="Hierarchical list of olders under the zone. Order is relevant."
-        ),
-    ]
-    modelEntity: Annotated[
-        str, Field(description="Name property of the modelEntity object.")
-    ]
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    zone: str
+    """
+    Reference to the top-level folder within the model folder.
+    """
+    folders: List[str]
+    """
+    Hierarchical list of olders under the zone. Order is relevant.
+    """
+    modelEntity: str
+    """
+    Name property of the modelEntity object.
+    """
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "Locator":
+        return Locator.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "Locator":
+        with open(path, "r") as file:
+            model = Locator.model_validate_json(file.read())
+
+        return model
 
 
 class ModelParameter(BaseModel):
@@ -60,11 +71,23 @@ class ModelParameter(BaseModel):
     Key-Value pair parameters for customization of and entity-level attributes.
     """
 
-    model_config = ConfigDict(
-        extra="forbid",
-    )
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
     name: str
-    value: Union[str, Dict[str, Any], float, bool]
+    value: str | Dict[str, Any] | float | bool
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "ModelParameter":
+        return ModelParameter.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "ModelParameter":
+        with open(path, "r") as file:
+            model = ModelParameter.model_validate_json(file.read())
+
+        return model
 
 
 class TransformationKind(Enum):
@@ -81,10 +104,22 @@ class TransformationFunction(BaseModel):
     A transformation function defined in the scope of the current solution.
     """
 
-    model_config = ConfigDict(
-        extra="forbid",
-    )
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
     source: str
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "TransformationFunction":
+        return TransformationFunction.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "TransformationFunction":
+        with open(path, "r") as file:
+            model = TransformationFunction.model_validate_json(file.read())
+
+        return model
 
 
 class SourceAttributeMapping(BaseModel):
@@ -92,13 +127,25 @@ class SourceAttributeMapping(BaseModel):
     Map an attribute in the source to one in the current entity. May optionally contain an explicit source data type.
     """
 
-    model_config = ConfigDict(
-        extra="forbid",
-    )
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
     targetName: str
     sourceName: str
-    sourceDataType: Optional[data_type.DataType] = None
-    properties: Optional[List[property.PropertyReference]] = None
+    sourceDataType: data_type.DataType | None = None
+    properties: List[property.PropertyReference] | None = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "SourceAttributeMapping":
+        return SourceAttributeMapping.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "SourceAttributeMapping":
+        with open(path, "r") as file:
+            model = SourceAttributeMapping.model_validate_json(file.read())
+
+        return model
 
 
 class ModelTransformation(BaseModel):
@@ -106,26 +153,34 @@ class ModelTransformation(BaseModel):
     Describes a single transformation, either builtin or defined within the solution.
     """
 
-    model_config = ConfigDict(
-        extra="forbid",
-    )
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
     stepNo: Annotated[int, Field(ge=1)]
-    kind: Annotated[
-        TransformationKind,
-        Field(
-            description="Type of transformation, either `builtin` or `function`.",
-            title="TransformationKind",
-        ),
-    ]
+    kind: Annotated[TransformationKind, Field(title="TransformationKind")]
+    """
+    Type of transformation, either `builtin` or `function`.
+    """
     name: str
-    properties: Optional[List[property.PropertyReference]] = None
+    properties: List[property.PropertyReference] | None = None
     function: Annotated[
-        Optional[TransformationFunction],
-        Field(
-            description="A transformation function defined in the scope of the current solution.",
-            title="TransformationFunction",
-        ),
+        TransformationFunction | None, Field(title="TransformationFunction")
     ] = None
+    """
+    A transformation function defined in the scope of the current solution.
+    """
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "ModelTransformation":
+        return ModelTransformation.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "ModelTransformation":
+        with open(path, "r") as file:
+            model = ModelTransformation.model_validate_json(file.read())
+
+        return model
 
 
 class InternalModelSource(BaseModel):
@@ -133,12 +188,24 @@ class InternalModelSource(BaseModel):
     Internal source definition to reference other entities within datam8.
     """
 
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    sourceLocation: Union[str, int]
-    properties: Optional[List[property.PropertyReference]] = None
-    mapping: Optional[List[SourceAttributeMapping]] = None
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    sourceLocation: str | int
+    properties: List[property.PropertyReference] | None = None
+    mapping: List[SourceAttributeMapping] | None = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "InternalModelSource":
+        return InternalModelSource.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "InternalModelSource":
+        with open(path, "r") as file:
+            model = InternalModelSource.model_validate_json(file.read())
+
+        return model
 
 
 class ExternalModelSource(BaseModel):
@@ -146,13 +213,25 @@ class ExternalModelSource(BaseModel):
     Sources that point to external systems outside of datam8.
     """
 
-    model_config = ConfigDict(
-        extra="forbid",
-    )
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
     dataSource: str
     sourceLocation: str
-    properties: Optional[List[property.PropertyReference]] = None
-    mapping: Optional[List[SourceAttributeMapping]] = None
+    properties: List[property.PropertyReference] | None = None
+    mapping: List[SourceAttributeMapping] | None = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "ExternalModelSource":
+        return ExternalModelSource.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "ExternalModelSource":
+        with open(path, "r") as file:
+            model = ExternalModelSource.model_validate_json(file.read())
+
+        return model
 
 
 class ModelEntity(BaseModel):
@@ -160,23 +239,35 @@ class ModelEntity(BaseModel):
     Describes a single entity within datam8. Most commonly a database table.
     """
 
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    id: Annotated[int, Field(description="Internal id of an entity.", gt=0)]
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    id: Annotated[int, Field(gt=0)]
+    """
+    Internal id of an entity.
+    """
     name: str
-    displayName: Optional[str] = None
-    description: Optional[str] = None
-    parameters: Optional[List[ModelParameter]] = None
+    displayName: str | None = None
+    description: str | None = None
+    parameters: List[ModelParameter] | None = None
     attributes: Annotated[List[attribute.Attribute], Field(min_length=1)]
-    properties: Optional[List[property.PropertyReference]] = None
+    properties: List[property.PropertyReference] | None = None
     sources: Annotated[
-        List[Union[InternalModelSource, ExternalModelSource]], Field(min_length=1)
+        List[InternalModelSource | ExternalModelSource], Field(min_length=1)
     ]
-    transformations: Annotated[
-        List[ModelTransformation],
-        Field(
-            description="List of transformations that will be executed in order of stepNo.",
-            min_length=1,
-        ),
-    ]
+    transformations: Annotated[List[ModelTransformation], Field(min_length=1)]
+    """
+    List of transformations that will be executed in order of stepNo.
+    """
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "ModelEntity":
+        return ModelEntity.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "ModelEntity":
+        with open(path, "r") as file:
+            model = ModelEntity.model_validate_json(file.read())
+
+        return model

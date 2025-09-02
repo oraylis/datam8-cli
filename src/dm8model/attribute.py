@@ -25,7 +25,8 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Annotated, List, Optional
+from pathlib import Path
+from typing import Annotated, List, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -59,24 +60,34 @@ class AttributeType(BaseModel):
     Defines abstract business orientated attribute definitions, e.g. an email address
     """
 
-    model_config = ConfigDict(
-        extra="forbid",
-    )
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
     name: str
-    displayName: Optional[str] = None
-    description: Optional[str] = None
+    displayName: str
+    description: str | None = None
     defaultType: str
-    defaultLength: Annotated[Optional[int], Field(gt=0)] = None
-    defaultPrecision: Annotated[Optional[int], Field(gt=0)] = None
-    defaultScale: Annotated[Optional[int], Field(gt=0)] = None
-    hasUnit: Annotated[
-        Optional[HasUnit],
-        Field(
-            description="Defines if an attribute should define a unit, e.g. `Physical` for weight or `Currency` for price."
-        ),
-    ] = HasUnit.NO_UNIT
-    canBeInRelation: Optional[bool] = False
-    isDefaultProperty: Optional[bool] = False
+    defaultLength: Annotated[int | None, Field(gt=0)] = None
+    defaultPrecision: Annotated[int | None, Field(gt=0)] = None
+    defaultScale: Annotated[int | None, Field(gt=0)] = None
+    hasUnit: HasUnit | None = HasUnit.NO_UNIT
+    """
+    Defines if an attribute should define a unit, e.g. `Physical` for weight or `Currency` for price.
+    """
+    canBeInRelation: bool | None = False
+    isDefaultProperty: bool | None = False
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "AttributeType":
+        return AttributeType.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "AttributeType":
+        with open(path, "r") as file:
+            model = AttributeType.model_validate_json(file.read())
+
+        return model
 
 
 class Attribute(BaseModel):
@@ -84,26 +95,37 @@ class Attribute(BaseModel):
     An attribute of a model entity.
     """
 
-    model_config = ConfigDict(
-        extra="forbid",
-    )
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
     ordinalNumber: Annotated[int, Field(gt=0)]
     name: str
-    displayName: Optional[str] = None
-    description: Optional[str] = None
+    displayName: str | None = None
+    description: str | None = None
     attributeType: str
     dataType: data_type.DataType
-    isBusinessKey: Optional[bool] = False
-    history: Annotated[
-        Optional[HistoryType],
-        Field(
-            description="Defines how an attribute in a slowly chaning dimension should behave.",
-            title="HistoryType",
-        ),
-    ] = HistoryType.SCD1
-    unit: Optional[str] = None
-    refactorNames: Optional[List[str]] = None
-    dateModified: Optional[datetime] = None
-    dateDeleted: Optional[datetime] = None
+    isBusinessKey: bool | None = False
+    history: Annotated[HistoryType | None, Field(title="HistoryType")] = (
+        HistoryType.SCD1
+    )
+    """
+    Defines how an attribute in a slowly chaning dimension should behave.
+    """
+    unit: str | None = None
+    refactorNames: List[str] | None = None
+    dateModified: datetime | None = None
+    dateDeleted: datetime | None = None
     dateAdded: datetime
-    properties: Optional[List[property.PropertyReference]] = None
+    properties: List[property.PropertyReference] | None = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "Attribute":
+        return Attribute.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "Attribute":
+        with open(path, "r") as file:
+            model = Attribute.model_validate_json(file.read())
+
+        return model

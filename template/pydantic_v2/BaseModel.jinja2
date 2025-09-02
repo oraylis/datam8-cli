@@ -1,3 +1,11 @@
+{% if base_class != "BaseModel" and "," not in base_class and not fields and not config -%}
+
+{# if this is just going to be `class Foo(Bar): pass`, then might as well just make Foo
+an alias for Bar: every pydantic model class consumes considerable memory. #}
+{{ class_name }} = {{ base_class }}
+
+{% else -%}
+
 {% for decorator in decorators -%}
 {{ decorator }}
 {% endfor -%}
@@ -24,7 +32,7 @@ class {{ class_name }}({{ base_class }}):{% if comment is defined %}  # {{ comme
     {%- else %}
     {{ field.name }}: {{ field.type_hint }}
     {%- endif %}
-    {%- if (not field.required or field.data_type.is_optional or field.nullable) and not field.annotated
+    {%- if not (field.required or (field.represented_default == 'None' and field.strip_default_none)) or field.data_type.is_optional
             %} = {{ field.represented_default }}
     {%- endif -%}
     {%- endif %}
@@ -43,5 +51,13 @@ class {{ class_name }}({{ base_class }}):{% if comment is defined %}  # {{ comme
         return self.model_dump(by_alias=True, exclude_unset=True, mode='json')
 
     @staticmethod
-    def from_dict(obj) -> '{{ class_name }}':
+    def from_dict(obj) -> "{{ class_name }}":
         return {{ class_name }}.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "{{ class_name }}":
+        with open(path, "r") as file:
+          model = {{ class_name }}.model_validate_json(file.read())
+
+        return model
+{%- endif %}

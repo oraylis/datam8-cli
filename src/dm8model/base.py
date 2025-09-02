@@ -24,7 +24,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Annotated, Any, List, Literal, Optional, Union
+from pathlib import Path
+from typing import Annotated, Any, List, Literal, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel
 
@@ -45,26 +46,38 @@ class AttributeTypes(BaseModel):
     Defines the layout of entity files within the `Base` folder.
     """
 
-    model_config = ConfigDict(
-        extra="forbid",
-    )
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
     type: Literal["attributeTypes"]
-    properties: Optional[Any] = None
-    propertyTypes: Optional[Any] = None
-    zones: Optional[Any] = None
-    dataTypes: Optional[Any] = None
-    dataSourceTypes: Optional[Any] = None
-    dataProducts: Optional[Any] = None
-    dataModules: Optional[Any] = None
-    attributeTypes: List[attribute.AttributeType]
-    dataSources: Optional[Any] = None
-    folders: Optional[Any] = None
-    modelEntities: Optional[Any] = None
+    properties: Any | None = None
+    propertyValues: Any | None = None
+    zones: Any | None = None
+    dataTypes: Any | None = None
+    dataSourceTypes: Any | None = None
+    dataProducts: Any | None = None
+    dataModules: Any | None = None
+    attributeTypes: Annotated[List[attribute.AttributeType], Field(min_length=1)]
+    dataSources: Any | None = None
+    folders: Any | None = None
+    modelEntities: Any | None = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "AttributeTypes":
+        return AttributeTypes.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "AttributeTypes":
+        with open(path, "r") as file:
+            model = AttributeTypes.model_validate_json(file.read())
+
+        return model
 
 
 class EntityType(Enum):
     PROPERTIES = "properties"
-    PROPERTY_TYPES = "propertyTypes"
+    PROPERTY_VALUES = "propertyValues"
     ZONES = "zones"
     DATA_TYPES = "dataTypes"
     DATA_SOURCE_TYPES = "dataSourceTypes"
@@ -76,26 +89,38 @@ class EntityType(Enum):
     MODEL_ENTITIES = "modelEntities"
 
 
-class PropertyType(BaseModel):
+class PropertyValues(BaseModel):
     """
     Defines the layout of entity files within the `Base` folder.
     """
 
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    type: Literal["propertyTypes"]
-    properties: Optional[Any] = None
-    propertyTypes: List[property.PropertyType]
-    zones: Optional[Any] = None
-    dataTypes: Optional[Any] = None
-    dataSourceTypes: Optional[Any] = None
-    dataProducts: Optional[Any] = None
-    dataModules: Optional[Any] = None
-    attributeTypes: Optional[Any] = None
-    dataSources: Optional[Any] = None
-    folders: Optional[Any] = None
-    modelEntities: Optional[Any] = None
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    type: Literal["propertyValues"]
+    properties: Any | None = None
+    propertyValues: List[property.PropertyValue]
+    zones: Any | None = None
+    dataTypes: Any | None = None
+    dataSourceTypes: Any | None = None
+    dataProducts: Any | None = None
+    dataModules: Any | None = None
+    attributeTypes: Any | None = None
+    dataSources: Any | None = None
+    folders: Any | None = None
+    modelEntities: Any | None = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "PropertyValues":
+        return PropertyValues.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "PropertyValues":
+        with open(path, "r") as file:
+            model = PropertyValues.model_validate_json(file.read())
+
+        return model
 
 
 class Zones(BaseModel):
@@ -103,21 +128,33 @@ class Zones(BaseModel):
     Defines the layout of entity files within the `Base` folder.
     """
 
-    model_config = ConfigDict(
-        extra="forbid",
-    )
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
     type: Literal["zones"]
-    properties: Optional[Any] = None
-    propertyTypes: Optional[Any] = None
-    zones: List[zone.Zone]
-    dataTypes: Optional[Any] = None
-    dataSourceTypes: Optional[Any] = None
-    dataProducts: Optional[Any] = None
-    dataModules: Optional[Any] = None
-    attributeTypes: Optional[Any] = None
-    dataSources: Optional[Any] = None
-    folders: Optional[Any] = None
-    modelEntities: Optional[Any] = None
+    properties: Any | None = None
+    propertyValues: Any | None = None
+    zones: Annotated[List[zone.Zone], Field(min_length=1)]
+    dataTypes: Any | None = None
+    dataSourceTypes: Any | None = None
+    dataProducts: Any | None = None
+    dataModules: Any | None = None
+    attributeTypes: Any | None = None
+    dataSources: Any | None = None
+    folders: Any | None = None
+    modelEntities: Any | None = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "Zones":
+        return Zones.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "Zones":
+        with open(path, "r") as file:
+            model = Zones.model_validate_json(file.read())
+
+        return model
 
 
 class DataTypes(BaseModel):
@@ -125,21 +162,33 @@ class DataTypes(BaseModel):
     Defines the layout of entity files within the `Base` folder.
     """
 
-    model_config = ConfigDict(
-        extra="forbid",
-    )
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
     type: Literal["dataTypes"]
-    properties: Optional[Any] = None
-    propertyTypes: Optional[Any] = None
-    zones: Optional[Any] = None
-    dataTypes: List[data_type.DataTypeDefinition]
-    dataSourceTypes: Optional[Any] = None
-    dataProducts: Optional[Any] = None
-    dataModules: Optional[Any] = None
-    attributeTypes: Optional[Any] = None
-    dataSources: Optional[Any] = None
-    folders: Optional[Any] = None
-    modelEntities: Optional[Any] = None
+    properties: Any | None = None
+    propertyValues: Any | None = None
+    zones: Any | None = None
+    dataTypes: Annotated[List[data_type.DataTypeDefinition], Field(min_length=1)]
+    dataSourceTypes: Any | None = None
+    dataProducts: Any | None = None
+    dataModules: Any | None = None
+    attributeTypes: Any | None = None
+    dataSources: Any | None = None
+    folders: Any | None = None
+    modelEntities: Any | None = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "DataTypes":
+        return DataTypes.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "DataTypes":
+        with open(path, "r") as file:
+            model = DataTypes.model_validate_json(file.read())
+
+        return model
 
 
 class DataSourceTypes(BaseModel):
@@ -147,21 +196,33 @@ class DataSourceTypes(BaseModel):
     Defines the layout of entity files within the `Base` folder.
     """
 
-    model_config = ConfigDict(
-        extra="forbid",
-    )
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
     type: Literal["dataSourceTypes"]
-    properties: Optional[Any] = None
-    propertyTypes: Optional[Any] = None
-    zones: Optional[Any] = None
-    dataTypes: Optional[Any] = None
-    dataSourceTypes: List[data_source.DataSourceType]
-    dataProducts: Optional[Any] = None
-    dataModules: Optional[Any] = None
-    attributeTypes: Optional[Any] = None
-    dataSources: Optional[Any] = None
-    folders: Optional[Any] = None
-    modelEntities: Optional[Any] = None
+    properties: Any | None = None
+    propertyValues: Any | None = None
+    zones: Any | None = None
+    dataTypes: Any | None = None
+    dataSourceTypes: Annotated[List[data_source.DataSourceType], Field(min_length=1)]
+    dataProducts: Any | None = None
+    dataModules: Any | None = None
+    attributeTypes: Any | None = None
+    dataSources: Any | None = None
+    folders: Any | None = None
+    modelEntities: Any | None = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "DataSourceTypes":
+        return DataSourceTypes.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "DataSourceTypes":
+        with open(path, "r") as file:
+            model = DataSourceTypes.model_validate_json(file.read())
+
+        return model
 
 
 class Folders(BaseModel):
@@ -169,21 +230,33 @@ class Folders(BaseModel):
     Defines the layout of entity files within the `Base` folder.
     """
 
-    model_config = ConfigDict(
-        extra="forbid",
-    )
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
     type: Literal["folders"]
-    properties: Optional[Any] = None
-    propertyTypes: Optional[Any] = None
-    zones: Optional[Any] = None
-    dataTypes: Optional[Any] = None
-    dataSourceTypes: Optional[Any] = None
-    dataProducts: Optional[Any] = None
-    dataModules: Optional[Any] = None
-    attributeTypes: Optional[Any] = None
-    dataSources: Optional[Any] = None
-    folders: List[folder.Folder]
-    modelEntities: Optional[Any] = None
+    properties: Any | None = None
+    propertyValues: Any | None = None
+    zones: Any | None = None
+    dataTypes: Any | None = None
+    dataSourceTypes: Any | None = None
+    dataProducts: Any | None = None
+    dataModules: Any | None = None
+    attributeTypes: Any | None = None
+    dataSources: Any | None = None
+    folders: Annotated[List[folder.Folder], Field(min_length=1)]
+    modelEntities: Any | None = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "Folders":
+        return Folders.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "Folders":
+        with open(path, "r") as file:
+            model = Folders.model_validate_json(file.read())
+
+        return model
 
 
 class Properties(BaseModel):
@@ -191,21 +264,33 @@ class Properties(BaseModel):
     Defines the layout of entity files within the `Base` folder.
     """
 
-    model_config = ConfigDict(
-        extra="forbid",
-    )
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
     type: Literal["properties"]
     properties: List[property.Property]
-    propertyTypes: Optional[Any] = None
-    zones: Optional[Any] = None
-    dataTypes: Optional[Any] = None
-    dataSourceTypes: Optional[Any] = None
-    dataProducts: Optional[Any] = None
-    dataModules: Optional[Any] = None
-    attributeTypes: Optional[Any] = None
-    dataSources: Optional[Any] = None
-    folders: Optional[Any] = None
-    modelEntities: Optional[Any] = None
+    propertyValues: Any | None = None
+    zones: Any | None = None
+    dataTypes: Any | None = None
+    dataSourceTypes: Any | None = None
+    dataProducts: Any | None = None
+    dataModules: Any | None = None
+    attributeTypes: Any | None = None
+    dataSources: Any | None = None
+    folders: Any | None = None
+    modelEntities: Any | None = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "Properties":
+        return Properties.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "Properties":
+        with open(path, "r") as file:
+            model = Properties.model_validate_json(file.read())
+
+        return model
 
 
 class DataModules(BaseModel):
@@ -213,21 +298,33 @@ class DataModules(BaseModel):
     Defines the layout of entity files within the `Base` folder.
     """
 
-    model_config = ConfigDict(
-        extra="forbid",
-    )
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
     type: Literal["dataModules"]
-    properties: Optional[Any] = None
-    propertyTypes: Optional[Any] = None
-    zones: Optional[Any] = None
-    dataTypes: Optional[Any] = None
-    dataSourceTypes: Optional[Any] = None
-    dataProducts: Optional[Any] = None
-    dataModules: List[data_product.DataModule]
-    attributeTypes: Optional[Any] = None
-    dataSources: Optional[Any] = None
-    folders: Optional[Any] = None
-    modelEntities: Optional[Any] = None
+    properties: Any | None = None
+    propertyValues: Any | None = None
+    zones: Any | None = None
+    dataTypes: Any | None = None
+    dataSourceTypes: Any | None = None
+    dataProducts: Any | None = None
+    dataModules: Annotated[List[data_product.DataModule], Field(min_length=1)]
+    attributeTypes: Any | None = None
+    dataSources: Any | None = None
+    folders: Any | None = None
+    modelEntities: Any | None = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "DataModules":
+        return DataModules.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "DataModules":
+        with open(path, "r") as file:
+            model = DataModules.model_validate_json(file.read())
+
+        return model
 
 
 class DataSources(BaseModel):
@@ -235,21 +332,33 @@ class DataSources(BaseModel):
     Defines the layout of entity files within the `Base` folder.
     """
 
-    model_config = ConfigDict(
-        extra="forbid",
-    )
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
     type: Literal["dataSources"]
-    properties: Optional[Any] = None
-    propertyTypes: Optional[Any] = None
-    zones: Optional[Any] = None
-    dataTypes: Optional[Any] = None
-    dataSourceTypes: Optional[Any] = None
-    dataProducts: Optional[Any] = None
-    dataModules: Optional[Any] = None
-    attributeTypes: Optional[Any] = None
+    properties: Any | None = None
+    propertyValues: Any | None = None
+    zones: Any | None = None
+    dataTypes: Any | None = None
+    dataSourceTypes: Any | None = None
+    dataProducts: Any | None = None
+    dataModules: Any | None = None
+    attributeTypes: Any | None = None
     dataSources: List[data_source.DataSource]
-    folders: Optional[Any] = None
-    modelEntities: Optional[Any] = None
+    folders: Any | None = None
+    modelEntities: Any | None = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "DataSources":
+        return DataSources.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "DataSources":
+        with open(path, "r") as file:
+            model = DataSources.model_validate_json(file.read())
+
+        return model
 
 
 class DataProducts(BaseModel):
@@ -257,21 +366,33 @@ class DataProducts(BaseModel):
     Defines the layout of entity files within the `Base` folder.
     """
 
-    model_config = ConfigDict(
-        extra="forbid",
-    )
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
     type: Literal["dataProducts"]
-    properties: Optional[Any] = None
-    propertyTypes: Optional[Any] = None
-    zones: Optional[Any] = None
-    dataTypes: Optional[Any] = None
-    dataSourceTypes: Optional[Any] = None
-    dataProducts: List[data_product.DataProduct]
-    dataModules: Optional[Any] = None
-    attributeTypes: Optional[Any] = None
-    dataSources: Optional[Any] = None
-    folders: Optional[Any] = None
-    modelEntities: Optional[Any] = None
+    properties: Any | None = None
+    propertyValues: Any | None = None
+    zones: Any | None = None
+    dataTypes: Any | None = None
+    dataSourceTypes: Any | None = None
+    dataProducts: Annotated[List[data_product.DataProduct], Field(min_length=1)]
+    dataModules: Any | None = None
+    attributeTypes: Any | None = None
+    dataSources: Any | None = None
+    folders: Any | None = None
+    modelEntities: Any | None = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "DataProducts":
+        return DataProducts.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "DataProducts":
+        with open(path, "r") as file:
+            model = DataProducts.model_validate_json(file.read())
+
+        return model
 
 
 class ModelEntities(BaseModel):
@@ -279,56 +400,150 @@ class ModelEntities(BaseModel):
     Defines the layout of entity files within the `Base` folder.
     """
 
-    model_config = ConfigDict(
-        extra="forbid",
-    )
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
     type: Literal["modelEntities"]
-    properties: Optional[Any] = None
-    propertyTypes: Optional[Any] = None
-    zones: Optional[Any] = None
-    dataTypes: Optional[Any] = None
-    dataSourceTypes: Optional[Any] = None
-    dataProducts: Optional[Any] = None
-    dataModules: Optional[Any] = None
-    attributeTypes: Optional[Any] = None
-    dataSources: Optional[Any] = None
-    folders: Optional[Any] = None
+    properties: Any | None = None
+    propertyValues: Any | None = None
+    zones: Any | None = None
+    dataTypes: Any | None = None
+    dataSourceTypes: Any | None = None
+    dataProducts: Any | None = None
+    dataModules: Any | None = None
+    attributeTypes: Any | None = None
+    dataSources: Any | None = None
+    folders: Any | None = None
     modelEntities: List[model.ModelEntity]
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "ModelEntities":
+        return ModelEntities.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "ModelEntities":
+        with open(path, "r") as file:
+            model = ModelEntities.model_validate_json(file.read())
+
+        return model
+
+
+BaseEntitiesType: TypeAlias = (
+    ModelEntities
+    | Folders
+    | Properties
+    | PropertyValues
+    | Zones
+    | DataTypes
+    | DataSourceTypes
+    | DataProducts
+    | DataModules
+    | AttributeTypes
+    | DataSources
+)
+"""
+Defines the layout of entity files within the `Base` folder.
+"""
+
+
+class BaseEntities(
+    RootModel[
+        ModelEntities
+        | Folders
+        | Properties
+        | PropertyValues
+        | Zones
+        | DataTypes
+        | DataSourceTypes
+        | DataProducts
+        | DataModules
+        | AttributeTypes
+        | DataSources
+    ]
+):
+    root: Annotated[
+        ModelEntities
+        | Folders
+        | Properties
+        | PropertyValues
+        | Zones
+        | DataTypes
+        | DataSourceTypes
+        | DataProducts
+        | DataModules
+        | AttributeTypes
+        | DataSources,
+        Field(title="BaseEntities"),
+    ]
+    """
+    Defines the layout of entity files within the `Base` folder.
+    """
+
+    @staticmethod
+    def from_json_file(path: Path) -> "BaseEntities":
+        with open(path, "r") as file:
+            model = BaseEntities.model_validate_json(file.read())
+
+        return model
+
+
+BaseEntityType: TypeAlias = (
+    property.Property
+    | property.PropertyValue
+    | zone.Zone
+    | data_type.DataType
+    | data_type.DataTypeDefinition
+    | data_source.DataSourceType
+    | data_product.DataProduct
+    | data_product.DataModule
+    | attribute.AttributeType
+    | data_source.DataSource
+    | folder.Folder
+    | model.ModelEntity
+)
+"""
+A union type for all internal objects.
+"""
 
 
 class BaseEntity(
     RootModel[
-        Union[
-            ModelEntities,
-            Folders,
-            Properties,
-            PropertyType,
-            Zones,
-            DataTypes,
-            DataSourceTypes,
-            DataProducts,
-            DataModules,
-            AttributeTypes,
-            DataSources,
-        ]
+        property.Property
+        | property.PropertyValue
+        | zone.Zone
+        | data_type.DataType
+        | data_type.DataTypeDefinition
+        | data_source.DataSourceType
+        | data_product.DataProduct
+        | data_product.DataModule
+        | attribute.AttributeType
+        | data_source.DataSource
+        | folder.Folder
+        | model.ModelEntity
     ]
 ):
-    root: Annotated[
-        Union[
-            ModelEntities,
-            Folders,
-            Properties,
-            PropertyType,
-            Zones,
-            DataTypes,
-            DataSourceTypes,
-            DataProducts,
-            DataModules,
-            AttributeTypes,
-            DataSources,
-        ],
-        Field(
-            description="Defines the layout of entity files within the `Base` folder.",
-            title="BaseEntity",
-        ),
-    ]
+    root: (
+        property.Property
+        | property.PropertyValue
+        | zone.Zone
+        | data_type.DataType
+        | data_type.DataTypeDefinition
+        | data_source.DataSourceType
+        | data_product.DataProduct
+        | data_product.DataModule
+        | attribute.AttributeType
+        | data_source.DataSource
+        | folder.Folder
+        | model.ModelEntity
+    )
+    """
+    A union type for all internal objects.
+    """
+
+    @staticmethod
+    def from_json_file(path: Path) -> "BaseEntity":
+        with open(path, "r") as file:
+            model = BaseEntity.model_validate_json(file.read())
+
+        return model

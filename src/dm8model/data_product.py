@@ -23,7 +23,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 from __future__ import annotations
 
-from typing import Annotated, List, Optional
+from pathlib import Path
+from typing import Annotated, List, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -35,13 +36,25 @@ class DataModule(BaseModel):
     Defines ...
     """
 
-    model_config = ConfigDict(
-        extra="forbid",
-    )
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
     name: str
-    displayName: Optional[str] = None
-    description: Optional[str] = None
-    properties: Optional[List[property.PropertyReference]] = None
+    displayName: str | None = None
+    description: str | None = None
+    properties: List[property.PropertyReference] | None = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "DataModule":
+        return DataModule.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "DataModule":
+        with open(path, "r") as file:
+            model = DataModule.model_validate_json(file.read())
+
+        return model
 
 
 class DataProduct(BaseModel):
@@ -49,11 +62,23 @@ class DataProduct(BaseModel):
     Defines ...
     """
 
-    model_config = ConfigDict(
-        extra="forbid",
-    )
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
     name: str
-    displayName: Optional[str] = None
-    description: Optional[str] = None
-    properties: Optional[List[property.PropertyReference]] = None
+    displayName: str | None = None
+    description: str | None = None
+    properties: List[property.PropertyReference] | None = None
     dataModules: Annotated[List[DataModule], Field(min_length=1)]
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> "DataProduct":
+        return DataProduct.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> "DataProduct":
+        with open(path, "r") as file:
+            model = DataProduct.model_validate_json(file.read())
+
+        return model
