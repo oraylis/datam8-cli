@@ -24,7 +24,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated, List, TypeAlias
+from typing import Annotated
+from collections.abc import Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -40,18 +41,18 @@ class DataModule(BaseModel):
     name: str
     displayName: str | None = None
     description: str | None = None
-    properties: List[property.PropertyReference] | None = None
+    properties: Sequence[property.PropertyReference] | None = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "DataModule":
+    def from_dict(obj) -> DataModule:
         return DataModule.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "DataModule":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> DataModule:
+        with open(path) as file:
             model = DataModule.model_validate_json(file.read())
 
         return model
@@ -66,19 +67,19 @@ class DataProduct(BaseModel):
     name: str
     displayName: str | None = None
     description: str | None = None
-    properties: List[property.PropertyReference] | None = None
-    dataModules: Annotated[List[DataModule], Field(min_length=1)]
+    properties: Sequence[property.PropertyReference] | None = None
+    dataModules: Annotated[Sequence[DataModule], Field(min_length=1)]
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "DataProduct":
+    def from_dict(obj) -> DataProduct:
         return DataProduct.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "DataProduct":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> DataProduct:
+        with open(path) as file:
             model = DataProduct.model_validate_json(file.read())
 
         return model

@@ -21,12 +21,32 @@ import json
 import logging
 import os
 import textwrap
+import time
 from pathlib import Path
-from typing import Callable
+from collections.abc import Callable
 
 import jsonschema
+from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from dm8gen import config
+from dm8gen import config, opts
+
+
+def print_progress_async(func: Callable):
+    async def wrapper(*args, **kwargs):
+        result = func(*args, **kwargs)
+
+        if config.log_level in [opts.LogLevels.WARNING, opts.LogLevels.ERROR]:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                transient=True,
+            ) as progress:
+                progress.add_task(description="Processing...", total=None)
+                time.sleep(3)
+
+        return await result
+
+    return wrapper
 
 
 def validate_json_schema(path_json: str, path_json_schema: str):
@@ -55,7 +75,7 @@ def read_json(path: str):
     Returns:
         dict: JSON data.
     """
-    with open(path, encoding="utf-8", mode="r") as f:
+    with open(path, encoding="utf-8") as f:
         try:
             __json = json.load(f)
         except Exception as e:
@@ -187,12 +207,8 @@ class JsonFileParseException(Exception):
 
     def __str__(self):
         return self.message + textwrap.dedent(
+            f"""
+            File:       {self.file}
+            Error-Type: {type(self.inner_exception)}
             """
-            File:       %(file)s
-            Error-Type: %(type)s
-            """
-            % {
-                "file": self.file,
-                "type": type(self.inner_exception),
-            }
         )

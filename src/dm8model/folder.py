@@ -24,7 +24,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated, List, TypeAlias
+from typing import Annotated
+from collections.abc import Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -44,18 +45,18 @@ class Folder(BaseModel):
     """
     Path of this folder, if not set the current directory will be used.
     """
-    properties: List[property.PropertyReference] | None = None
+    properties: Sequence[property.PropertyReference] | None = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "Folder":
+    def from_dict(obj) -> Folder:
         return Folder.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "Folder":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> Folder:
+        with open(path) as file:
             model = Folder.model_validate_json(file.read())
 
         return model

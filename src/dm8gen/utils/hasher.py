@@ -13,7 +13,7 @@ class Algorithm(Enum):
 
 class UnknownAlgorithmExpcetion(Exception):
     def __ini__(self, algorithm: str):
-        super().__init__("Unkown algorithm: %s" % algorithm)
+        super().__init__(f"Unkown algorithm: {algorithm}")
 
 
 class Hasher:

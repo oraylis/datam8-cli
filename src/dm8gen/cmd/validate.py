@@ -1,8 +1,10 @@
-import typer
 import sys
 
-from dm8gen import config, opts, parser, utils
-from dm8gen.factory import EntityNotFoundException
+import typer
+import rich
+
+from dm8gen import config, factory, opts, parser, utils
+from dm8gen.model import EntityNotFoundException
 
 app = typer.Typer()
 
@@ -17,45 +19,31 @@ def command(
 ):
     """Validate solution model."""
     config.log_level = log_level
+    config.solution_path = solution_path
     config.solution_folder_path = solution_path.parent.absolute()
     logger = utils.start_logger(__name__)
-    logger.info("Start validating")
 
     try:
-        parsed_model = parser.parse_full_solution(solution_path.absolute())
+        model = factory.create_model()
+
+        rich.print("solution:", model.solution)
+
+        model_entity = model.get_model_entity_by_id(1001)
+        rich.print("entity:", model_entity.locator)
+        rich.print("property:", model_entity.get_property_value("write_mode", "merge"))
+
+        data_source = model.get_data_source("AdventureWorks")
+        rich.print("data source:", data_source.locator)
+        rich.print("data source:", data_source.model_object.dataTypeMapping)
+
+        data_type = model.get_data_type("string")
+        rich.print("data type:", data_type)
+
+        data_product = model.get_data_product("Sales")
+        rich.print("data product:", data_product)
+
     except parser.ModelParseException as _:
         sys.exit(1)
-
-    logger.info("Finished validating")
-
-    try:
-        test_entity = parsed_model.get_model_entity_by_id(1001)
-        logger.info("entity: %s", test_entity.locator)
     except EntityNotFoundException as err:
         logger.error(err)
         sys.exit(1)
-
-
-    """
-    print("Start validating model entities")
-    for model_file in model_path.glob("**/*.json"):
-        if model_file.match(".properties.json"):
-            continue
-
-        rel_file_path = model_file.relative_to(
-            solution_path.parent.absolute() / solution.modelPath
-        )
-        try:
-            _ = ModelEntity.from_json_file(model_file)
-            print("\t%s - Success" % rel_file_path)
-        except ValidationError as e:
-            errors[rel_file_path] = e
-            print("\t%s - Error" % rel_file_path)
-
-    if len(errors) == 0:
-        print("\nno errors found")
-    else:
-        print("\nerrors found\n")
-        for file, error in errors.items():
-            print("%s\n%s" % (file, error))
-    """

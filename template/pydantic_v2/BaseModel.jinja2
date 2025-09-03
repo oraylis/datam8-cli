@@ -48,15 +48,15 @@ class {{ class_name }}({{ base_class }}):{% if comment is defined %}  # {{ comme
 
  {{ "" | indent(4) }}
     def to_dict(self) -> dict:
-        return self.model_dump(by_alias=True, exclude_unset=True, mode='json')
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "{{ class_name }}":
+    def from_dict(obj) -> {{ class_name }}:
         return {{ class_name }}.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "{{ class_name }}":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> {{ class_name }}:
+        with open(path) as file:
           model = {{ class_name }}.model_validate_json(file.read())
 
         return model

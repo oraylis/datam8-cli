@@ -26,7 +26,8 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Annotated, List, TypeAlias
+from typing import Annotated
+from collections.abc import Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -79,12 +80,12 @@ class AttributeType(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "AttributeType":
+    def from_dict(obj) -> AttributeType:
         return AttributeType.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "AttributeType":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> AttributeType:
+        with open(path) as file:
             model = AttributeType.model_validate_json(file.read())
 
         return model
@@ -110,22 +111,22 @@ class Attribute(BaseModel):
     Defines how an attribute in a slowly chaning dimension should behave.
     """
     unit: str | None = None
-    refactorNames: List[str] | None = None
+    refactorNames: Sequence[str] | None = None
     dateModified: datetime | None = None
     dateDeleted: datetime | None = None
     dateAdded: datetime
-    properties: List[property.PropertyReference] | None = None
+    properties: Sequence[property.PropertyReference] | None = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "Attribute":
+    def from_dict(obj) -> Attribute:
         return Attribute.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "Attribute":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> Attribute:
+        with open(path) as file:
             model = Attribute.model_validate_json(file.read())
 
         return model

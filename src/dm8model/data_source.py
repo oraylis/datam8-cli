@@ -24,7 +24,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated, Dict, List, TypeAlias
+from typing import Annotated
+from collections.abc import Mapping, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -50,12 +51,12 @@ class SourceDataTypeMapping(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "SourceDataTypeMapping":
+    def from_dict(obj) -> SourceDataTypeMapping:
         return SourceDataTypeMapping.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "SourceDataTypeMapping":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> SourceDataTypeMapping:
+        with open(path) as file:
             model = SourceDataTypeMapping.model_validate_json(file.read())
 
         return model
@@ -74,12 +75,12 @@ class ConnectionProperty(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "ConnectionProperty":
+    def from_dict(obj) -> ConnectionProperty:
         return ConnectionProperty.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "ConnectionProperty":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> ConnectionProperty:
+        with open(path) as file:
             model = ConnectionProperty.model_validate_json(file.read())
 
         return model
@@ -103,11 +104,11 @@ class DataSourceType(BaseModel):
     """
     Description of the data source type
     """
-    dataTypeMapping: Annotated[List[SourceDataTypeMapping], Field(min_length=1)]
+    dataTypeMapping: Annotated[Sequence[SourceDataTypeMapping], Field(min_length=1)]
     """
     Default data type mappings for this source type
     """
-    connectionProperties: List[ConnectionProperty] | None = None
+    connectionProperties: Sequence[ConnectionProperty] | None = None
     """
     Required connection properties for this source type
     """
@@ -116,12 +117,12 @@ class DataSourceType(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "DataSourceType":
+    def from_dict(obj) -> DataSourceType:
         return DataSourceType.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "DataSourceType":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> DataSourceType:
+        with open(path) as file:
             model = DataSourceType.model_validate_json(file.read())
 
         return model
@@ -136,14 +137,14 @@ class DataSource(BaseModel):
     name: str
     displayName: str | None = None
     description: str | None = None
-    properties: List[property.PropertyReference] | None = None
+    properties: Sequence[property.PropertyReference] | None = None
     type: str
     connectionString: str | None = None
-    dataTypeMapping: List[SourceDataTypeMapping] | None = None
+    dataTypeMapping: Sequence[SourceDataTypeMapping] | None = None
     """
     Optional data type mappings. If not specified, uses defaults from DataSourceTypes. Individual mappings override defaults.
     """
-    extendedProperties: Dict[str, str] | None = None
+    extendedProperties: Mapping[str, str] | None = None
     """
     Additional properties specific to the data source
     """
@@ -152,12 +153,12 @@ class DataSource(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "DataSource":
+    def from_dict(obj) -> DataSource:
         return DataSource.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "DataSource":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> DataSource:
+        with open(path) as file:
             model = DataSource.model_validate_json(file.read())
 
         return model
