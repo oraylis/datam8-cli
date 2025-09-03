@@ -7,12 +7,12 @@ creating values, by using the following classes.
 """
 
 from dataclasses import dataclass
-from typing import Any, Type
+from typing import Any
 
 
 @dataclass
 class CacheEntry:
-    type: Type
+    type: type
     value: Any
 
 
@@ -60,5 +60,5 @@ class Cache:
 
     def __str__(self):
         return "Cached Items: " + ", ".join(
-            ["%s(%s)" % (k, str(v.value)) for k, v in self.__dict.items()]
+            [f"{k}({str(v.value)})" for k, v in self.__dict.items()]
         )

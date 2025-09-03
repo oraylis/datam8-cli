@@ -25,7 +25,8 @@ from __future__ import annotations
 
 from enum import Enum
 from pathlib import Path
-from typing import Annotated, Any, List, Literal, TypeAlias
+from typing import Annotated, Any, Literal
+from collections.abc import Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel
 
@@ -55,7 +56,7 @@ class AttributeTypes(BaseModel):
     dataSourceTypes: Any | None = None
     dataProducts: Any | None = None
     dataModules: Any | None = None
-    attributeTypes: Annotated[List[attribute.AttributeType], Field(min_length=1)]
+    attributeTypes: Annotated[Sequence[attribute.AttributeType], Field(min_length=1)]
     dataSources: Any | None = None
     folders: Any | None = None
     modelEntities: Any | None = None
@@ -64,12 +65,12 @@ class AttributeTypes(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "AttributeTypes":
+    def from_dict(obj) -> AttributeTypes:
         return AttributeTypes.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "AttributeTypes":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> AttributeTypes:
+        with open(path) as file:
             model = AttributeTypes.model_validate_json(file.read())
 
         return model
@@ -97,7 +98,7 @@ class PropertyValues(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
     type: Literal["propertyValues"]
     properties: Any | None = None
-    propertyValues: List[property.PropertyValue]
+    propertyValues: Sequence[property.PropertyValue]
     zones: Any | None = None
     dataTypes: Any | None = None
     dataSourceTypes: Any | None = None
@@ -112,12 +113,12 @@ class PropertyValues(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "PropertyValues":
+    def from_dict(obj) -> PropertyValues:
         return PropertyValues.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "PropertyValues":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> PropertyValues:
+        with open(path) as file:
             model = PropertyValues.model_validate_json(file.read())
 
         return model
@@ -132,7 +133,7 @@ class Zones(BaseModel):
     type: Literal["zones"]
     properties: Any | None = None
     propertyValues: Any | None = None
-    zones: Annotated[List[zone.Zone], Field(min_length=1)]
+    zones: Annotated[Sequence[zone.Zone], Field(min_length=1)]
     dataTypes: Any | None = None
     dataSourceTypes: Any | None = None
     dataProducts: Any | None = None
@@ -146,12 +147,12 @@ class Zones(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "Zones":
+    def from_dict(obj) -> Zones:
         return Zones.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "Zones":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> Zones:
+        with open(path) as file:
             model = Zones.model_validate_json(file.read())
 
         return model
@@ -167,7 +168,7 @@ class DataTypes(BaseModel):
     properties: Any | None = None
     propertyValues: Any | None = None
     zones: Any | None = None
-    dataTypes: Annotated[List[data_type.DataTypeDefinition], Field(min_length=1)]
+    dataTypes: Annotated[Sequence[data_type.DataTypeDefinition], Field(min_length=1)]
     dataSourceTypes: Any | None = None
     dataProducts: Any | None = None
     dataModules: Any | None = None
@@ -180,12 +181,12 @@ class DataTypes(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "DataTypes":
+    def from_dict(obj) -> DataTypes:
         return DataTypes.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "DataTypes":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> DataTypes:
+        with open(path) as file:
             model = DataTypes.model_validate_json(file.read())
 
         return model
@@ -202,7 +203,9 @@ class DataSourceTypes(BaseModel):
     propertyValues: Any | None = None
     zones: Any | None = None
     dataTypes: Any | None = None
-    dataSourceTypes: Annotated[List[data_source.DataSourceType], Field(min_length=1)]
+    dataSourceTypes: Annotated[
+        Sequence[data_source.DataSourceType], Field(min_length=1)
+    ]
     dataProducts: Any | None = None
     dataModules: Any | None = None
     attributeTypes: Any | None = None
@@ -214,12 +217,12 @@ class DataSourceTypes(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "DataSourceTypes":
+    def from_dict(obj) -> DataSourceTypes:
         return DataSourceTypes.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "DataSourceTypes":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> DataSourceTypes:
+        with open(path) as file:
             model = DataSourceTypes.model_validate_json(file.read())
 
         return model
@@ -241,19 +244,19 @@ class Folders(BaseModel):
     dataModules: Any | None = None
     attributeTypes: Any | None = None
     dataSources: Any | None = None
-    folders: Annotated[List[folder.Folder], Field(min_length=1)]
+    folders: Annotated[Sequence[folder.Folder], Field(min_length=1)]
     modelEntities: Any | None = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "Folders":
+    def from_dict(obj) -> Folders:
         return Folders.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "Folders":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> Folders:
+        with open(path) as file:
             model = Folders.model_validate_json(file.read())
 
         return model
@@ -266,7 +269,7 @@ class Properties(BaseModel):
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
     type: Literal["properties"]
-    properties: List[property.Property]
+    properties: Sequence[property.Property]
     propertyValues: Any | None = None
     zones: Any | None = None
     dataTypes: Any | None = None
@@ -282,12 +285,12 @@ class Properties(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "Properties":
+    def from_dict(obj) -> Properties:
         return Properties.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "Properties":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> Properties:
+        with open(path) as file:
             model = Properties.model_validate_json(file.read())
 
         return model
@@ -306,7 +309,7 @@ class DataModules(BaseModel):
     dataTypes: Any | None = None
     dataSourceTypes: Any | None = None
     dataProducts: Any | None = None
-    dataModules: Annotated[List[data_product.DataModule], Field(min_length=1)]
+    dataModules: Annotated[Sequence[data_product.DataModule], Field(min_length=1)]
     attributeTypes: Any | None = None
     dataSources: Any | None = None
     folders: Any | None = None
@@ -316,12 +319,12 @@ class DataModules(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "DataModules":
+    def from_dict(obj) -> DataModules:
         return DataModules.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "DataModules":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> DataModules:
+        with open(path) as file:
             model = DataModules.model_validate_json(file.read())
 
         return model
@@ -342,7 +345,7 @@ class DataSources(BaseModel):
     dataProducts: Any | None = None
     dataModules: Any | None = None
     attributeTypes: Any | None = None
-    dataSources: List[data_source.DataSource]
+    dataSources: Sequence[data_source.DataSource]
     folders: Any | None = None
     modelEntities: Any | None = None
 
@@ -350,12 +353,12 @@ class DataSources(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "DataSources":
+    def from_dict(obj) -> DataSources:
         return DataSources.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "DataSources":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> DataSources:
+        with open(path) as file:
             model = DataSources.model_validate_json(file.read())
 
         return model
@@ -373,7 +376,7 @@ class DataProducts(BaseModel):
     zones: Any | None = None
     dataTypes: Any | None = None
     dataSourceTypes: Any | None = None
-    dataProducts: Annotated[List[data_product.DataProduct], Field(min_length=1)]
+    dataProducts: Annotated[Sequence[data_product.DataProduct], Field(min_length=1)]
     dataModules: Any | None = None
     attributeTypes: Any | None = None
     dataSources: Any | None = None
@@ -384,12 +387,12 @@ class DataProducts(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "DataProducts":
+    def from_dict(obj) -> DataProducts:
         return DataProducts.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "DataProducts":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> DataProducts:
+        with open(path) as file:
             model = DataProducts.model_validate_json(file.read())
 
         return model
@@ -412,36 +415,24 @@ class ModelEntities(BaseModel):
     attributeTypes: Any | None = None
     dataSources: Any | None = None
     folders: Any | None = None
-    modelEntities: List[model.ModelEntity]
+    modelEntities: Sequence[model.ModelEntity]
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "ModelEntities":
+    def from_dict(obj) -> ModelEntities:
         return ModelEntities.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "ModelEntities":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> ModelEntities:
+        with open(path) as file:
             model = ModelEntities.model_validate_json(file.read())
 
         return model
 
 
-BaseEntitiesType: TypeAlias = (
-    ModelEntities
-    | Folders
-    | Properties
-    | PropertyValues
-    | Zones
-    | DataTypes
-    | DataSourceTypes
-    | DataProducts
-    | DataModules
-    | AttributeTypes
-    | DataSources
-)
+type BaseEntitiesType = ModelEntities | Folders | Properties | PropertyValues | Zones | DataTypes | DataSourceTypes | DataProducts | DataModules | AttributeTypes | DataSources
 """
 Defines the layout of entity files within the `Base` folder.
 """
@@ -481,27 +472,14 @@ class BaseEntities(
     """
 
     @staticmethod
-    def from_json_file(path: Path) -> "BaseEntities":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> BaseEntities:
+        with open(path) as file:
             model = BaseEntities.model_validate_json(file.read())
 
         return model
 
 
-BaseEntityType: TypeAlias = (
-    property.Property
-    | property.PropertyValue
-    | zone.Zone
-    | data_type.DataType
-    | data_type.DataTypeDefinition
-    | data_source.DataSourceType
-    | data_product.DataProduct
-    | data_product.DataModule
-    | attribute.AttributeType
-    | data_source.DataSource
-    | folder.Folder
-    | model.ModelEntity
-)
+type BaseEntityType = property.Property | property.PropertyValue | zone.Zone | data_type.DataType | data_type.DataTypeDefinition | data_source.DataSourceType | data_product.DataProduct | data_product.DataModule | attribute.AttributeType | data_source.DataSource | folder.Folder | model.ModelEntity
 """
 A union type for all internal objects.
 """
@@ -542,8 +520,8 @@ class BaseEntity(
     """
 
     @staticmethod
-    def from_json_file(path: Path) -> "BaseEntity":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> BaseEntity:
+        with open(path) as file:
             model = BaseEntity.model_validate_json(file.read())
 
         return model

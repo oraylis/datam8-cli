@@ -24,7 +24,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated, List, TypeAlias
+from typing import Annotated
+from collections.abc import Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -35,6 +36,8 @@ class GeneratorTarget(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    name: str
+    isDefault: bool | None = False
     sourcePath: Path
     """
     A path relative to the folder where the the solution file lies.
@@ -48,12 +51,12 @@ class GeneratorTarget(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "GeneratorTarget":
+    def from_dict(obj) -> GeneratorTarget:
         return GeneratorTarget.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "GeneratorTarget":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> GeneratorTarget:
+        with open(path) as file:
             model = GeneratorTarget.model_validate_json(file.read())
 
         return model
@@ -81,7 +84,7 @@ class Solution(BaseModel):
     """
     tbd
     """
-    generatorTargets: Annotated[List[GeneratorTarget], Field(min_length=1)]
+    generatorTargets: Annotated[Sequence[GeneratorTarget], Field(min_length=1)]
     """
     Targets available to the generator when not explicitly specifying it.
     """
@@ -90,12 +93,12 @@ class Solution(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "Solution":
+    def from_dict(obj) -> Solution:
         return Solution.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "Solution":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> Solution:
+        with open(path) as file:
             model = Solution.model_validate_json(file.read())
 
         return model

@@ -24,7 +24,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated, List, TypeAlias
+from typing import Annotated
+from collections.abc import Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -42,12 +43,12 @@ class PropertyReference(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "PropertyReference":
+    def from_dict(obj) -> PropertyReference:
         return PropertyReference.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "PropertyReference":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> PropertyReference:
+        with open(path) as file:
             model = PropertyReference.model_validate_json(file.read())
 
         return model
@@ -70,12 +71,12 @@ class PropertyScope(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "PropertyScope":
+    def from_dict(obj) -> PropertyScope:
         return PropertyScope.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "PropertyScope":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> PropertyScope:
+        with open(path) as file:
             model = PropertyScope.model_validate_json(file.read())
 
         return model
@@ -94,18 +95,18 @@ class PropertyValue(BaseModel):
     """
     The name of the associated property.
     """
-    properties: List[PropertyReference] | None = None
+    properties: Sequence[PropertyReference] | None = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "PropertyValue":
+    def from_dict(obj) -> PropertyValue:
         return PropertyValue.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "PropertyValue":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> PropertyValue:
+        with open(path) as file:
             model = PropertyValue.model_validate_json(file.read())
 
         return model
@@ -120,18 +121,18 @@ class Property(BaseModel):
     name: str
     displayName: str
     schema_: Annotated[str | None, Field(alias="schema")] = None
-    scopes: List[PropertyScope] | None = []
+    scopes: Sequence[PropertyScope] | None = []
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "Property":
+    def from_dict(obj) -> Property:
         return Property.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "Property":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> Property:
+        with open(path) as file:
             model = Property.model_validate_json(file.read())
 
         return model

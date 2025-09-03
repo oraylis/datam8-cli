@@ -24,11 +24,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated, Any, TypeAlias
+from typing import Annotated, Any
 
 from pydantic import Field, RootModel
 
-CommonType: TypeAlias = Any
+type CommonType = Any
 """
 An attribute of a model entity.
 """
@@ -41,8 +41,8 @@ class Common(RootModel[Any]):
     """
 
     @staticmethod
-    def from_json_file(path: Path) -> "Common":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> Common:
+        with open(path) as file:
             model = Common.model_validate_json(file.read())
 
         return model

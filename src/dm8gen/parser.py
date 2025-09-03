@@ -3,30 +3,40 @@ This module handles all parsing of json files into generator internal objects.
 """
 
 import pathlib
-from typing import TypeAlias, cast
+from concurrent import futures
 
 from pydantic import ValidationError
 
-from dm8gen.factory import EntityWrapper, Model, Locator
 from dm8gen import config
-from dm8model import base as b, model as m, solution as s
-from dm8model.attribute import AttributeType
-from dm8model.data_product import DataModule, DataProduct
-from dm8model.data_source import DataSource
-from dm8model.data_type import DataTypeDefinition
-from dm8model.folder import Folder
-from dm8model.property import Property, PropertyValue
-from dm8model.zone import Zone
+from dm8gen.model import (
+    EntityWrapper,
+    Model,
+    EntityDict,
+    BaseEntityDict,
+    Locator,
+)
+from dm8model import base as b
+from dm8model import model as m
+from dm8model import solution as s
 
 from . import utils
 
 logger = utils.start_logger(__name__)
 
-BaseEntityDict: TypeAlias = dict[b.EntityType, list[b.BaseEntityType]]
-
 
 def __parse_base_entity_type(entity_type: str) -> b.EntityType:
     return {e.value: e for e in b.EntityType}[entity_type]
+
+
+def __parse_solution_file(path: pathlib.Path) -> s.Solution:
+    solution = s.Solution.from_json_file(path)
+
+    logger.info(
+        "Parsed solution file with schema version: %s",
+        solution.schemaVersion,
+    )
+    logger.debug(solution.model_dump_json(indent=4))
+    return solution
 
 
 def __parse_base_entity_file(
@@ -38,99 +48,105 @@ def __parse_base_entity_file(
     entities_type = __parse_base_entity_type(base_entities.root.type)
     entities = getattr(base_entities.root, entities_type.value)
 
-    logger.debug("%s: Success", rel_path)
+    logger.debug(rel_path)
 
     return entities_type, entities
 
 
-def __parse_solution_file(path: pathlib.Path) -> s.Solution:
-    solution = s.Solution.from_json_file(path)
+def __parse_base_entities(
+    base_path: pathlib.Path,
+    model_path: pathlib.Path,
+    executor: futures.ThreadPoolExecutor,
+) -> BaseEntityDict[b.BaseEntityType]:
+    logger.debug(f"Scanning {base_path} for base entities")
+    logger.debug(f"Scanning {model_path} for folder entities")
 
-    logger.info("Successfully parsed solution file with schema version: %s", solution.schemaVersion)
-    logger.debug(solution.model_dump_json(indent=4))
-    return solution
+    base_files = [
+        *(config.solution_folder_path / base_path).glob("**/*.json"),
+        *(config.solution_folder_path / model_path).glob("**/.properties.json"),
+    ]
 
+    base_entities: BaseEntityDict[b.BaseEntityType] = {
+        # combine with all entries from enum to ensure existance of keys
+        **{_type: [] for _type in b.EntityType},
+        **{
+            _type: parsed_entities
+            for _type, parsed_entities in executor.map(
+                __parse_base_entity_file, base_files
+            )
+        },
+    }
 
-def __parse_base_entities(solution: s.Solution) -> BaseEntityDict:
-    base_entities: BaseEntityDict = {_type: [] for _type in b.EntityType}
-    file_count = 0
-
-    for base_file in [
-        *(config.solution_folder_path / solution.basePath).glob("**/*.json"),
-        *(config.solution_folder_path / solution.modelPath).glob(
-            "**/.properties.json"
-        ),
-    ]:
-        _type, parsed_entities = __parse_base_entity_file(base_file)
-        base_entities[_type] = parsed_entities
-
-        file_count += 1
-
-    logger.info("Successfully parsed base entities: %d", file_count)
+    logger.info("Parsed base entities: %d", len(base_entities))
 
     return base_entities
 
 
 def __parse_model_entity_file(
     path: pathlib.Path,
-) -> m.ModelEntity | Exception:
+) -> tuple[pathlib.Path, m.ModelEntity | ValidationError]:
     rel_path = path.relative_to(config.solution_folder_path)
 
     try:
         model_entity = m.ModelEntity.from_json_file(path)
     except ValidationError as err:
-        return err
+        logger.error("%s: \n%s", path, err)
+        return rel_path, err
 
-    logger.debug("%s: Success", rel_path)
-    return model_entity
+    logger.debug(rel_path)
+
+    return rel_path, model_entity
 
 
 def __parse_model_entities(
-    model_path: pathlib.Path,
-) -> dict[str, EntityWrapper]:
-    model_entities: dict[str, EntityWrapper] = {}
-    parse_errors: dict[pathlib.Path, Exception] = {}
-    file_count = 0
+    path: pathlib.Path,
+    executor: futures.ThreadPoolExecutor,
+) -> EntityDict[m.ModelEntity]:
+    model_entities: EntityDict[m.ModelEntity] = {}
+    parse_errors: dict[pathlib.Path, ValidationError] = {}
 
-    # model_files = [file for file in model_path.glob("**/*.json") if not file.match(".properties.json")]
+    logger.debug(f"Scanning {path} for model entities")
 
-    for model_file in model_path.glob("**/*.json"):
-        if model_file.match(".properties.json"):
-            continue
+    model_files = [
+        file
+        for file in (config.solution_folder_path / path).glob("**/*.json")
+        if not file.match(".properties.json")
+    ]
 
-        model_entity_or_err = __parse_model_entity_file(model_file)
-        rel_path = model_file.relative_to(model_path)
+    if not model_files:
+        logger.warning("Not model entity files found")
 
-        if isinstance(model_entity_or_err, ValidationError):
-            parse_errors[rel_path] = model_entity_or_err
-            continue
+    loaded_entities = executor.map(__parse_model_entity_file, model_files)
 
-        # NOTE: explicitly cast to ModelEntity for type hinting only
-        model_entities[rel_path.as_posix()] = EntityWrapper(
-            locator=__compose_locator(rel_path.as_posix()),
-            entity=cast(m.ModelEntity, model_entity_or_err),
-        )
-
-        file_count += 1
+    for rel_path, model_entity_orr_err in loaded_entities:
+        if isinstance(model_entity_orr_err, m.ModelEntity):
+            model_entities[rel_path.as_posix()] = EntityWrapper[m.ModelEntity](
+                locator=__compose_locator(
+                    "modelEntities/"
+                    + rel_path.as_posix().removeprefix(path.as_posix())
+                ),
+                # NOTE: explicitly cast to ModelEntity for type hinting only
+                model_object=model_entity_orr_err,
+            )
+        else:
+            parse_errors[rel_path] = model_entity_orr_err
 
     if parse_errors:
-        for file, error in parse_errors.items():
-            logger.error("%s: \n%s", file, error)
-
         raise ModelParseException(
             inner_exceptions=[err for err in parse_errors.values()]
         )
 
-    logger.info("Successfully parsed model entities: %d", file_count)
+    logger.info("Parsed model entities: %d", len(model_files))
 
     return model_entities
 
 
+@utils.print_progress_async
 @utils.get_logger
-def parse_full_solution(
-    solution_path: pathlib.Path, lazy: bool = False
-) -> Model:
+async def parse_full_solution(solution_path: pathlib.Path) -> Model:
     """Load and parses all json files in a solution into generator internal objects.
+
+    Executes loading & parsing of json files via multi threading.
 
     Args
         solution_path (Path): path to the solution file (.dm8s)
@@ -141,73 +157,77 @@ def parse_full_solution(
         The parsed model from files BUT not validated in regards to internal
         references.
     """
+    logger.debug("Start parsing solution")
+
     solution = __parse_solution_file(solution_path)
 
-    base_path = solution_path.parent.absolute() / solution.basePath
-    model_path = solution_path.parent.absolute() / solution.modelPath
+    executor = futures.ThreadPoolExecutor()
 
-    logger.debug("BasePath: %s", base_path.relative_to(solution_path.parent))
-    logger.debug("ModelPath: %s", model_path.relative_to(solution_path.parent))
+    worker_model = executor.submit(
+        __parse_model_entities, solution.modelPath, executor
+    )
+    worker_base = executor.submit(
+        __parse_base_entities, solution.basePath, solution.modelPath, executor
+    )
 
-    base_entities = __parse_base_entities(solution)
-    model_entites = {}
-
-    if not lazy:
-        model_entites = __parse_model_entities(model_path)
+    base_entities = worker_base.result()
+    model_entities = worker_model.result()
 
     model = Model(
         solution=solution,
-        properties={
-            cast(Property, p).name: EntityWrapper(entity=p)
-            for p in base_entities[b.EntityType.PROPERTIES]
-        },
-        property_values={
-            cast(PropertyValue, p).name: EntityWrapper(entity=p)
-            for p in base_entities[b.EntityType.PROPERTY_VALUES]
-        },
-        zones={
-            cast(Zone, p).name: EntityWrapper(entity=p)
-            for p in base_entities[b.EntityType.ZONES]
-        },
-        data_types={
-            cast(DataTypeDefinition, p).name: EntityWrapper(entity=p)
-            for p in base_entities[b.EntityType.DATA_TYPES]
-        },
-        attribute_types={
-            cast(AttributeType, p).name: EntityWrapper(entity=p)
-            for p in base_entities[b.EntityType.ATTRIBUTE_TYPES]
-        },
-        data_modules={
-            cast(DataModule, p).name: EntityWrapper(entity=p)
-            for p in base_entities[b.EntityType.DATA_MODULES]
-        },
-        data_product={
-            cast(DataProduct, p).name: EntityWrapper(entity=p)
-            for p in base_entities[b.EntityType.DATA_PRODUCTS]
-        },
-        data_sources={
-            cast(DataSource, p).name: EntityWrapper(entity=p)
-            for p in base_entities[b.EntityType.DATA_SOURCES]
-        },
-        folders={
-            cast(Folder, p).name: EntityWrapper(entity=p)
-            for p in base_entities[b.EntityType.FOLDERS]
-        },
-        entities=model_entites,
+        properties={},  # base_dict_to_entity_dict(base_entities, b.EntityType.PROPERTIES),
+        # properties=base_entity_dict_to_wrapper_dict[p.Property](base_entities, b.EntityType.PROPERTIES),
+        propertyValues={},  # base_dict_to_entity_dict(base_entities, b.EntityType.PROPERTY_VALUES),
+        # propertyValues=base_entity_dict_to_wrapper_dict[p.PropertyValue](base_entities, b.EntityType.PROPERTY_VALUES),
+        zones={},  # base_dict_to_entity_dict(base_entities, b.EntityType.ZONES),
+        # zones=base_entity_dict_to_wrapper_dict[z.Zone](base_entities, b.EntityType.ZONES),
+        dataTypes=base_dict_to_entity_dict(
+            base_entities, b.EntityType.DATA_TYPES
+        ),  # base_dict_to_entity_dict(base_entities, b.EntityType.DATA_TYPES),
+        # dataTypes=base_entity_dict_to_wrapper_dict[dt.DataTypeDefinition](base_entities, b.EntityType.DATA_TYPES),
+        attributeTypes={},  # base_dict_to_entity_dict(base_entities, b.EntityType.ATTRIBUTE_TYPES),
+        # attributeTypes=base_entity_dict_to_wrapper_dict[a.AttributeType](base_entities, b.EntityType.ATTRIBUTE_TYPES),
+        dataModules=base_dict_to_entity_dict(base_entities, b.EntityType.DATA_MODULES),
+        # dataModules=base_entity_dict_to_wrapper_dict[dp.DataModule](base_entities, b.EntityType.DATA_MODULES),
+        dataProducts=base_dict_to_entity_dict(base_entities, b.EntityType.DATA_PRODUCTS),
+        # dataProduct=base_entity_dict_to_wrapper_dict[dp.DataProduct](base_entities, b.EntityType.DATA_PRODUCTS),
+        dataSources=base_dict_to_entity_dict(
+            base_entities, b.EntityType.DATA_SOURCES
+        ),
+        # dataSources=base_entity_dict_to_wrapper_dict[ds.DataSource](base_entities, b.EntityType.DATA_SOURCES),
+        folders={},  # base_dict_to_entity_dict(base_entities, b.EntityType.FOLDERS),
+        # folders=base_entity_dict_to_wrapper_dict[f.Folder](base_entities, b.EntityType.FOLDERS),
+        modelEntities=model_entities,
     )
 
-    # logger.debug("Parse model:\n%s", model.model_dump_json())
-    logger.info("Successfully parsed all files in solution")
+    executor.shutdown()
+
+    logger.info("Parsed all files in solution")
 
     return model
 
 
+def base_dict_to_entity_dict(d, t):
+    return {
+        _entity.name: EntityWrapper(
+            model_object=_entity,
+            locator=Locator(
+                entityType=t.value,
+                folders=[],
+                entityName=_entity.name,
+            ),
+        )
+        for _entity in d[t]
+    }
+
+
 def __compose_locator(path: str) -> Locator:
     parts = path.removesuffix(".json").split("/")
+    parts.remove("")
     locator = Locator(
-        zone=parts[0],
-        folders=parts[1:-2],
-        modelEntity=parts[-1],
+        entityType=parts[0],
+        folders=parts[1:-1],
+        entityName=parts[-1],
     )
     return locator
 
