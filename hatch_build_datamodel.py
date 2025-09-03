@@ -1,4 +1,6 @@
 import pathlib
+import subprocess
+
 import datamodel_code_generator as dcg
 from hatchling.builders.hooks.plugin import interface
 
@@ -22,8 +24,9 @@ class GenerateDatamodelHook(interface.BuildHookInterface):
             output=self.__output_dir,
             output_model_type=dcg.DataModelType.PydanticV2BaseModel,
             output_datetime_class=dcg.DatetimeClassType.Datetime,
+            target_python_version=dcg.PythonVersion.PY_312,
             custom_template_dir=self.__template_dir,
-            additional_imports=["typing.TypeAlias", "pathlib.Path"],
+            additional_imports=["pathlib.Path"],
             disable_timestamp=True,
             set_default_enum_member=True,
             capitalise_enum_members=True,
@@ -31,6 +34,7 @@ class GenerateDatamodelHook(interface.BuildHookInterface):
             allow_extra_fields=False,
             use_annotated=True,
             field_constraints=True,
+            use_generic_container_types=True,
             use_schema_description=True,
             use_field_description=True,
             use_double_quotes=True,
@@ -41,6 +45,8 @@ class GenerateDatamodelHook(interface.BuildHookInterface):
         self.prepend_license_to_files()
 
         self.convert_crlf_to_lf()
+
+        subprocess.run(args=["ruff", "check", "--fix", self.__output_dir])
 
     def clean(self, versions):
         self.__output_dir.rmdir()

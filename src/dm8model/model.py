@@ -25,7 +25,8 @@ from __future__ import annotations
 
 from enum import Enum
 from pathlib import Path
-from typing import Annotated, Any, Dict, List, TypeAlias
+from typing import Annotated, Any
+from collections.abc import Mapping, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -38,29 +39,26 @@ class Locator(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
-    zone: str
+    entityType: str
+    folders: Sequence[str]
     """
-    Reference to the top-level folder within the model folder.
+    Hierarchical list of olders under the base-/modelpath. Order is relevant.
     """
-    folders: List[str]
+    entityName: str | None = None
     """
-    Hierarchical list of olders under the zone. Order is relevant.
-    """
-    modelEntity: str
-    """
-    Name property of the modelEntity object.
+    Name property of the entity object.
     """
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "Locator":
+    def from_dict(obj) -> Locator:
         return Locator.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "Locator":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> Locator:
+        with open(path) as file:
             model = Locator.model_validate_json(file.read())
 
         return model
@@ -73,18 +71,18 @@ class ModelParameter(BaseModel):
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
     name: str
-    value: str | Dict[str, Any] | float | bool
+    value: str | Mapping[str, Any] | float | bool
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "ModelParameter":
+    def from_dict(obj) -> ModelParameter:
         return ModelParameter.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "ModelParameter":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> ModelParameter:
+        with open(path) as file:
             model = ModelParameter.model_validate_json(file.read())
 
         return model
@@ -111,12 +109,12 @@ class TransformationFunction(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "TransformationFunction":
+    def from_dict(obj) -> TransformationFunction:
         return TransformationFunction.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "TransformationFunction":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> TransformationFunction:
+        with open(path) as file:
             model = TransformationFunction.model_validate_json(file.read())
 
         return model
@@ -131,18 +129,18 @@ class SourceAttributeMapping(BaseModel):
     targetName: str
     sourceName: str
     sourceDataType: data_type.DataType | None = None
-    properties: List[property.PropertyReference] | None = None
+    properties: Sequence[property.PropertyReference] | None = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "SourceAttributeMapping":
+    def from_dict(obj) -> SourceAttributeMapping:
         return SourceAttributeMapping.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "SourceAttributeMapping":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> SourceAttributeMapping:
+        with open(path) as file:
             model = SourceAttributeMapping.model_validate_json(file.read())
 
         return model
@@ -160,7 +158,7 @@ class ModelTransformation(BaseModel):
     Type of transformation, either `builtin` or `function`.
     """
     name: str
-    properties: List[property.PropertyReference] | None = None
+    properties: Sequence[property.PropertyReference] | None = None
     function: Annotated[
         TransformationFunction | None, Field(title="TransformationFunction")
     ] = None
@@ -172,12 +170,12 @@ class ModelTransformation(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "ModelTransformation":
+    def from_dict(obj) -> ModelTransformation:
         return ModelTransformation.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "ModelTransformation":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> ModelTransformation:
+        with open(path) as file:
             model = ModelTransformation.model_validate_json(file.read())
 
         return model
@@ -190,19 +188,19 @@ class InternalModelSource(BaseModel):
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
     sourceLocation: str | int
-    properties: List[property.PropertyReference] | None = None
-    mapping: List[SourceAttributeMapping] | None = None
+    properties: Sequence[property.PropertyReference] | None = None
+    mapping: Sequence[SourceAttributeMapping] | None = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "InternalModelSource":
+    def from_dict(obj) -> InternalModelSource:
         return InternalModelSource.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "InternalModelSource":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> InternalModelSource:
+        with open(path) as file:
             model = InternalModelSource.model_validate_json(file.read())
 
         return model
@@ -216,19 +214,19 @@ class ExternalModelSource(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
     dataSource: str
     sourceLocation: str
-    properties: List[property.PropertyReference] | None = None
-    mapping: List[SourceAttributeMapping] | None = None
+    properties: Sequence[property.PropertyReference] | None = None
+    mapping: Sequence[SourceAttributeMapping] | None = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "ExternalModelSource":
+    def from_dict(obj) -> ExternalModelSource:
         return ExternalModelSource.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "ExternalModelSource":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> ExternalModelSource:
+        with open(path) as file:
             model = ExternalModelSource.model_validate_json(file.read())
 
         return model
@@ -247,13 +245,11 @@ class ModelEntity(BaseModel):
     name: str
     displayName: str | None = None
     description: str | None = None
-    parameters: List[ModelParameter] | None = None
-    attributes: Annotated[List[attribute.Attribute], Field(min_length=1)]
-    properties: List[property.PropertyReference] | None = None
-    sources: Annotated[
-        List[InternalModelSource | ExternalModelSource], Field(min_length=1)
-    ]
-    transformations: Annotated[List[ModelTransformation], Field(min_length=1)]
+    parameters: Sequence[ModelParameter] | None = None
+    attributes: Annotated[Sequence[attribute.Attribute], Field(min_length=1)]
+    properties: Sequence[property.PropertyReference] | None = None
+    sources: Sequence[InternalModelSource | ExternalModelSource]
+    transformations: Sequence[ModelTransformation]
     """
     List of transformations that will be executed in order of stepNo.
     """
@@ -262,12 +258,12 @@ class ModelEntity(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "ModelEntity":
+    def from_dict(obj) -> ModelEntity:
         return ModelEntity.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "ModelEntity":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> ModelEntity:
+        with open(path) as file:
             model = ModelEntity.model_validate_json(file.read())
 
         return model

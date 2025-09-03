@@ -1,4 +1,4 @@
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 
@@ -12,7 +12,7 @@ def command(
     solution: opts.SolutionPath,
     log_level: opts.LogLevel = opts.LogLevels.INFO,
     path_template_source: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(
             "--path-template-source",
             "-src",
@@ -20,7 +20,7 @@ def command(
         ),
     ] = None,
     path_template_destination: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(
             "--path-template-destination",
             "-dest",
@@ -36,7 +36,7 @@ def command(
         ),
     ] = False,
     path_modules: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(
             "--path-modules",
             "-m",
@@ -44,7 +44,7 @@ def command(
         ),
     ] = None,
     path_collections: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(
             "--path-collections",
             "-c",

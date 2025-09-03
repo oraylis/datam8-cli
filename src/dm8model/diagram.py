@@ -24,7 +24,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, TypeAlias
+from collections.abc import Sequence
 
 from pydantic import BaseModel, ConfigDict
 
@@ -38,12 +38,12 @@ class DiagramOption(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "DiagramOption":
+    def from_dict(obj) -> DiagramOption:
         return DiagramOption.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "DiagramOption":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> DiagramOption:
+        with open(path) as file:
             model = DiagramOption.model_validate_json(file.read())
 
         return model
@@ -52,19 +52,19 @@ class DiagramOption(BaseModel):
 class Diagram(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
     diagramType: str | None = None
-    coreEntities: List[str] | None = None
-    diagramOptions: List[DiagramOption] | None = None
+    coreEntities: Sequence[str] | None = None
+    diagramOptions: Sequence[DiagramOption] | None = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "Diagram":
+    def from_dict(obj) -> Diagram:
         return Diagram.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "Diagram":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> Diagram:
+        with open(path) as file:
             model = Diagram.model_validate_json(file.read())
 
         return model

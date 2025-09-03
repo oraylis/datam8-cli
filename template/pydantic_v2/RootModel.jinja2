@@ -9,7 +9,7 @@
 {{ decorator }}
 {% endfor -%}
 
-{{ class_name }}Type: TypeAlias = {{ get_type_hint(fields) }}
+type {{ class_name }}Type = {{ get_type_hint(fields) }}
 {%- if fields[0].docstring %}
 """
 {{ fields[0].docstring | indent(4) }}

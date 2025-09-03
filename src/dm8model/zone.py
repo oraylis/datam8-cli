@@ -24,7 +24,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TypeAlias
 
 from pydantic import BaseModel, ConfigDict
 
@@ -56,12 +55,12 @@ class Zone(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "Zone":
+    def from_dict(obj) -> Zone:
         return Zone.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "Zone":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> Zone:
+        with open(path) as file:
             model = Zone.model_validate_json(file.read())
 
         return model

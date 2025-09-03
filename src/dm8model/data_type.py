@@ -24,7 +24,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated, TypeAlias
+from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -45,12 +45,12 @@ class DataType(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "DataType":
+    def from_dict(obj) -> DataType:
         return DataType.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "DataType":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> DataType:
+        with open(path) as file:
             model = DataType.model_validate_json(file.read())
 
         return model
@@ -81,12 +81,12 @@ class DataTypeDefinition(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> "DataTypeDefinition":
+    def from_dict(obj) -> DataTypeDefinition:
         return DataTypeDefinition.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> "DataTypeDefinition":
-        with open(path, "r") as file:
+    def from_json_file(path: Path) -> DataTypeDefinition:
+        with open(path) as file:
             model = DataTypeDefinition.model_validate_json(file.read())
 
         return model
