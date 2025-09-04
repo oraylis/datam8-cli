@@ -81,7 +81,7 @@ class GenerateDatamodelHook(interface.BuildHookInterface):
         )
 
         for file in self.__output_dir.glob("**/*.py"):
-            with open(file, "r", encoding="utf-8") as f:
+            with open(file, encoding="utf-8") as f:
                 content = f.read()
 
             with open(file, "w", encoding="utf-8") as f:
