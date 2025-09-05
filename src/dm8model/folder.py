@@ -56,6 +56,23 @@ class Folder(BaseModel):
 
     @staticmethod
     def from_json_file(path: Path) -> Folder:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        Folder
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
         with open(path) as file:
             model = Folder.model_validate_json(file.read())
 

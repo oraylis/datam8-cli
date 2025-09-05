@@ -48,6 +48,23 @@ class PropertyReference(BaseModel):
 
     @staticmethod
     def from_json_file(path: Path) -> PropertyReference:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        PropertyReference
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
         with open(path) as file:
             model = PropertyReference.model_validate_json(file.read())
 
@@ -76,6 +93,23 @@ class PropertyScope(BaseModel):
 
     @staticmethod
     def from_json_file(path: Path) -> PropertyScope:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        PropertyScope
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
         with open(path) as file:
             model = PropertyScope.model_validate_json(file.read())
 
@@ -91,7 +125,7 @@ class PropertyValue(BaseModel):
     name: str
     displayName: str | None = None
     default: bool | None = False
-    property: str | None = None
+    property: str
     """
     The name of the associated property.
     """
@@ -106,6 +140,23 @@ class PropertyValue(BaseModel):
 
     @staticmethod
     def from_json_file(path: Path) -> PropertyValue:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        PropertyValue
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
         with open(path) as file:
             model = PropertyValue.model_validate_json(file.read())
 
@@ -132,6 +183,23 @@ class Property(BaseModel):
 
     @staticmethod
     def from_json_file(path: Path) -> Property:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        Property
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
         with open(path) as file:
             model = Property.model_validate_json(file.read())
 

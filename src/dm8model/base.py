@@ -70,6 +70,23 @@ class AttributeTypes(BaseModel):
 
     @staticmethod
     def from_json_file(path: Path) -> AttributeTypes:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        AttributeTypes
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
         with open(path) as file:
             model = AttributeTypes.model_validate_json(file.read())
 
@@ -118,6 +135,23 @@ class PropertyValues(BaseModel):
 
     @staticmethod
     def from_json_file(path: Path) -> PropertyValues:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        PropertyValues
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
         with open(path) as file:
             model = PropertyValues.model_validate_json(file.read())
 
@@ -152,6 +186,23 @@ class Zones(BaseModel):
 
     @staticmethod
     def from_json_file(path: Path) -> Zones:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        Zones
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
         with open(path) as file:
             model = Zones.model_validate_json(file.read())
 
@@ -186,6 +237,23 @@ class DataTypes(BaseModel):
 
     @staticmethod
     def from_json_file(path: Path) -> DataTypes:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        DataTypes
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
         with open(path) as file:
             model = DataTypes.model_validate_json(file.read())
 
@@ -222,6 +290,23 @@ class DataSourceTypes(BaseModel):
 
     @staticmethod
     def from_json_file(path: Path) -> DataSourceTypes:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        DataSourceTypes
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
         with open(path) as file:
             model = DataSourceTypes.model_validate_json(file.read())
 
@@ -256,6 +341,23 @@ class Folders(BaseModel):
 
     @staticmethod
     def from_json_file(path: Path) -> Folders:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        Folders
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
         with open(path) as file:
             model = Folders.model_validate_json(file.read())
 
@@ -290,6 +392,23 @@ class Properties(BaseModel):
 
     @staticmethod
     def from_json_file(path: Path) -> Properties:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        Properties
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
         with open(path) as file:
             model = Properties.model_validate_json(file.read())
 
@@ -324,6 +443,23 @@ class DataModules(BaseModel):
 
     @staticmethod
     def from_json_file(path: Path) -> DataModules:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        DataModules
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
         with open(path) as file:
             model = DataModules.model_validate_json(file.read())
 
@@ -358,6 +494,23 @@ class DataSources(BaseModel):
 
     @staticmethod
     def from_json_file(path: Path) -> DataSources:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        DataSources
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
         with open(path) as file:
             model = DataSources.model_validate_json(file.read())
 
@@ -392,6 +545,23 @@ class DataProducts(BaseModel):
 
     @staticmethod
     def from_json_file(path: Path) -> DataProducts:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        DataProducts
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
         with open(path) as file:
             model = DataProducts.model_validate_json(file.read())
 
@@ -426,6 +596,23 @@ class ModelEntities(BaseModel):
 
     @staticmethod
     def from_json_file(path: Path) -> ModelEntities:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        ModelEntities
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
         with open(path) as file:
             model = ModelEntities.model_validate_json(file.read())
 
@@ -479,7 +666,7 @@ class BaseEntities(
         return model
 
 
-type BaseEntityType = property.Property | property.PropertyValue | zone.Zone | data_type.DataType | data_type.DataTypeDefinition | data_source.DataSourceType | data_product.DataProduct | data_product.DataModule | attribute.AttributeType | data_source.DataSource | folder.Folder | model.ModelEntity
+type BaseEntityType = property.Property | property.PropertyValue | zone.Zone | data_type.DataTypeDefinition | data_source.DataSourceType | data_product.DataProduct | data_product.DataModule | attribute.AttributeType | data_source.DataSource | folder.Folder | model.ModelEntity
 """
 A union type for all internal objects.
 """
@@ -490,7 +677,6 @@ class BaseEntity(
         property.Property
         | property.PropertyValue
         | zone.Zone
-        | data_type.DataType
         | data_type.DataTypeDefinition
         | data_source.DataSourceType
         | data_product.DataProduct
@@ -505,7 +691,6 @@ class BaseEntity(
         property.Property
         | property.PropertyValue
         | zone.Zone
-        | data_type.DataType
         | data_type.DataTypeDefinition
         | data_source.DataSourceType
         | data_product.DataProduct

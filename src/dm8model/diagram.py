@@ -43,6 +43,23 @@ class DiagramOption(BaseModel):
 
     @staticmethod
     def from_json_file(path: Path) -> DiagramOption:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        DiagramOption
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
         with open(path) as file:
             model = DiagramOption.model_validate_json(file.read())
 
@@ -64,6 +81,23 @@ class Diagram(BaseModel):
 
     @staticmethod
     def from_json_file(path: Path) -> Diagram:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        Diagram
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
         with open(path) as file:
             model = Diagram.model_validate_json(file.read())
 
