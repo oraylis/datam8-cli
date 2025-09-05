@@ -56,6 +56,23 @@ class SourceDataTypeMapping(BaseModel):
 
     @staticmethod
     def from_json_file(path: Path) -> SourceDataTypeMapping:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        SourceDataTypeMapping
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
         with open(path) as file:
             model = SourceDataTypeMapping.model_validate_json(file.read())
 
@@ -80,6 +97,23 @@ class ConnectionProperty(BaseModel):
 
     @staticmethod
     def from_json_file(path: Path) -> ConnectionProperty:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        ConnectionProperty
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
         with open(path) as file:
             model = ConnectionProperty.model_validate_json(file.read())
 
@@ -122,6 +156,23 @@ class DataSourceType(BaseModel):
 
     @staticmethod
     def from_json_file(path: Path) -> DataSourceType:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        DataSourceType
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
         with open(path) as file:
             model = DataSourceType.model_validate_json(file.read())
 
@@ -158,6 +209,23 @@ class DataSource(BaseModel):
 
     @staticmethod
     def from_json_file(path: Path) -> DataSource:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        DataSource
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
         with open(path) as file:
             model = DataSource.model_validate_json(file.read())
 

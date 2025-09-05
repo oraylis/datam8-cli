@@ -58,6 +58,23 @@ class Locator(BaseModel):
 
     @staticmethod
     def from_json_file(path: Path) -> Locator:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        Locator
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
         with open(path) as file:
             model = Locator.model_validate_json(file.read())
 
@@ -82,6 +99,23 @@ class ModelParameter(BaseModel):
 
     @staticmethod
     def from_json_file(path: Path) -> ModelParameter:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        ModelParameter
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
         with open(path) as file:
             model = ModelParameter.model_validate_json(file.read())
 
@@ -114,6 +148,23 @@ class TransformationFunction(BaseModel):
 
     @staticmethod
     def from_json_file(path: Path) -> TransformationFunction:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        TransformationFunction
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
         with open(path) as file:
             model = TransformationFunction.model_validate_json(file.read())
 
@@ -140,6 +191,23 @@ class SourceAttributeMapping(BaseModel):
 
     @staticmethod
     def from_json_file(path: Path) -> SourceAttributeMapping:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        SourceAttributeMapping
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
         with open(path) as file:
             model = SourceAttributeMapping.model_validate_json(file.read())
 
@@ -175,6 +243,23 @@ class ModelTransformation(BaseModel):
 
     @staticmethod
     def from_json_file(path: Path) -> ModelTransformation:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        ModelTransformation
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
         with open(path) as file:
             model = ModelTransformation.model_validate_json(file.read())
 
@@ -200,6 +285,23 @@ class InternalModelSource(BaseModel):
 
     @staticmethod
     def from_json_file(path: Path) -> InternalModelSource:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        InternalModelSource
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
         with open(path) as file:
             model = InternalModelSource.model_validate_json(file.read())
 
@@ -226,6 +328,23 @@ class ExternalModelSource(BaseModel):
 
     @staticmethod
     def from_json_file(path: Path) -> ExternalModelSource:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        ExternalModelSource
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
         with open(path) as file:
             model = ExternalModelSource.model_validate_json(file.read())
 
@@ -263,6 +382,23 @@ class ModelEntity(BaseModel):
 
     @staticmethod
     def from_json_file(path: Path) -> ModelEntity:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        ModelEntity
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
         with open(path) as file:
             model = ModelEntity.model_validate_json(file.read())
 

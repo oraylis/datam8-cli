@@ -1,5 +1,6 @@
 import sys
 
+from pydantic_core import ValidationError
 import typer
 import rich
 
@@ -26,23 +27,50 @@ def command(
     try:
         model = factory.create_model()
 
-        rich.print("solution:", model.solution)
-
         model_entity = model.get_model_entity_by_id(1001)
         rich.print("entity:", model_entity.locator)
-        rich.print("property:", model_entity.get_property_value("write_mode", "merge"))
+        rich.print("properties:", model_entity.entity.properties)
+        if model_entity.entity.properties:
+            single_prop_ref = model_entity.entity.properties[0]
+            rich.print(single_prop_ref)
+            # rich.print(
+            #     "property value:", model.get_property_values(single_prop_ref)
+            # )
 
-        data_source = model.get_data_source("AdventureWorks")
-        rich.print("data source:", data_source.locator)
-        rich.print("data source:", data_source.model_object.dataTypeMapping)
+        # NOTE: Folder Tests
+        # rich.print("folder:", model.folders)
 
-        data_type = model.get_data_type("string")
-        rich.print("data type:", data_type)
+        # NOTE: Property Values Tests
+        # rich.print("solution:", model.solution)
+        # rich.print("properties:", model.propertyValues)
 
+        # NOTE: Data Source Tests
+        # data_source = model.get_data_source("AdventureWorks")
+        # rich.print("data source:", data_source.locator)
+        # rich.print("data source:", data_source.entity.dataTypeMapping)
+
+        # NOTE: Data Type Tests
+        # data_type = model.get_data_type("string")
+        # rich.print("data type:", data_type)
+        # rich.print(
+        #     "compare locator vs string:",
+        #     data_type.locator == "dataTypes/string",
+        # )
+
+        # NOTE: Data Product Tests
         data_product = model.get_data_product("Sales")
         rich.print("data product:", data_product)
+        rich.print(type(data_product))
 
-    except parser.ModelParseException as _:
+        # NOTE: Data Module Tests
+        data_module = model.get_data_module("Sales", "Customer")
+        rich.print("data module:", data_module)
+
+    except ValidationError as err:
+        logger.error(err)
+        sys.exit(1)
+    except parser.ModelParseException as err:
+        logger.error(err)
         sys.exit(1)
     except EntityNotFoundException as err:
         logger.error(err)

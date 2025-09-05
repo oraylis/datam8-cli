@@ -17,99 +17,63 @@ Utility Module to make working with datam8 models more comfortable in jinja2 tem
 * ColorFormatter
 """
 
-import json
 import logging
 import os
-import textwrap
 import time
-from pathlib import Path
 from collections.abc import Callable
+from pathlib import Path
 
-import jsonschema
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from dm8gen import config, opts
 
 
-def print_progress_async(func: Callable):
-    async def wrapper(*args, **kwargs):
-        result = func(*args, **kwargs)
-
-        if config.log_level in [opts.LogLevels.WARNING, opts.LogLevels.ERROR]:
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                transient=True,
-            ) as progress:
-                progress.add_task(description="Processing...", total=None)
-                time.sleep(3)
-
-        return await result
-
-    return wrapper
-
-
-def validate_json_schema(path_json: str, path_json_schema: str):
-    """Validate a JSON file against a JSON schema.
-
-    Args:
-        path_json (str): Path to the JSON file.
-        path_json_schema (str): Path to the JSON schema file.
+def print_progress_async(msg: str) -> Callable:
     """
-    with open(path_json, encoding="utf-8") as f:
-        js = json.load(f)
+    Decorator to print a progress spinner with a given message while the function executes.
 
-    # Read schema
-    with open(path_json_schema, encoding="utf-8-sig", errors="ignore") as f:
-        js_schema = json.load(f, strict=False)
+    Runs the Sprinner in an async function.
 
-    jsonschema.validate(js, schema=js_schema)
-
-
-def read_json(path: str):
-    """Read JSON data from a file.
-
-    Args:
-        path (str): Path to the JSON file.
-
-    Returns:
-        dict: JSON data.
+    Parameters
+    ----------
+    msg : `str`
+        The message to show behind the spinner while the function runs.
     """
-    with open(path, encoding="utf-8") as f:
-        try:
-            __json = json.load(f)
-        except Exception as e:
-            raise JsonFileParseException(e, path)
 
-    return __json
+    def decorator_print_progress_async(func: Callable) -> Callable:
+        async def wrapper(*args, **kwargs) -> Callable:
+            result = func(*args, **kwargs)
+
+            if config.log_level in [
+                opts.LogLevels.WARNING,
+                opts.LogLevels.ERROR,
+            ]:
+                with Progress(
+                    SpinnerColumn(),
+                    TextColumn("[progress.description]{task.description}"),
+                    transient=True,
+                ) as progress:
+                    progress.add_task(description=msg, total=None)
+                    time.sleep(3)
+
+            return await result
+
+        return wrapper
+
+    return decorator_print_progress_async
 
 
-def coalesce(values: list):
+def get_logger(func: Callable) -> Callable:
     """
-    Coalesce implementation to get first None value of a list
+    Descorator to refresh the logger object within a package, otherwise
+    settings like log level are not updated based on cli input.
+
+    Parameters
+    ----------
+    func : `Callable`
+        The function to decorate.
     """
-    return next((v for v in values if v is not None), None)
 
-
-def get_locator(
-    entity_type: str, data_product: str, data_module: str, entity_name: str
-) -> str:
-    """Get locator string for an entity.
-
-    Args:
-        entity_type (str): Type of the entity.
-        data_product (str): Data product name.
-        data_module (str): Data module name.
-        entity_name (str): Entity name.
-
-    Returns:
-        str: Locator string.
-    """
-    locator = f"/{entity_type}/{data_product}/{data_module}/{entity_name}"
-    return locator
-
-
-def get_logger(func: Callable):
     def wrapper(*args, **kwargs):
         start_logger(func.__module__)
         return func(*args, **kwargs)
@@ -124,14 +88,21 @@ def start_logger(
 ) -> logging.Logger:
     """Initialize and configure a logger.
 
-    Args:
-        log_name (str, optional): Name of the logger. Defaults to "template log".
-        log_directory (str, optional): Directory to store log files. Defaults to f"{Path(__file__).parents[1]}\\Logs".
-        enable_write_log (bool, optional): Enable writing logs to file. Defaults to False.
-        log_level (logging.log, optional): Logging level. Defaults to logging.INFO.
+    Parameters
+    ----------
+    log_name : `str`, optional
+        Name of the logger. Defaults to "template log".
+    log_directory : `str`, optional
+        Directory to store log files. Defaults to f"{Path(__file__).parents[1]}\\Logs".
+    enable_write_log : `bool`, optional
+        Enable writing logs to file. Defaults to False.
+    log_level : `logging.log`, optional
+        Logging level. Defaults to logging.INFO.
 
-    Returns:
-        logging.Logger: Initialized logger object.
+    Returns
+    -------
+    logging.Logger
+        Initialized logger object.
     """
     log_path = f"{log_directory}\\{log_name}.log"
 
@@ -174,17 +145,19 @@ class ColorFormatter(logging.Formatter):
     red = "\x1b[91m"
     reset = "\x1b[0m"
     _time = grey + "%(asctime)s "
-    _level = "[%(levelname)s] "
+    _level = "[%(levelname)-5s] "
     _scope = grey + "%(name)s | "
     _msg = "%(message)s" + reset
 
+    # fmt: off
     FORMATS = {
-        logging.DEBUG: _time + _level + _scope + reset + _msg,
-        logging.INFO: _time + green + _level + _scope + reset + _msg,
-        logging.WARNING: _time + yellow + _level + _scope + reset + _msg,
-        logging.ERROR: _time + red + _level + _scope + red + _msg,
-        logging.CRITICAL: _time + red + _level + _scope + red + _msg,
+        logging.DEBUG:    _time          + _level + _scope + reset + _msg,
+        logging.INFO:     _time + green  + _level + _scope + reset + _msg,
+        logging.WARNING:  _time + yellow + _level + _scope + reset + _msg,
+        logging.ERROR:    _time + red    + _level + _scope + red   + _msg,
+        logging.CRITICAL: _time + red    + _level + _scope + red   + _msg,
     }
+    # fmt: on
 
     def format(self, record) -> str:
         record.levelname = (
@@ -196,19 +169,3 @@ class ColorFormatter(logging.Formatter):
         log_fmt = self.FORMATS.get(record.levelno)
         formatter = logging.Formatter(log_fmt)
         return formatter.format(record)
-
-
-class JsonFileParseException(Exception):
-    def __init__(self, e: Exception, file: str):
-        Exception.__init__(self, str(e))
-        self.file = file
-        self.inner_exception = e
-        self.message = str(e)
-
-    def __str__(self):
-        return self.message + textwrap.dedent(
-            f"""
-            File:       {self.file}
-            Error-Type: {type(self.inner_exception)}
-            """
-        )
