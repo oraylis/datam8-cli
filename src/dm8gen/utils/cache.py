@@ -19,14 +19,16 @@ class CacheEntry:
 class Cache:
     __dict: dict[str, CacheEntry]
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.__dict = {}
 
     def get(self, key: str) -> Any:
         """Get a value from the cache by key.
 
-        Args
-            key (str): identifier to retrieve the value for.
+        Parameters
+        ----------
+        key : `str`
+            identifier to retrieve the value for.
 
         Returns
         ---------------
@@ -34,15 +36,18 @@ class Cache:
         """
         return self.__dict[key].value
 
-    def set(self, key: str, value: object) -> object:
+    def set(self, key: str, value: Any) -> Any:
         """Set the value in cache by key and return it.
 
-        Args
-            key (str): identifier to set the value.
-            value (object): value to set.
+        Parameters
+        ----------
+        key : `str`
+            identifier to set the value.
+        value : `Any`
+            value to set.
 
         Returns
-        -------------
+        -------
         The newly set value.
         """
         self.__dict[key] = CacheEntry(type=type(value), value=value)
@@ -57,6 +62,11 @@ class Cache:
     def items(self) -> dict[str, Any]:
         """Return all key-value pairs currently in the cache."""
         return {k: v.value for k, v in self.__dict.items()}
+
+    @property
+    def values(self) -> list[Any]:
+        """Return all values currently in the cache."""
+        return [v.value for v in self.__dict.values()]
 
     def __str__(self):
         return "Cached Items: " + ", ".join(

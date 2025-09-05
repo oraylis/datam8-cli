@@ -56,6 +56,23 @@ class GeneratorTarget(BaseModel):
 
     @staticmethod
     def from_json_file(path: Path) -> GeneratorTarget:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        GeneratorTarget
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
         with open(path) as file:
             model = GeneratorTarget.model_validate_json(file.read())
 
@@ -98,6 +115,23 @@ class Solution(BaseModel):
 
     @staticmethod
     def from_json_file(path: Path) -> Solution:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        Solution
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
         with open(path) as file:
             model = Solution.model_validate_json(file.read())
 

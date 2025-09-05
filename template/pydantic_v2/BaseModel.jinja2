@@ -56,6 +56,23 @@ class {{ class_name }}({{ base_class }}):{% if comment is defined %}  # {{ comme
 
     @staticmethod
     def from_json_file(path: Path) -> {{ class_name }}:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        {{ class_name }}
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
         with open(path) as file:
           model = {{ class_name }}.model_validate_json(file.read())
 

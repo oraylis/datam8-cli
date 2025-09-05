@@ -52,6 +52,23 @@ class DataModule(BaseModel):
 
     @staticmethod
     def from_json_file(path: Path) -> DataModule:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        DataModule
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
         with open(path) as file:
             model = DataModule.model_validate_json(file.read())
 
@@ -79,6 +96,23 @@ class DataProduct(BaseModel):
 
     @staticmethod
     def from_json_file(path: Path) -> DataProduct:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        DataProduct
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
         with open(path) as file:
             model = DataProduct.model_validate_json(file.read())
 
