@@ -11,13 +11,14 @@ class CasesLocator:
     @parametrize(
         "locator",
         [
-            # tuple consisting of a zone name and a valid locator
-            ("stage", "/010-staging/Sales/Product/Product"),
-            ("stage", "/010-staging/Sales/Customer/Customer_DE"),
-            ("core", "/020-core/Sales/Customer/Customer"),
-            ("curated", "/030-curated/Sales/Customer/DimCustomer"),
-            ("curated", "/030-curated/Sales/Customer/DimCustomer"),
-            ("curated", "030-curated/Sales/Customer/DimCustomer"),
+            "attributeTypes/Generic Int",
+            "dataProducts/Sales",
+            "dataSources/AdventureWorks",
+            "dataSourceTypes/SqlDataSource",
+            "dataTypes/string",
+            "properties/jobs",
+            "zones/raw",
+            "folders/sales",
         ],
     )
     def case_locator_valid(self, locator):
@@ -35,19 +36,64 @@ class CasesLocator:
         return locator
 
     def case_locator_multiple(self):
-        return "/"
+        return "dataProducts/"
 
     def case_locator_unkown(self):
         return "/010-staging/Sales/Delivery/Product"
+
+    # fmt: off
+    @parametrize(
+        "test_case",
+        [
+            # tuple-format (left side, right side, expected result
+            ("dataProducts/Sales", "dataProducts/", True),
+            ("dataProducts/Sales", "dataProducts/Sales", False),
+            ("properties/jobs", "propertyValues/", False),
+            ("modelEntities/Sales/Customer/Customer", "modelEntities/Sales/", True),
+            ("modelEntities/Sales/Customer/", "modelEntities/Sales/", True),
+        ],
+    )
+    # fmt: on
+    def case_locator_comparison(self, test_case):
+        return test_case
 
 
 class CasesModel:
     @parametrize(
         "attribute",
         [
-            "lookup_entity",
-            "perform_initial_checks",
+            "modelEntities",
+            "properties",
+            "dataSources",
         ],
     )
     def case_model_attributes(self, attribute):
         return attribute
+
+    @parametrize(
+        "function",
+        [
+            "get_data_type",
+            "get_data_source",
+        ],
+    )
+    def case_model_functions(self, function):
+        return function
+
+
+class CasesEntityLookup:
+    @parametrize(
+        "input",
+        [
+            ("dataTypes", ["string", "money"]),
+            ("attributeTypes", ["Amt", "BirthDate"]),
+            ("zones", ["raw", "core"]),
+            ("properties", ["jobs"]),
+            ("dataSources", ["AdventureWorks"]),
+            ("dataSourceTypes", ["SqlDataSource"]),
+            ("dataProducts", ["Sales"]),
+            ("dataModules", ["Sales/Other"]),
+        ],
+    )
+    def case_get_entity_dict_valid(self, input):
+        return input

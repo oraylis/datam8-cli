@@ -1,9 +1,0 @@
-{
-  "$schema": "../datam8-model/schema/Solution.json",
-  "schemaVersion": "2.0.0",
-  "basePath": "Base",
-  "modelPath": "Model",
-  "generatePath": "Generate",
-  "diagramPath": "Diagram",
-  "outputPath": "Output"
-}
