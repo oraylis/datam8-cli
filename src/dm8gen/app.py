@@ -1,6 +1,6 @@
 import typer
 
-from dm8gen.cmd import generate, reverse, validate
+from .cmd import generate, reverse, validate
 
 app = typer.Typer(
     pretty_exceptions_enable=True,

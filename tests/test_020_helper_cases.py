@@ -15,17 +15,13 @@ class AlgorithmCases:
 class HashCases:
     @parametrize(
         "input",
+        # fmt: off
         [
             # format: ("input", "64-byte hash")
-            (
-                "test",
-                "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
-            ),
-            (
-                "test2",
-                "60303ae22b998861bce3b28f33eec1be758a213c86c93c076dbe9f558c11c752",
-            ),
+            ("test", "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"),
+            ("test2", "60303ae22b998861bce3b28f33eec1be758a213c86c93c076dbe9f558c11c752"),
         ],
+        # fmt: on
     )
     def case_hashes_valid(self, input):
         return input
@@ -42,20 +38,3 @@ class UuidCases:
     )
     def case_uuid_valid(self, input):
         return input
-
-
-class SolutionFilePathCases:
-    @parametrize(
-        "input",
-        [
-            # format: ("solution_file", "solution_folder")
-            ("/home/user/solution/solution_file.dm8s", "/home/user/solution"),
-            ("../solution/solution_file.dm8s", "../solution"),
-            # TODO: windows path as tests do not work under linux
-            # (r"C:\test\test\solution_file.dm8s", r"C:\test\test"),
-            # (r".\solution\solution_file.dm8s", r".\solution"),
-        ],
-    )
-    def case_solution_folder_valid(self, input):
-        file, folder = input
-        return (Path(file), Path(folder))

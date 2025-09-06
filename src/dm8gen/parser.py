@@ -8,20 +8,20 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from dm8gen import config
-from dm8gen.model import (
-    EntityWrapper,
-    Model,
-    EntityDict,
-    Locator,
-    new_empty_base_entity_dict,
-    wrap_base_entity,
-)
 from dm8model import base as b
 from dm8model import model as m
 from dm8model import solution as s
 
-from . import utils
+from . import config, utils
+from . import parser_exceptions as errors
+from .model import (
+    EntityDict,
+    EntityWrapper,
+    Locator,
+    Model,
+    new_empty_entity_type_dict,
+    wrap_base_entity,
+)
 
 logger = utils.start_logger(__name__)
 
@@ -117,9 +117,7 @@ def __parse_model_entities(
             continue
 
         clean_path = rel_path.as_posix().removeprefix(path.as_posix())
-        locator = Locator.from_path(
-            f"{b.EntityType.MODEL_ENTITIES.value}/{clean_path}"
-        )
+        locator = Locator.from_path(f"{b.EntityType.MODEL_ENTITIES.value}/{clean_path}")
         model_entities[locator] = EntityWrapper[m.ModelEntity](
             locator=locator,
             entity=model_entity_or_err,
@@ -129,7 +127,7 @@ def __parse_model_entities(
         _executor.shutdown()
 
     if parse_errors:
-        raise ModelParseException(
+        raise errors.ModelParseException(
             inner_exceptions=[err for err in parse_errors.values()]
         )
 
@@ -170,7 +168,7 @@ def __parse_base_entities(
     _executor = executor or futures.ThreadPoolExecutor()
 
     # ensure every entity type except modelEntities is present in dictionary
-    base_entities = new_empty_base_entity_dict()
+    base_entities: dict[b.EntityType, list[EntityWrapper]] = new_empty_entity_type_dict()
     del base_entities[b.EntityType.MODEL_ENTITIES]
 
     loaded_entities = _executor.map(__parse_base_entity_file, base_files)
@@ -182,38 +180,44 @@ def __parse_base_entities(
             continue
 
         entity_type, entity_list = base_entity_list_or_err
+
         for entity in entity_list:
+            locator_path = pathlib.Path(entity.name)
+
+            # NOTE: some types need special handling due them being embedded/
+            # referenced in other entities
+            match entity_type:
+                case b.EntityType.PROPERTY_VALUES:
+                    locator_path = (
+                        pathlib.Path(getattr(entity, "property")) / locator_path
+                    )
+
             base_entities[entity_type].append(
-                wrap_base_entity(entity_type, pathlib.Path(), entity)
+                wrap_base_entity(entity_type, locator_path, entity)
             )
 
     if executor is None:
         _executor.shutdown()
 
     if parse_errors:
-        raise ModelParseException(
+        raise errors.ModelParseException(
             inner_exceptions=[err for err in parse_errors.values()]
         )
 
-    logger.info(
-        f"Parsed base entities: {sum([len(x) for x in base_entities.values()])}"
-    )
-
     unpacked_entities = {
-        k.value: {
-            wrapped_entity.locator: wrapped_entity for wrapped_entity in v
-        }
+        k.value: {wrapped_entity.locator: wrapped_entity for wrapped_entity in v}
         for k, v in base_entities.items()
     }
+
+    for _t, _entity in unpacked_entities.items():
+        logger.info(f"Parsed {_t} entities: {len(_entity)}")
 
     return unpacked_entities
 
 
 def __parse_base_entity_file(
     path: pathlib.Path,
-) -> tuple[
-    pathlib.Path, tuple[b.EntityType, list[b.BaseEntityType]] | ValidationError
-]:
+) -> tuple[pathlib.Path, tuple[b.EntityType, list[b.BaseEntityType]] | ValidationError]:
     rel_path = path.relative_to(config.solution_folder_path)
 
     try:
@@ -228,15 +232,3 @@ def __parse_base_entity_file(
     logger.debug(rel_path)
 
     return rel_path, (entities_type, entities)
-
-
-class ModelParseException(Exception):
-    def __init__(
-        self,
-        msg="Error(s) occured during model files parsing.",
-        inner_exceptions: list[Exception] = [],
-    ):
-        Exception.__init__(self, msg)
-
-        self.inner_exceptions = inner_exceptions
-        self.message = msg

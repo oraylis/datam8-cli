@@ -2,7 +2,7 @@ from typing import Annotated
 
 import typer
 
-from dm8gen import opts
+from .. import opts
 
 app = typer.Typer()
 

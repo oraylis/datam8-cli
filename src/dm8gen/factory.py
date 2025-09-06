@@ -1,17 +1,20 @@
 import asyncio
+import pathlib
 
-from dm8gen import config, parser, utils
-from dm8gen.model import Model
+from . import config, parser, utils
+from .model import Model
 
 logger = utils.start_logger(__name__)
 
 _model: Model
 
 
-def create_model() -> Model:
+def create_model(solution_path: pathlib.Path | None = None) -> Model:
     global _model
 
-    _model = asyncio.run(parser.parse_full_solution_async(config.solution_path))
+    _model = asyncio.run(
+        parser.parse_full_solution_async(solution_path or config.solution_path)
+    )
 
     # if not config.lazy:
     #     __resolve_model_properties(_model)

@@ -1,79 +1,130 @@
-from dm8gen.Generated.ModelDataEntity import Model as UnifiedModel
-from dm8gen.Factory.Model import Model
-from dm8gen.Factory.UnifiedEntityFactory import UnifiedEntityFactory
-from dm8gen.Factory.Model import (
-    LocatorNotFoundException,
-    MultipleLocatorsFoundException,
-    InvalidLocatorException,
-)
+from types import MethodType
 
 import pytest
-from pytest_cases import parametrize_with_cases, fixture
-from .test_010_model_cases import CasesLocator, CasesModel, CasesLayer
+import pytest_cases
+from dm8model.base import EntityType
+from dm8model.data_product import DataModule
+from test_010_model_cases import CasesEntityLookup, CasesLocator, CasesModel
+
+from dm8gen.model import EntityWrapper, Locator, Model
+from dm8gen import model_exceptions as errors
 
 
-@fixture
-def target():
-    return "databricks-lake"
+@pytest_cases.parametrize_with_cases("attribute", cases=CasesModel, glob="*_attributes")
+def test_available_attribute(attribute: str, model: Model):
+    assert hasattr(model, attribute), f"Model is missing attribute: {attribute}"
 
 
-@parametrize_with_cases("layers", cases=CasesLayer, glob="*_valid")
-def test_perform_initial_checks(config, model: Model, layers):
-    assert isinstance(model, Model)
-
-    model.perform_initial_checks(layers)
-
-
-@parametrize_with_cases("attribute", cases=CasesModel, glob="*_attributes")
-def test_available_attribute(attribute, model):
-    assert hasattr(model, attribute), "Model is missing attribute: %s" % attribute
+@pytest_cases.parametrize_with_cases("function", cases=CasesModel, glob="*_functions")
+def test_available_functions(function: str, model: Model):
+    assert hasattr(model, function), f"Model is missing function: {function}"
+    assert type(getattr(model, function)) is MethodType
 
 
-@parametrize_with_cases("locator", cases=CasesLocator, glob="*_valid")
-def test_lookup_entity__valid(locator, config, model):
-    """Test the Model().lookup_entity() function with valid locators as an input."""
+@pytest_cases.parametrize_with_cases("locator", cases=CasesLocator, glob="*_valid")
+def test_lookup_entity__valid(locator: str, model: Model):
+    """Test the Model.get_entity_by_locator() function with valid locators as an input."""
+    entity = model.get_entity_by_locator(locator)
 
-    if not model.check_zone_for_entities(locator[0]):
-        return
-    else:
-        locator = locator[1]
+    assert entity.locator == locator, (
+        f"Locators do not match - search: {locator} - found: {entity.locator}"
+    )
+    assert isinstance(entity, EntityWrapper), (
+        f"Returned type is not `EntityWrapper` but {type(entity)}"
+    )
+    assert not entity.resolved, "Resolved attribute should be false after initialization"
 
-    entity_factory = model.lookup_entity(locator)
-    model_object = entity_factory.model_object
 
-    assert entity_factory is not None, "Return factory is None."
-    assert isinstance(entity_factory, UnifiedEntityFactory), "Return factory is of an unknown type: %s" % str(type(entity_factory))
-    assert isinstance(model_object, UnifiedModel), "Model_object is of unknown type: %s" % str(type(model_object))
-    assert (
-        entity_factory.locator.lower() == locator.lower()
-        if locator.startswith("/")
-        else "/%s" % locator
-    ), "Locators do not match - search: %s - found: %s" % (
-        locator,
-        entity_factory.locator,
+@pytest_cases.parametrize_with_cases("locator", cases=CasesLocator, glob="*_invalid")
+def test_lookup_entity__invalid(locator: str, model: Model):
+    """Test the Model().lookup_entity() function with an invalid locator as an input."""
+
+    with pytest.raises(errors.InvalidLocatorError):
+        model.get_entity_by_locator(locator)
+
+
+def test_has_property(model: Model):
+    entity = model.get_entity_by_locator("dataProducts/Sales")
+
+    with pytest.raises(errors.PropertiesNotResolvedError):
+        entity.has_property("test")
+
+
+@pytest_cases.parametrize_with_cases("test_case", cases=CasesLocator, glob="*_comparison")
+def test_locator_comparison(test_case: tuple[str, str, bool]):
+    left_side, right_side, expected_result = test_case
+    left_side = Locator.from_path(left_side)
+    right_side = Locator.from_path(right_side)
+
+    assert (left_side in right_side) == expected_result, (
+        "Membership check between `{}` in `{}` had the wrong result: {result}, exptected: {}".format(  # noqa: UP032
+            left_side,
+            right_side,
+            expected_result,
+            result=left_side in right_side,
+        )
     )
 
 
-@parametrize_with_cases("locator", cases=CasesLocator, glob="*_invalid")
-def test_lookup_entity__invalid(locator, model):
-    """Test the Model().lookup_entity() function with an invalid locator as an input."""
+@pytest_cases.parametrize_with_cases(
+    "input", cases=CasesEntityLookup, glob="*_dict_valid"
+)
+def test_get_entity_dict(input: tuple[str, list[str]], model: Model):
+    entity_type, entity_names = input
 
-    with pytest.raises(InvalidLocatorException):
-        model.lookup_entity(locator)
+    for entity_name in entity_names:
+        match EntityType._value2member_map_[entity_type]:
+            case EntityType.DATA_TYPES:
+                entity = model.get_data_type(entity_name)
+            case EntityType.ATTRIBUTE_TYPES:
+                entity = model.get_attribute_type(entity_name)
+            case EntityType.ZONES:
+                entity = model.get_zone(entity_name)
+            case EntityType.PROPERTIES:
+                entity = model.get_property(entity_name)
+            case EntityType.PROPERTY_VALUES:
+                property, name = entity_name.split("/")
+                entity = model.get_property_value(property, name)
+            case EntityType.DATA_SOURCES:
+                entity = model.get_data_source(entity_name)
+            case EntityType.DATA_SOURCE_TYPES:
+                entity = model.get_data_source_type(entity_name)
+            case EntityType.DATA_PRODUCTS:
+                entity = model.get_data_product(entity_name)
+            case EntityType.DATA_MODULES:
+                # NOTE: data modules are currently not being wrapped which results
+                # in a different behaviour / class, which needs to be handlered differntly
+                data_product, data_module = entity_name.split("/")
+                entity = model.get_data_module(data_product, data_module)
+                assert isinstance(entity, DataModule), f"Wrong type {type(entity)}"
+                return
+            case _:
+                raise Exception(
+                    f"entity type not configured in {__name__}: {entity_type}"
+                )
+
+        assert isinstance(entity, EntityWrapper), (
+            f"Looked up entity has the wrong type: {type(entity)}"
+        )
+
+        expected_locator = f"{entity_type}/{entity_name}"
+        assert entity.locator == expected_locator, (
+            f"Expected {expected_locator} but got {entity.locator}"
+        )
 
 
-@parametrize_with_cases("locator", cases=CasesLocator, glob="*_multiple")
-def test_lookup_entity__multiple(locator, model):
-    """Test Model.lookup_entity() with multiple resolve locators."""
-
-    with pytest.raises(MultipleLocatorsFoundException):
-        # TODO: current generator does not do fuzzzy or regex matching
-        raise MultipleLocatorsFoundException("dummy")
-
-
-@parametrize_with_cases("locator", cases=CasesLocator, glob="*_unkown")
-def test_lookup_entity__unkown(locator, model):
-    """Test Model.lookup_entity() with unkownk locator."""
-
-    with pytest.raises(LocatorNotFoundException):
-        model.lookup_entity(locator)
+# @parametrize_with_cases("locator", cases=CasesLocator, glob="*_multiple")
+# def test_lookup_entity__multiple(locator, model):
+#     """Test Model.lookup_entity() with multiple resolve locators."""
+#
+#     with pytest.raises(MultipleLocatorsFoundException):
+#         # TODO: current generator does not do fuzzzy or regex matching
+#         raise MultipleLocatorsFoundException("dummy")
+#
+#
+# @parametrize_with_cases("locator", cases=CasesLocator, glob="*_unkown")
+# def test_lookup_entity__unkown(locator, model):
+#     """Test Model.lookup_entity() with unkownk locator."""
+#
+#     with pytest.raises(LocatorNotFoundException):
+#         model.lookup_entity(locator)
