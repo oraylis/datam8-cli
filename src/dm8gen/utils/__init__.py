@@ -19,13 +19,12 @@ Utility Module to make working with datam8 models more comfortable in jinja2 tem
 
 import logging
 import os
-import time
 from collections.abc import Callable
 from pathlib import Path
 
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from dm8gen import config, opts
+from .. import config, opts
 
 
 def print_progress_async(msg: str) -> Callable:
@@ -54,7 +53,7 @@ def print_progress_async(msg: str) -> Callable:
                     transient=True,
                 ) as progress:
                     progress.add_task(description=msg, total=None)
-                    time.sleep(3)
+                    # time.sleep(3)
 
             return await result
 

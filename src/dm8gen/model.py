@@ -1,9 +1,8 @@
 from pathlib import Path
-from typing import Annotated, cast
+from typing import Annotated, Any, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, SkipValidation
 
-from dm8gen import utils
 from dm8model import attribute as a
 from dm8model import base as b
 from dm8model import data_product as dp
@@ -15,12 +14,14 @@ from dm8model import property as p
 from dm8model import solution as s
 from dm8model import zone as z
 
+from . import model_exceptions as errors
+from . import utils
+
 logger = utils.start_logger(__name__)
 
 
 type BaseEntityDict[T] = dict[b.EntityType, list[T]]
 type EntityDict[T] = dict[Locator, EntityWrapper[T]]
-type ModelEntityDict = dict[str, m.ModelEntity]
 
 
 def wrap_base_entity[T](
@@ -51,16 +52,29 @@ def wrap_base_entity[T](
 
     return EntityWrapper[T](
         locator=locator,
-        entity=cast(T, entity),
+        entity=entity,
     )
 
 
-def new_empty_base_entity_dict() -> BaseEntityDict:
+def new_empty_entity_type_dict() -> dict[b.EntityType, list[Any]]:
     """Create an empty dictionary to every available BaseEntityType.
 
-    WARNING: The generic type is not set and therefor unknown.
+    WARNING: The type of the result list items is not set.
+
+    Returns
+    -------
+    list[Any]
+        A dictionary with a key for every available entity type, mapping to an
+        empty list.
     """
     return {_type: [] for _type in b.EntityType}
+
+
+def _ensure_locator(locator: "str | Locator") -> "Locator":
+    if isinstance(locator, str):
+        return Locator.from_path(locator)
+
+    return locator
 
 
 class Locator(m.Locator):
@@ -70,11 +84,11 @@ class Locator(m.Locator):
     """
 
     def __eq__(self, other: object) -> bool:
-        if not isinstance(other, Locator):
-            return False
-
-        elif isinstance(other, str):
+        if isinstance(other, str):
             return self.__str__() == other
+
+        elif not isinstance(other, Locator):
+            raise TypeError(f"Cannot compare object of type {type(object)} with Locator")
 
         return all(
             [
@@ -83,6 +97,27 @@ class Locator(m.Locator):
                 self.entityName == other.entityName,
             ]
         )
+
+    def __contains__(self, other: object) -> bool:
+        # ensure later checks are only done on locator objects
+        if isinstance(other, str):
+            other = Locator.from_path(other)
+        elif not isinstance(other, Locator):
+            raise TypeError(f"Cannot compare object of type {type(object)} with Locator")
+
+        # basic format checks before comparison the actual folder paths
+        if (
+            self.entityName
+            or self == other
+            or self.entityType != other.entityType
+            or len(self.folders) > len(other.folders)
+        ):
+            return False
+
+        left_path = Path("/".join(other.folders))
+        right_path = Path("/".join(self.folders))
+
+        return left_path.is_relative_to(right_path)
 
     def __hash__(self):
         return hash(self.__str__())
@@ -122,15 +157,21 @@ class Locator(m.Locator):
         `Locator`
             An identifier unique for every object in the solution.
         """
-        parts = path.removesuffix(".json").split("/")
+        parts = path.removesuffix(".json").removeprefix("/").split("/")
+        # parts = [part for part in parts if part != ""]
 
-        if "" in parts:
-            parts.remove("")
+        if any(
+            [
+                len(parts) < 2,
+                parts[0] not in [member.value for member in b.EntityType],
+            ]
+        ):
+            raise errors.InvalidLocatorError(path)
 
         locator = Locator(
             entityType=parts[0],
             folders=parts[1:-1],
-            entityName=parts[-1],
+            entityName=None if parts[-1] == "" else parts[-1],
         )
 
         return locator
@@ -189,7 +230,6 @@ class EntityWrapper[T](BaseModel):
     """
 
     model_config = ConfigDict(
-        protected_namespaces=(),
         populate_by_name=True,
     )
     locator: Locator
@@ -205,7 +245,7 @@ class EntityWrapper[T](BaseModel):
     """
     Marks if references to other entities, e.g. Properties have  been resolved.
     """
-    properties: dict[PropertyReference, "EntityWrapper[p.PropertyValue]"] = {}
+    properties: dict[PropertyReference, Self] = {}
     """
     Additional properties than are dynamically defined within the solution.
     Contains actual properties based on the property references with the
@@ -231,7 +271,15 @@ class EntityWrapper[T](BaseModel):
         -------
         bool
             If true the property name is assigned.
+
+        Raises
+        ------
+        PropertiesNotResolvedError
+            If the property references within the entity have not been resolved yet.
         """
+        if not self.resolved:
+            raise errors.PropertiesNotResolvedError(self.locator)
+
         for pr in self.properties:
             if pr.property == property_name:
                 return True
@@ -239,7 +287,7 @@ class EntityWrapper[T](BaseModel):
         return False
 
 
-class Model(BaseModel):
+class Model:
     """
     The main class that all data from the datam8 solution will be stored in.
 
@@ -248,22 +296,26 @@ class Model(BaseModel):
     """
 
     model_config = ConfigDict(
-        protected_namespaces=(),
-        populate_by_name=True,
-        # extra="forbig",
         arbitrary_types_allowed=True,
     )
     solution: Annotated[s.Solution, Field(frozen=True)]
-    properties: EntityDict[p.Property]
-    propertyValues: EntityDict[p.PropertyValue]
-    zones: EntityDict[z.Zone]
-    dataTypes: EntityDict[dt.DataTypeDefinition]
-    dataSources: EntityDict[ds.DataSource]
-    dataProducts: EntityDict[dp.DataProduct]
-    dataModules: EntityDict[dp.DataModule]
-    attributeTypes: EntityDict[a.AttributeType]
-    folders: EntityDict[f.Folder]
-    modelEntities: EntityDict[m.ModelEntity]
+    properties: Annotated[EntityDict[p.Property], SkipValidation]
+    propertyValues: Annotated[EntityDict[p.PropertyValue], SkipValidation]
+    zones: Annotated[EntityDict[z.Zone], SkipValidation]
+    dataTypes: Annotated[EntityDict[dt.DataTypeDefinition], SkipValidation]
+    dataSources: Annotated[EntityDict[ds.DataSource], SkipValidation]
+    dataSourceTypes: Annotated[EntityDict[ds.DataSourceType], SkipValidation]
+    dataProducts: Annotated[EntityDict[dp.DataProduct], SkipValidation]
+    dataModules: Annotated[EntityDict[dp.DataModule], SkipValidation]
+    attributeTypes: Annotated[EntityDict[a.AttributeType], SkipValidation]
+    folders: Annotated[EntityDict[f.Folder], SkipValidation]
+    modelEntities: Annotated[EntityDict[m.ModelEntity], SkipValidation]
+
+    def __init__(self, solution: s.Solution, **kwargs: EntityDict):
+        self.solution = solution
+
+        for k, v in kwargs.items():
+            setattr(self, k, v)
 
     def _get_entity[T](
         self, entity_dict: EntityDict[T], entity_type: b.EntityType, name: str
@@ -271,7 +323,7 @@ class Model(BaseModel):
         locator = Locator.from_path(f"{entity_type.value}/{name}")
 
         if locator not in entity_dict:
-            raise EntityNotFoundException(f"{entity_type} {name}")
+            raise errors.EntityNotFoundError(f"{entity_type} {name}")
 
         return entity_dict[locator]
 
@@ -294,6 +346,13 @@ class Model(BaseModel):
         )
         return wrapped_data_source
 
+    def get_data_source_type(self, name: str) -> EntityWrapper[ds.DataSourceType]:
+        """Get a data source type by name."""
+        wrapped_data_source_type = self._get_entity(
+            self.dataSourceTypes, b.EntityType.DATA_SOURCE_TYPES, name
+        )
+        return wrapped_data_source_type
+
     def get_data_product(self, name: str) -> EntityWrapper[dp.DataProduct]:
         """Get a data product by name."""
         wrapped_data_product = self._get_entity(
@@ -312,7 +371,7 @@ class Model(BaseModel):
             if data_module.name == name:
                 return data_module
 
-        raise EntityNotFoundException(f"dataModule {data_product}:{name}")
+        raise errors.EntityNotFoundError(f"dataModule {data_product}:{name}")
 
     def get_attribute_type(self, name: str) -> EntityWrapper[a.AttributeType]:
         """Get an attribute type by name."""
@@ -321,29 +380,125 @@ class Model(BaseModel):
         )
         return wrapped_attribute_type
 
+    def get_property(self, name: str) -> EntityWrapper[p.Property]:
+        """Get a property by name."""
+        wrapped_property = self._get_entity(
+            self.properties, b.EntityType.PROPERTIES, name
+        )
+        return wrapped_property
+
+    def get_property_value(
+        self, property: str, name: str
+    ) -> EntityWrapper[p.PropertyValue]:
+        """Get a property value by its property and name."""
+        property_values = [
+            pv
+            for pv in self.propertyValues.values()
+            if pv.entity.property == property and pv.entity.name == name
+        ]
+
+        if len(property_values) != 1:
+            raise errors.EntityNotFoundError(f"property value {property}/{name}")
+
+        return property_values.pop()
+
     def get_folder(self, name: str) -> EntityWrapper[f.Folder]:
         """Get a folder by name."""
-        wrapped_folder = self._get_entity(
-            self.folders, b.EntityType.FOLDERS, name
-        )
+        wrapped_folder = self._get_entity(self.folders, b.EntityType.FOLDERS, name)
         return wrapped_folder
 
     def get_model_entity_by_id(self, id: int) -> EntityWrapper[m.ModelEntity]:
+        """
+        Retrieves a model entity by its id.
+
+        Parameters
+        ----------
+        id : `int`
+            The numeric id of the entity. Unrelated to the dynamic locator.
+
+        Returns
+        -------
+        `EntityWrapper[ModelEntity]`
+
+        Raises
+        ------
+        `EntityNotFoundError`
+            When no model entity was found with this id.
+        """
         for entity in self.modelEntities.values():
             if entity.entity.id == id:
                 return entity
 
-        raise EntityNotFoundException(f"Model Id {id}")
+        raise errors.EntityNotFoundError(f"Model Id {id}")
 
+    def get_entity_by_locator(self, locator: str | Locator) -> EntityWrapper:
+        """
+        Retrieve a single entity by its locator.
 
-class EntityNotFoundException(Exception):
-    def __init__(
-        self,
-        entity: str,
-        msg: str = "Entity was not found in model: {}",
-        inner_exceptions: list[Exception] | None = None,
-    ):
-        Exception.__init__(self, msg.format(entity))
+        This is implemented as a directy dictionary key lookup, and will fail if
+        the entity / locator does not exist.
 
-        self.inner_exceptions = inner_exceptions
-        self.message = msg.format(entity)
+        Parameters
+        ----------
+        locator : `str` or `Locator`
+            The locator of the entity to retrieve.
+
+        Returns
+        -------
+        `EntityWrapper`
+            Of an unkown entity type. Needs to be type hinted manually if required.
+        """
+        locator = _ensure_locator(locator)
+
+        return getattr(self, locator.entityType)[locator]
+
+    def get_entities(self, search_locator: str | Locator) -> list[EntityWrapper]:
+        """
+        Retrieve a list of EntityWrappers that are hierarchically underneath the
+        given locator.
+
+        Parameters
+        ----------
+        search_locator : `str` or `Locator`
+            The parent locator to search for entities.
+
+        Returns
+        -------
+        `list[EntityWrapper]`
+            Since the entityType is not known beforehand type hints for the
+            entities are not available automatically and need to be added manually.
+        """
+        search_locator = _ensure_locator(search_locator)
+        child_locators = self.get_child_locators(search_locator)
+        entities: EntityDict = getattr(self, search_locator.entityType)
+
+        return [entities[_loc] for _loc in child_locators]
+
+    def get_child_locators(self, search_locator: str | Locator) -> list[Locator]:
+        """
+        Retrieve all enties located underneath the given locator, works for alle
+        items not only model entities.
+
+        Only locators to actual entities are return, no "intermediate" locators point to folders.
+
+        Parameters
+        ----------
+        search_locator : `str` or `Locator`
+            The locator used for searching. It itself is not included in the results.
+
+        Returns
+        -------
+        `list[Locator]`
+            Since the entityType is not known beforehand type hints for the
+            entities are not available automatically and need to be added manually.
+        """
+        search_locator = _ensure_locator(search_locator)
+
+        locators_to_be_compared: list[Locator] = [
+            _loc for _loc in getattr(self, search_locator.entityType)
+        ]
+        found_locators = list(
+            filter(lambda _loc: _loc in search_locator, locators_to_be_compared)
+        )
+
+        return found_locators

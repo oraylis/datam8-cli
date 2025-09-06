@@ -11,7 +11,7 @@ class Algorithm(Enum):
     SHA256 = 0
 
 
-class UnknownAlgorithmExpcetion(Exception):
+class UnknownAlgorithmError(Exception):
     def __ini__(self, algorithm: str):
         super().__init__(f"Unkown algorithm: {algorithm}")
 
@@ -25,11 +25,12 @@ class Hasher:
 
     def __init__(self, algorithm: str = Algorithm.SHA256.name) -> None:
         if algorithm not in Algorithm._member_names_:
-            raise UnknownAlgorithmExpcetion(algorithm)
+            raise UnknownAlgorithmError(algorithm)
 
-        self.__algorithm = Algorithm(algorithm)
+        self.__algorithm = Algorithm[algorithm]
 
-    def hash(self, input: str) -> hashlib._Hash:
+    # HACK: return type needs to be in double-quote otherwis the code fails
+    def hash(self, input: str) -> "hashlib._Hash":
         input_encoded = input.encode()
 
         match self.__algorithm:
