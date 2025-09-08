@@ -117,7 +117,7 @@ def __parse_model_entities(
             continue
 
         clean_path = rel_path.as_posix().removeprefix(path.as_posix())
-        locator = Locator.from_path(f"{b.EntityType.MODEL_ENTITIES.value}/{clean_path}")
+        locator = Locator.from_path(f"{b.EntityType.MODEL_ENTITIES.value}{clean_path}")
         model_entities[locator] = EntityWrapper[m.ModelEntity](
             locator=locator,
             entity=model_entity_or_err,

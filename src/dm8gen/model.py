@@ -46,7 +46,7 @@ def wrap_base_entity[T](
     """
     locator = Locator(
         entityType=entity_type.value,
-        folders=path.as_posix().split("/")[0:-1],
+        folders=path.as_posix().split("/")[1:-1],
         entityName=getattr(entity, "name"),
     )
 
@@ -107,7 +107,7 @@ class Locator(m.Locator):
 
         # basic format checks before comparison the actual folder paths
         if (
-            self.entityName
+            self.entityName is not None
             or self == other
             or self.entityType != other.entityType
             or len(self.folders) > len(other.folders)
@@ -123,12 +123,8 @@ class Locator(m.Locator):
         return hash(self.__str__())
 
     def __str__(self) -> str:
-        folders = "/".join(self.folders)
-
-        if folders:
-            return f"{self.entityType}/{folders}/{self.entityName}"
-        else:
-            return f"{self.entityType}/{self.entityName}"
+        parts = [self.entityType, *self.folders, self.entityName or ""]
+        return "/".join(parts)
 
     @staticmethod
     def from_path(path: str) -> "Locator":
@@ -317,6 +313,13 @@ class Model:
         for k, v in kwargs.items():
             setattr(self, k, v)
 
+    def get_generator_target(self, name: str) -> s.GeneratorTarget:
+        for target in self.solution.generatorTargets:
+            if target.name == name:
+                return target
+
+        raise errors.InvalidGeneratorTargetError(name)
+
     def _get_entity[T](
         self, entity_dict: EntityDict[T], entity_type: b.EntityType, name: str
     ) -> EntityWrapper[T]:
@@ -470,6 +473,10 @@ class Model:
         """
         search_locator = _ensure_locator(search_locator)
         child_locators = self.get_child_locators(search_locator)
+
+        if not child_locators:
+            raise Exception("No entites found")
+
         entities: EntityDict = getattr(self, search_locator.entityType)
 
         return [entities[_loc] for _loc in child_locators]
@@ -493,7 +500,6 @@ class Model:
             entities are not available automatically and need to be added manually.
         """
         search_locator = _ensure_locator(search_locator)
-
         locators_to_be_compared: list[Locator] = [
             _loc for _loc in getattr(self, search_locator.entityType)
         ]

@@ -26,8 +26,37 @@ LogLevel = Annotated[
 
 SolutionPath = Annotated[
     Path,
-    typer.Argument(
+    typer.Option(
+        "--solution-path",
+        "-s",
         help="Path to .dm8s solution file",
         envvar="DATAM8_SOLUTION_PATH",
+    ),
+]
+
+GeneratorTarget = Annotated[
+    str,
+    typer.Argument(
+        help="Target name as defined in .dm8gs file",
+        envvar="DATAM8_GENERATOR_TARGET",
+    ),
+]
+
+CleanOutput = Annotated[
+    bool,
+    typer.Option(
+        "--clean-output",
+        "-c",
+        help="Cleans the output directory, i.e. deleting its content",
+        envvar="DATAM8_CLEAN_OUTPUT",
+    ),
+]
+
+Payload = Annotated[
+    list[str],
+    typer.Option(
+        "--payload",
+        "-p",
+        help="The name of a payload registrated via decorator. Can be provided multiple times",
     ),
 ]
