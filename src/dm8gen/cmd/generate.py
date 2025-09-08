@@ -1,80 +1,108 @@
-from typing import Annotated
+import asyncio
+from concurrent import futures
+import sys
+import os
 
+import rich
 import typer
 
-from .. import opts
+from dm8gen.model_exceptions import InvalidGeneratorTargetError
+from dm8gen.utils.cache import Cache
+from dm8model.solution import GeneratorTarget
+
+from .. import config, factory, opts, utils, generate
 
 app = typer.Typer()
+
+logger = utils.start_logger(__name__)
+sys.tracebacklimit = 0
 
 
 @app.command("generate")
 def command(
-    solution: opts.SolutionPath,
-    log_level: opts.LogLevel = opts.LogLevels.INFO,
-    path_template_source: Annotated[
-        str | None,
-        typer.Option(
-            "--path-template-source",
-            "-src",
-            help="Directory or file path to the template(s) source.",
-        ),
-    ] = None,
-    path_template_destination: Annotated[
-        str | None,
-        typer.Option(
-            "--path-template-destination",
-            "-dest",
-            help="Directory for template output.",
-        ),
-    ] = None,
-    full_index_scan: Annotated[
-        bool,
-        typer.Option(
-            "--full-index-scan",
-            "-i",
-            help="Flag to indicate a full index scan (True) or just a refresh (False).",
-        ),
-    ] = False,
-    path_modules: Annotated[
-        str | None,
-        typer.Option(
-            "--path-modules",
-            "-m",
-            help="Directory or file path to modules that can be registered.",
-        ),
-    ] = None,
-    path_collections: Annotated[
-        str | None,
-        typer.Option(
-            "--path-collections",
-            "-c",
-            help="Directory path to Jinja2 collections (templates for blocks and includes).",
-        ),
-    ] = None,
+    solution_path: opts.SolutionPath,
+    target: opts.GeneratorTarget = config.target,
+    log_level: opts.LogLevel = opts.LogLevels.WARNING,
+    clean_output: opts.CleanOutput = False,
+    payloads: opts.Payload = [],
 ):
-    """
-    Main function to execute different actions based on user input.
+    """Generate a jinja2 template configured in the solution file."""
+    config.log_level = log_level
+    config.solution_path = solution_path
+    config.solution_folder_path = solution_path.parent.absolute()
 
-    Args:
-        action (GenerateOptionEnum): The action to perform (validate_index, generate_template, refresh_generate, reverse_generate).
-        path_solution (str): The file path to the solution JSON file.
-        path_template_source (Optional[str]): The directory or file path to the template(s) source.
-        path_template_destination (Optional[str]): The directory for template output.
-        full_index_scan (bool): Flag to indicate whether to perform a full index scan or just refresh it.
-        path_modules (Optional[str]): The directory or file path to modules that can be registered.
-        path_collections (Optional[str]): The directory path to Jinja2 collections.
-        data_source (Optional[str]): Name of the data source for reverse generation (required for reverse_generate).
-        data_product (Optional[str]): Data product name for output path (required for reverse_generate).
-        data_module (Optional[str]): Data module name for output path (required for reverse_generate).
-        tables (Optional[str]): Comma-separated list of table names to reverse generate (required for reverse_generate).
-        entity_names (Optional[str]): Comma-separated list of entity names corresponding to tables (optional for reverse_generate).
-        interactive (bool): Enable interactive mode for reverse generation with user prompts.
-        log_level (str): The log level for the application (default is "INFO").
+    model = factory.create_model()
+    cache = Cache()
 
-    Raises:
-        Exception: If the solution validation fails or an unknown action is provided.
-    """
-    ...
+    try:
+        if target == "none":
+
+            def filter_targets(_target: GeneratorTarget) -> bool:
+                if _target.isDefault is None:
+                    return False
+                return _target.isDefault
+
+            generator_target = [
+                _t for _t in model.solution.generatorTargets if filter_targets(_t)
+            ].pop()
+        else:
+            generator_target = model.get_generator_target(target)
+
+        config.template_path = generator_target.sourcePath
+        config.output_path = generator_target.outputPath
+        output_path_abs = config.solution_folder_path / config.output_path
+        module_path = (
+            config.solution_folder_path / generator_target.sourcePath / "__modules"
+        )
+
+        _ = generate.load_modules(module_path)
+
+        if clean_output and output_path_abs.exists():
+            logger.warning("Cleaning Output...")
+            utils.delete_path(output_path_abs, recursive=True)
+
+        if not output_path_abs.exists():
+            os.mkdir(output_path_abs)
+
+        selected_payloads = {
+            order: [
+                payload
+                for payload in generate.payload_functions[order]
+                # NOTE: either payloads is set via cli arguments which results in
+                # the first comparison to be truthy OR if no payload is set via
+                # cli all payloads will be used due to the second condition being always true
+                if payload.name in payloads or not payloads
+            ]
+            for order in sorted(generate.payload_functions)
+        }
+
+        for order in selected_payloads:
+            executor = futures.ThreadPoolExecutor()
+
+            def render_payload(
+                payload: generate.PayloadDefinition,
+            ) -> Exception | None:
+                return asyncio.run(generate.render_payload(payload, model, cache))
+
+            results = executor.map(
+                render_payload,
+                selected_payloads[order],
+            )
+
+            executor.shutdown()
+
+            errors = [_result for _result in results if _result]
+
+            if len(errors) > 0:
+                raise generate.RenderError()
+
+    except InvalidGeneratorTargetError as err:
+        logger.error(err)
+        sys.exit(1)
+    except generate.RenderError as _:
+        sys.exit(1)
+
+    rich.print("Generation successfull")
 
 
 #     # Validate Log level

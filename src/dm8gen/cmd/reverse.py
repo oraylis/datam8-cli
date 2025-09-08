@@ -56,4 +56,6 @@ def command(
             help="Set log level: NOTSET, DEBUG, INFO, WARN, ERROR, CRITICAL (default INFO).",
         ),
     ] = "INFO",
-): ...
+):
+    """Generate a datam8 model file from a source object."""
+    ...

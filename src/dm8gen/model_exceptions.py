@@ -21,3 +21,8 @@ class PropertiesNotResolvedError(Exception):
         super().__init__(
             f"Tried to access properties of unresolved entity '{locator}' yet"
         )
+
+
+class InvalidGeneratorTargetError(Exception):
+    def __init__(self, target_name: str):
+        super().__init__(f"Generator target '{target_name}' is not defined")

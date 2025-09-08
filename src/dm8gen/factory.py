@@ -1,7 +1,10 @@
 import asyncio
 import pathlib
+import sys
 
-from . import config, parser, utils
+from pydantic_core import ValidationError
+
+from . import config, model_exceptions, parser, parser_exceptions, utils
 from .model import Model
 
 logger = utils.start_logger(__name__)
@@ -12,12 +15,29 @@ _model: Model
 def create_model(solution_path: pathlib.Path | None = None) -> Model:
     global _model
 
-    _model = asyncio.run(
-        parser.parse_full_solution_async(solution_path or config.solution_path)
-    )
+    path = solution_path or config.solution_path
 
-    # if not config.lazy:
-    #     __resolve_model_properties(_model)
+    if not path.exists():
+        logger.error("Solution file does not exists")
+        sys.exit(1)
+
+    try:
+        _model = asyncio.run(parser.parse_full_solution_async(path))
+        # if not config.lazy:
+        #     __resolve_model_properties(_model)
+
+    except ValidationError as err:
+        logger.error(err)
+        sys.exit(1)
+    except parser_exceptions.ModelParseException as err:
+        logger.error(err)
+        sys.exit(1)
+    except model_exceptions.EntityNotFoundError as err:
+        logger.error(err)
+        sys.exit(1)
+    except model_exceptions.PropertiesNotResolvedError as err:
+        logger.error(err)
+        sys.exit(1)
 
     # TODO: reference resolution
 
