@@ -2,9 +2,8 @@ import sys
 
 import rich
 import typer
-from pydantic_core import ValidationError
 
-from .. import config, factory, model_exceptions, opts, utils, parser_exceptions
+from .. import config, factory, opts, utils
 
 app = typer.Typer()
 
@@ -21,22 +20,7 @@ def command(
     config.log_level = log_level
     config.solution_path = solution_path
     config.solution_folder_path = solution_path.parent.absolute()
-    logger = utils.start_logger(__name__)
 
-    try:
-        _ = factory.create_model()
+    _ = factory.create_model()
 
-        rich.print("Validation successfull")
-
-    except ValidationError as err:
-        logger.error(err)
-        sys.exit(1)
-    except parser_exceptions.ModelParseException as err:
-        logger.error(err)
-        sys.exit(1)
-    except model_exceptions.EntityNotFoundError as err:
-        logger.error(err)
-        sys.exit(1)
-    except model_exceptions.PropertiesNotResolvedError as err:
-        logger.error(err)
-        sys.exit(1)
+    rich.print("Validation successfull")

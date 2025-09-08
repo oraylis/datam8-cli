@@ -27,6 +27,21 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from .. import config, opts
 
 
+def delete_path(path: Path, recursive: bool = False) -> None:
+    if path.is_file():
+        os.remove(path)
+        return
+
+    if not recursive and path.is_dir():
+        path.rmdir()
+        return
+
+    for child in path.iterdir():
+        delete_path(child, recursive)
+
+    path.rmdir()
+
+
 def print_progress_async(msg: str) -> Callable:
     """
     Decorator to print a progress spinner with a given message while the function executes.
@@ -73,7 +88,7 @@ def get_logger(func: Callable) -> Callable:
         The function to decorate.
     """
 
-    def wrapper(*args, **kwargs):
+    def wrapper(*args, **kwargs) -> Callable:
         start_logger(func.__module__)
         return func(*args, **kwargs)
 
@@ -159,12 +174,8 @@ class ColorFormatter(logging.Formatter):
     # fmt: on
 
     def format(self, record) -> str:
-        record.levelname = (
-            "WARN" if record.levelname == "WARNING" else record.levelname
-        )
-        record.levelname = (
-            "ERROR" if record.levelname == "CRITICAL" else record.levelname
-        )
+        record.levelname = "WARN" if record.levelname == "WARNING" else record.levelname
+        record.levelname = "ERROR" if record.levelname == "CRITICAL" else record.levelname
         log_fmt = self.FORMATS.get(record.levelno)
         formatter = logging.Formatter(log_fmt)
         return formatter.format(record)
