@@ -1,13 +1,12 @@
-from dm8gen import utils
-from dm8gen.utils import hasher as hashutils
-
 import pytest
 from pytest_cases import parametrize_with_cases
 from test_020_helper_cases import (
-    HashCases,
     AlgorithmCases,
+    HashCases,
     UuidCases,
 )
+
+from dm8gen.utils import hasher as hashutils
 
 
 @parametrize_with_cases("algorithm", cases=AlgorithmCases, glob="*_valid")
