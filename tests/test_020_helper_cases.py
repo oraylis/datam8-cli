@@ -1,5 +1,4 @@
 from pytest_cases import parametrize
-from pathlib import Path
 
 
 class AlgorithmCases:

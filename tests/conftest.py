@@ -3,11 +3,15 @@ import dataclasses
 import os
 import pathlib
 
+import pytest
 from pytest_cases import fixture
 
 from dm8gen import config as dm8gen_config
 from dm8gen.model import Model
 from dm8gen.parser import parse_full_solution_async
+
+solution_file_path_key = pytest.StashKey[pathlib.Path]()
+log_level_key = pytest.StashKey[str]()
 
 
 # Set Input Parameter für test
@@ -24,30 +28,32 @@ def pytest_addoption(parser):
     )
 
 
-def pytest_configure(config: "TestConfig"):
+def pytest_configure(config: pytest.Config):
     """Pre run."""
     solution_file_path = __get_variable(config, "solution-path")
     log_level = __get_variable(config, "log-level", "info")
 
-    config.solution_file_path = pathlib.Path(
+    config.stash[solution_file_path_key] = pathlib.Path(
         solution_file_path.replace("\\", "/")
     )
-    config.log_level = log_level
+    config.stash[log_level_key] = log_level
 
 
 @dataclasses.dataclass
 class TestConfig:
     solution_file_path: pathlib.Path
     log_level: str
+    pytest_config: pytest.Config
 
 
 @fixture
-def config(request) -> TestConfig:
+def config(request: pytest.FixtureRequest) -> TestConfig:
     """DataM8 Solution configuration."""
 
     return TestConfig(
-        solution_file_path=request.config.solution_file_path,
-        log_level=request.config.log_level,
+        solution_file_path=request.config.stash[solution_file_path_key],
+        log_level=request.config.stash[log_level_key],
+        pytest_config=request.config,
     )
 
 
@@ -60,7 +66,7 @@ def model(config: TestConfig) -> Model:
 
 
 def __get_variable(
-    config: TestConfig, variable: str, default: str | None = None
+    config: pytest.Config, variable: str, default: str | None = None
 ) -> str:
     variable_from_env = __get_variable_from_env(variable)
     variable_from_cli = __get_variable_from_cli(config, variable)
@@ -82,5 +88,5 @@ def __get_variable_from_env(var: str) -> str | None:
         return None
 
 
-def __get_variable_from_cli(config: TestConfig, var: str) -> str | None:
+def __get_variable_from_cli(config: pytest.Config, var: str) -> str | None:
     return config.getoption(f"--{var}")

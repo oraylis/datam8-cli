@@ -1,3 +1,21 @@
+# DataM8
+# Copyright (C) 2024-2025 ORAYLIS GmbH
+#
+# This file is part of DataM8.
+#
+# DataM8 is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# DataM8 is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 """
 This module handles all parsing of json files into generator internal objects.
 """
@@ -79,6 +97,10 @@ def __parse_base_entity_type(entity_type: str) -> b.EntityType:
 
 def __parse_solution_file(path: pathlib.Path) -> s.Solution:
     solution = s.Solution.from_json_file(path)
+
+    if solution.schemaVersion not in config.supported_model_versions:
+        raise errors.NotSupportedModelVersion(solution.schemaVersion)
+
     logger.info(
         f"Parsed solution file with schema version: {solution.schemaVersion}",
     )
@@ -189,7 +211,7 @@ def __parse_base_entities(
             match entity_type:
                 case b.EntityType.PROPERTY_VALUES:
                     locator_path = (
-                        pathlib.Path(getattr(entity, "property")) / locator_path
+                        pathlib.Path(getattr(entity, "property")) / locator_path  # noqa: B009
                     )
 
             base_entities[entity_type].append(

@@ -1,5 +1,4 @@
 import pathlib
-import subprocess
 
 import datamodel_code_generator as dcg
 from hatchling.builders.hooks.plugin import interface
@@ -26,6 +25,7 @@ class GenerateDatamodelHook(interface.BuildHookInterface):
             output_datetime_class=dcg.DatetimeClassType.Datetime,
             target_python_version=dcg.PythonVersion.PY_312,
             custom_template_dir=self.__template_dir,
+            formatters=[dcg.Formatter.RUFF_CHECK, dcg.Formatter.RUFF_FORMAT],
             additional_imports=["pathlib.Path"],
             disable_timestamp=True,
             set_default_enum_member=True,
@@ -40,13 +40,12 @@ class GenerateDatamodelHook(interface.BuildHookInterface):
             use_double_quotes=True,
             use_title_as_name=True,
             use_union_operator=True,
+            custom_file_header_path=pathlib.Path("./license_file_header.txt"),
         )
 
-        self.prepend_license_to_files()
+        # self.prepend_license_to_files()
 
         self.convert_crlf_to_lf()
-
-        subprocess.run(args=["ruff", "check", "--fix", self.__output_dir])
 
     def clean(self, versions):
         self.__output_dir.rmdir()
@@ -60,29 +59,3 @@ class GenerateDatamodelHook(interface.BuildHookInterface):
 
             with open(file, "wb") as f:
                 f.write(content)
-
-    def prepend_license_to_files(self):
-        license_text = (
-            '"""\n'
-            "DataM8\n"
-            "Copyright (C) 2024-2025 ORAYLIS GmbH\n\n"
-            "This file is part of DataM8.\n\n"
-            "DataM8 is free software: you can redistribute it and/or modify\n"
-            "it under the terms of the GNU General Public License as published by\n"
-            "the Free Software Foundation, either version 3 of the License, or\n"
-            "(at your option) any later version.\n\n"
-            "DataM8 is distributed in the hope that it will be useful,\n"
-            "but WITHOUT ANY WARRANTY; without even the implied warranty of\n"
-            "MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the\n"
-            "GNU General Public License for more details.\n\n"
-            "You should have received a copy of the GNU General Public License\n"
-            "along with this program. If not, see <https://www.gnu.org/licenses/>.\n"
-            '"""\n\n'
-        )
-
-        for file in self.__output_dir.glob("**/*.py"):
-            with open(file, encoding="utf-8") as f:
-                content = f.read()
-
-            with open(file, "w", encoding="utf-8") as f:
-                f.write(license_text + content)
