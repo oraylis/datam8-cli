@@ -1,24 +1,22 @@
 [project]
 name = "datam8-generator"
-version = "1.0.1"
+version = "2.0.0"
 description = "ORAYLIS DataM8 Generator"
 license = "GPL-3.0"
 requires-python = ">=3.12"
 readme = "README.md"
-authors = [
-    { name = "ORAYLIS Gmbh", email = "DataM8@Oraylis.de" }
-]
+authors = [{ name = "ORAYLIS Gmbh", email = "DataM8@Oraylis.de" }]
 dependencies = [
-    "autopep8==2.3.1",
-    "Jinja2==3.1.6",
-    "jsonschema==4.23.0",
-    "pydantic==2.8.2",
-    "sqlparse==0.5.1",
-    "typer >=0.19.1,<1.0.0",
+  "autopep8==2.3.1",
+  "Jinja2==3.1.6",
+  "jsonschema==4.23.0",
+  "pydantic==2.8.2",
+  "sqlparse==0.5.1",
+  "typer==0.19.1",
 ]
 classifiers = [
-    "Programming Language :: Python :: 3",
-    "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent",
 ]
 
 [project.scripts]
@@ -30,9 +28,10 @@ Issues = "https://github.com/oraylis/datam8/issues"
 
 [dependency-groups]
 dev = [
-    "pytest>=8.3.4",
-    "pytest-cases>=3.8.6",
-    "datamodel-code-generator>=0.33.0",
+  "pytest>=8.3.4",
+  "pytest-cases>=3.8.6",
+  "datamodel-code-generator>=0.33.0",
+  "hatchling == 1.27.0",
 ]
 
 [build-system]
@@ -47,7 +46,7 @@ build-backend = "hatchling.build"
 line-length = 90
 
 [tool.ruff.lint]
-select = ["E4", "E7", "E9", "W", "F", "B", "Q", "UP"]
+select = ["I", "E4", "E7", "E9", "W", "F", "Q", "UP"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -61,10 +60,7 @@ packages = ["src/dm8gen", "src/dm8model"]
 
 [tool.hatch.build.hooks.custom]
 path = "hatch_build_datamodel.py"
-dependencies = [
-  "datamodel-code-generator>=0.33.0",
-  "ruff"
-]
+dependencies = ["datamodel-code-generator>=0.33.0", "ruff"]
 
 ###############
 # tool.pytest #

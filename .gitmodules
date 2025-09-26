@@ -1,4 +1,4 @@
 [submodule "datam8-model"]
 	path = datam8-model
 	url = https://github.com/oraylis/datam8-model.git
-	branch = release/v1.0.0
+	branch = feature/v2
