@@ -24,6 +24,7 @@ from collections.abc import Callable, Sequence
 from importlib import util
 from pathlib import Path
 from types import ModuleType
+from typing import Protocol
 
 import jinja2
 
@@ -33,7 +34,7 @@ from .utils import cache
 logger = utils.start_logger(__name__)
 payload_functions: dict["PayloadOrder", list["PayloadDefinition"]] = {}
 
-type PayloadFunction = Callable[[model.Model, cache.Cache], Sequence[Payload]]
+type PayloadFunction = Callable[[model.Model, cache.Cache], Sequence[IPayload]]
 type PayloadOrder = int
 
 
@@ -114,7 +115,7 @@ async def render_payload(
     logger.debug(f"Render payload: {payload._function.__name__}")
 
     try:
-        payloads: Sequence[Payload] = payload._function(model, cache)
+        payloads: Sequence[IPayload] = payload._function(model, cache)
     except Exception as err:
         logger.error(
             "payload '{payload}' threw errors during payload creation: {error_type} - {msg}".format(  # noqa: UP032
@@ -138,7 +139,7 @@ async def render_payload(
         return err
 
     coros = [
-        render_template(payload.name, _p.data, template, _p.output_path)
+        render_template(payload.name, _p.get_data(), template, _p.get_output_path())
         for _p in payloads
     ]
     results = [
@@ -180,9 +181,20 @@ class PayloadDefinition:
 
 
 @dataclasses.dataclass
-class Payload:
+class BasePayload:
     data: object
     output_path: Path
+
+    def get_data(self) -> object:
+        return self.data
+
+    def get_output_path(self) -> Path:
+        return self.output_path
+
+
+class IPayload(Protocol):
+    def get_data(self) -> object: ...
+    def get_output_path(self) -> Path: ...
 
 
 class PayloadRegisteredMultipleTimesError(Exception):
