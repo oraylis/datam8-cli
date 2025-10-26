@@ -13,6 +13,7 @@ The DataM8 documentation is also centrally stored at the following place
 https://github.com/oraylis/datam8/tree/main/docs
 
 The specific Generator documentation is located [here](https://github.com/oraylis/datam8/tree/main/docs/generator).
+- For automation agent guidance, see [`AGENTS.md`](AGENTS.md).
 
 ## Local development
 
