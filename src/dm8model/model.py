@@ -311,6 +311,7 @@ class ExternalModelSource(BaseModel):
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
     dataSource: str
+    sourceAlias: str | None = None
     sourceLocation: str
     properties: Sequence[property.PropertyReference] | None = None
     mapping: Sequence[SourceAttributeMapping] | None = None

@@ -70,7 +70,11 @@ def register_payload(
 @utils.get_logger
 def load_modules(module_path: Path) -> dict[str, ModuleType]:
     modules: dict[str, ModuleType] = {}
-    module_files = list(module_path.glob("**/*.py"))
+    module_path_str = str(module_path)
+    if module_path_str not in sys.path:
+        sys.path.insert(0, module_path_str)
+
+    module_files = sorted(module_path.glob("**/*.py"))
 
     for i in range(0, len(module_files)):
         module_name = (

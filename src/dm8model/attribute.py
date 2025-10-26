@@ -42,6 +42,12 @@ class HistoryType(Enum):
     SCD4 = "SCD4"
 
 
+class ExpressionLanguage(Enum):
+    SQL = "sql"
+    DAX = "dax"
+    PYTHON = "python"
+
+
 class HasUnit(Enum):
     """
     Defines if an attribute should define a unit, e.g. `Physical` for weight or `Currency` for price.
@@ -121,6 +127,8 @@ class Attribute(BaseModel):
     """
     Defines how an attribute in a slowly chaning dimension should behave.
     """
+    expression: str | None = None
+    expressionLanguage: ExpressionLanguage | str | None = ExpressionLanguage.SQL
     unit: str | None = None
     refactorNames: Sequence[str] | None = None
     dateModified: datetime | None = None
