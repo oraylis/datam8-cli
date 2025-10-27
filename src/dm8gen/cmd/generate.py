@@ -29,6 +29,7 @@ from dm8gen.utils.cache import Cache
 from dm8model.solution import GeneratorTarget
 
 from .. import config, factory, generate, opts, utils
+from ..utils import importer
 
 app = typer.Typer()
 
@@ -68,12 +69,15 @@ def command(
 
         config.template_path = generator_target.sourcePath
         config.output_path = generator_target.outputPath
-        output_path_abs = config.solution_folder_path / config.output_path
-        module_path = (
+        config.module_path = (
             config.solution_folder_path / generator_target.sourcePath / "__modules"
         )
+        output_path_abs = config.solution_folder_path / config.output_path
 
-        _ = generate.load_modules(module_path)
+        # NOTE: python modules are made available for import but for the register decorater
+        # to work they need to be actively imported/loaded, which is done with the second line
+        importer.enable_target_modules()
+        _ = importer.load_modules(config.module_path)
 
         if clean_output and output_path_abs.exists():
             logger.warning("Cleaning Output...")

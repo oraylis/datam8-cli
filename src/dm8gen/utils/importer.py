@@ -1,0 +1,85 @@
+# DataM8
+# Copyright (C) 2024-2025 ORAYLIS GmbH
+#
+# This file is part of DataM8.
+#
+# DataM8 is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# DataM8 is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+import logging
+import pathlib
+import sys
+from importlib import machinery, util
+from types import ModuleType
+
+from .. import config, generate, utils
+
+logger = logging.getLogger(__name__)
+
+
+def enable_target_modules() -> None:
+    logger.info("Enable importing from target __modules")
+    sys.meta_path.append(TargetModuleFinder)
+
+
+@utils.get_logger
+def load_modules(module_path: pathlib.Path) -> dict[str, ModuleType]:
+    modules: dict[str, ModuleType] = {}
+    module_files = list(module_path.glob("**/*.py"))
+
+    for i in range(0, len(module_files)):
+        module_name = (
+            module_files[i].relative_to(module_path).as_posix().removesuffix(".py")
+        )
+        try:
+            modules[module_name] = load_module(module_files[i], module_name)
+        except generate.PayloadRegisteredMultipleTimesError as err:
+            logger.error(f"{err}\n{module_files[i]}")
+            sys.exit(1)
+
+    logger.info(
+        f"Loaded {len(modules)} modules with {len(generate.payload_functions)} payload(s)"
+    )
+
+    return modules
+
+
+def load_module(path: pathlib.Path, module_name: str) -> ModuleType:
+    logger.debug(f"Loaded module {path.relative_to(config.solution_folder_path)}")
+
+    spec = util.spec_from_file_location(module_name, path)
+    if spec is None:
+        # TODO: raise a better error
+        raise Exception("spec is none")
+
+    module = util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    loader = spec.loader
+
+    if loader is None:
+        # TODO: raise a better error
+        raise Exception("loader is none")
+
+    loader.exec_module(module)
+
+    return module
+
+
+class TargetModuleFinder(machinery.PathFinder):
+    _path = []
+
+    @classmethod
+    def find_spec(cls, fullname: str, path=None, target=None):
+        _path = [config.module_path.as_posix()]
+
+        return super().find_spec(fullname, _path, target)
