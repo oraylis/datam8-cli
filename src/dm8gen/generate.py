@@ -19,11 +19,8 @@
 import asyncio
 import dataclasses
 import os
-import sys
 from collections.abc import Callable, Sequence
-from importlib import util
 from pathlib import Path
-from types import ModuleType
 from typing import Protocol
 
 import jinja2
@@ -67,48 +64,8 @@ def register_payload(
     return register_payload
 
 
-@utils.get_logger
-def load_modules(module_path: Path) -> dict[str, ModuleType]:
-    modules: dict[str, ModuleType] = {}
-    module_files = list(module_path.glob("**/*.py"))
-
-    for i in range(0, len(module_files)):
-        module_name = (
-            module_files[i].relative_to(module_path).as_posix().removesuffix(".py")
-        )
-        try:
-            modules[module_name] = load_module(module_files[i], module_name)
-        except PayloadRegisteredMultipleTimesError as err:
-            logger.error(f"{err}\n{module_files[i]}")
-            sys.exit(1)
-
-    logger.info(f"Loaded {len(modules)} modules with {len(payload_functions)} payload(s)")
-
-    return modules
-
-
-def load_module(path: Path, module_name: str) -> ModuleType:
-    logger.debug(f"Loaded module {path.relative_to(config.solution_folder_path)}")
-
-    spec = util.spec_from_file_location(module_name, path)
-    if spec is None:
-        # TODO: raise a better error
-        raise Exception("spec is none")
-
-    module = util.module_from_spec(spec)
-    sys.modules[module_name] = module
-    loader = spec.loader
-
-    if loader is None:
-        # TODO: raise a better error
-        raise Exception("loader is none")
-
-    loader.exec_module(module)
-
-    return module
-
-
 # @utils.print_progress_async("Rendering templates...")
+@utils.get_logger
 async def render_payload(
     payload: "PayloadDefinition", model: model.Model, cache: cache.Cache
 ) -> Exception | None:
