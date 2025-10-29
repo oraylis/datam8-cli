@@ -167,6 +167,47 @@ class TransformationFunction(BaseModel):
         return model
 
 
+class ModelRelationshipAttribute(BaseModel):
+    """
+    Single attribute mapping from source to target.
+    """
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    sourceName: Annotated[str, Field(min_length=1)]
+    targetName: Annotated[str, Field(min_length=1)]
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> ModelRelationshipAttribute:
+        return ModelRelationshipAttribute.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> ModelRelationshipAttribute:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        ModelRelationshipAttribute
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
+        with open(path) as file:
+            model = ModelRelationshipAttribute.model_validate_json(file.read())
+
+        return model
+
+
 class SourceAttributeMapping(BaseModel):
     """
     Map an attribute in the source to one in the current entity. May optionally contain an explicit source data type.
@@ -258,6 +299,47 @@ class ModelTransformation(BaseModel):
         """
         with open(path) as file:
             model = ModelTransformation.model_validate_json(file.read())
+
+        return model
+
+
+class ModelRelationship(BaseModel):
+    """
+    Maps attributes to a target location.
+    """
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    targetLocation: int
+    attributes: Annotated[Sequence[ModelRelationshipAttribute], Field(min_length=1)]
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> ModelRelationship:
+        return ModelRelationship.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> ModelRelationship:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        ModelRelationship
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
+        with open(path) as file:
+            model = ModelRelationship.model_validate_json(file.read())
 
         return model
 
@@ -368,6 +450,10 @@ class ModelEntity(BaseModel):
     transformations: Sequence[ModelTransformation]
     """
     List of transformations that will be executed in order of stepNo.
+    """
+    relationships: Sequence[ModelRelationship]
+    """
+    List of entity relationships.
     """
 
     def to_dict(self) -> dict:
