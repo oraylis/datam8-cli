@@ -16,8 +16,9 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Annotated, Any, Self
+from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field, SkipValidation
 
@@ -32,8 +33,8 @@ from dm8model import property as p
 from dm8model import solution as s
 from dm8model import zone as z
 
+from . import factory, utils
 from . import model_exceptions as errors
-from . import utils
 
 logger = utils.start_logger(__name__)
 
@@ -122,6 +123,9 @@ class Locator(m.Locator):
             other = Locator.from_path(other)
         elif not isinstance(other, Locator):
             raise TypeError(f"Cannot compare object of type {type(object)} with Locator")
+
+        if self == other:
+            return True
 
         # basic format checks before comparison the actual folder paths
         if (
@@ -259,18 +263,26 @@ class EntityWrapper[T](BaseModel):
     """
     Marks if references to other entities, e.g. Properties have  been resolved.
     """
-    properties: dict[PropertyReference, Self] = {}
-    """
-    Additional properties than are dynamically defined within the solution.
-    Contains actual properties based on the property references with the
-    `entity.properties` attribute.
-    """
+    _properties: dict[Locator, p.PropertyValue] = {}
+    "Use `properties` instead"
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, EntityWrapper):
             return False
 
         return self.locator == other.locator
+
+    @property
+    def properties(self) -> dict[Locator, p.PropertyValue]:
+        """
+        Additional properties than are dynamically defined within the solution.
+        Contains actual properties based on the property references with the
+        `entity.properties` attribute.
+        """
+        if not self.resolved:
+            factory._resolve_wrapper_properties(self)
+
+        return self._properties
 
     def has_property(self, property_name: str) -> bool:
         """
@@ -292,10 +304,10 @@ class EntityWrapper[T](BaseModel):
             If the property references within the entity have not been resolved yet.
         """
         if not self.resolved:
-            raise errors.PropertiesNotResolvedError(self.locator)
+            factory._resolve_wrapper_properties(self)
 
         for pr in self.properties:
-            if pr.property == property_name:
+            if self.properties[pr].property == property_name:
                 return True
 
         return False
@@ -330,6 +342,12 @@ class Model:
 
         for k, v in kwargs.items():
             setattr(self, k, v)
+
+    def get_entity_iterator(self) -> Iterator[EntityWrapper]:
+        for entity_type in b.EntityType:
+            entities: EntityDict = getattr(self, entity_type.value)
+            for _, wrapper in entities.items():
+                yield wrapper
 
     def get_generator_target(self, name: str) -> s.GeneratorTarget:
         for target in self.solution.generatorTargets:

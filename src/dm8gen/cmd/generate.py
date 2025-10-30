@@ -44,10 +44,12 @@ def command(
     clean_output: opts.CleanOutput = False,
     payloads: opts.Payload = [],
     generate_all: opts.AllTargets = False,
+    lazy: opts.Lazy = False,
 ):
     """Generate a jinja2 template configured in the solution file."""
     config.log_level = log_level
     config.solution_path = solution_path
+    config.lazy = lazy
     config.solution_folder_path = solution_path.parent.absolute()
 
     model = factory.create_model()

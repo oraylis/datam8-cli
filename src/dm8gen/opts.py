@@ -31,6 +31,18 @@ class LogLevels(Enum):
     CRITICAL = "critical"
 
 
+Lazy = Annotated[
+    bool,
+    typer.Option(
+        "--lazy",
+        help=(
+            "Resolve properties only when access. "
+            "Use with care as problems can occure when resolving properties in parallel."
+        ),
+    ),
+]
+
+
 LogLevel = Annotated[
     LogLevels,
     typer.Option(
