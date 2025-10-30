@@ -36,6 +36,7 @@ def command(
 ):
     """Validate solution model."""
     config.log_level = log_level
+    config.lazy = False
     config.solution_path = solution_path
     config.solution_folder_path = solution_path.parent.absolute()
 

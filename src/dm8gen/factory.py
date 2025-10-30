@@ -19,18 +19,22 @@
 import asyncio
 import pathlib
 import sys
+from collections.abc import Sequence
+from concurrent import futures
 
 from pydantic_core import ValidationError
 
-from . import config, model_exceptions, parser, parser_exceptions, utils
-from .model import Model
+from dm8model.property import PropertyReference
+
+from . import config, model, model_exceptions, parser, parser_exceptions, utils
 
 logger = utils.start_logger(__name__)
 
-_model: Model
+_model: model.Model
 
 
-def create_model(solution_path: pathlib.Path | None = None) -> Model:
+@utils.get_logger
+def create_model(solution_path: pathlib.Path | None = None) -> model.Model:
     global _model
 
     path = solution_path or config.solution_path
@@ -41,8 +45,9 @@ def create_model(solution_path: pathlib.Path | None = None) -> Model:
 
     try:
         _model = asyncio.run(parser.parse_full_solution_async(path))
-        # if not config.lazy:
-        #     __resolve_model_properties(_model)
+
+        if not config.lazy:
+            _resolve_model_properties(_model)
 
     except ValidationError as err:
         logger.error(err)
@@ -66,72 +71,39 @@ def create_model(solution_path: pathlib.Path | None = None) -> Model:
     return _model
 
 
-# def __resolve_wrapper_properties(
-#     model: Model, wrapper: EntityWrapper[BaseEntityType]
-# ) -> None:
-#     for ref in wrapper.entity.properties:
-#         result_set = [
-#             pv
-#             for pv in model.propertyValues.values()
-#             if pv.entity.name == ref.value
-#             and pv.entity.property == ref.property
-#         ]
-#
-#         if len(result_set) != 1:
-#             raise parser.ModelParseException(
-#                 msg=f"PropertyReference could not be resolved to one PropertyValue {ref}"
-#             )
-#
-#         wrapped_property_value = result_set.pop()
-#
-#         if wrapped_property_value.entity.properties:
-#             __resolve_wrapper_properties(model, wrapped_property_value)
-#
-#         logger.info(wrapped_property_value)
-#
-#         wrapper.properties[PropertyReference.from_model_ref(ref)] = (
-#             wrapped_property_value
-#         )
-#
-#
-# def __resolve_model_properties(model: Model) -> None:
-#     for folder in model.folders.values():
-#         if folder.entity.properties is None:
-#             continue
-#
-#         __resolve_wrapper_properties(model, folder)
+def _resolve_model_properties(_model: model.Model) -> None:
+    executor = futures.ThreadPoolExecutor()
 
-# def __get_single_property_value(
-#     self, ref: p.PropertyReference
-# ) -> p.PropertyValue:
-#     results = [
-#         pv
-#         for pv in self.propertyValues.values()
-#         if pv.model_object.name == ref.value
-#         and pv.model_object.property == ref.property
-#     ]
+    executor.map(_resolve_wrapper_properties, _model.get_entity_iterator())
 
-#     if len(results) != 1:
-#         raise Exception(
-#             f"The requested property value is not or multiple times defined {ref}"
-#         )
 
-#     return results.pop().model_object
+def _resolve_wrapper_properties(wrapper: model.EntityWrapper) -> None:
+    entity = wrapper.entity
+    if hasattr(entity, "properties"):
+        if entity.properties is not None:
+            _resolve_properties(wrapper, entity.properties)
 
-# def get_nested_properties(
-#     self, reference: p.PropertyReference
-# ) -> Sequence[p.PropertyValue]:
-#     return []
 
-# # def get_property(self, ref: p.PropertyReference) -> Sequence[p.PropertyValue]
+def _resolve_properties(
+    wrapper: model.EntityWrapper, properties: Sequence[PropertyReference]
+) -> None:
+    if len(properties) == 0:
+        return
 
-# def get_property_values(
-#     self, references: Sequence[p.PropertyReference]
-# ) -> Sequence[p.PropertyValue]:
-#     result_set: Sequence[p.PropertyValue] = []
+    global _model
+    _properties = [
+        model.PropertyReference(property=pr.property, value=pr.value) for pr in properties
+    ]
 
-#     for ref in references:
-#         result_set.append(self.__get_single_property_value(ref))
-#         self.get_nested_properties(ref)
+    logger.debug(
+        "%s - %s", wrapper.locator, [f"{p.property}:{p.value}" for p in properties]
+    )
 
-#     return result_set
+    for ref in _properties:
+        property_value = _model.get_property_value(ref.property, ref.value)
+        wrapper._properties[property_value.locator] = property_value.entity
+
+        if property_value.entity.properties:
+            _resolve_properties(wrapper, property_value.entity.properties)
+
+    wrapper.resolved = True
