@@ -55,8 +55,17 @@ SolutionPath = Annotated[
 GeneratorTarget = Annotated[
     str,
     typer.Argument(
-        help="Target name as defined in .dm8gs file",
+        help="Target name as defined in .dm8s file",
         envvar="DATAM8_GENERATOR_TARGET",
+    ),
+]
+
+AllTargets = Annotated[
+    bool,
+    typer.Option(
+        "--all",
+        help="Generates all targets in sequence",
+        envvar="DATAM8_GENERATE_ALL_TARGETS",
     ),
 ]
 

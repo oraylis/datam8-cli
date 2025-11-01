@@ -18,7 +18,7 @@ class CasesLocator:
             "dataTypes/string",
             "properties/jobs",
             "zones/raw",
-            "folders/sales",
+            "folders/020-Core/Sales",
         ],
     )
     def case_locator_valid(self, locator):
