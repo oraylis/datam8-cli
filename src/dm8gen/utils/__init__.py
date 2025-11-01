@@ -60,6 +60,13 @@ def delete_path(path: Path, recursive: bool = False) -> None:
     path.rmdir()
 
 
+def mkdir(path: Path, recursive: bool = False) -> None:
+    if not path.parent.exists() and recursive:
+        mkdir(path.parent, recursive=recursive)
+
+    os.mkdir(path)
+
+
 def print_progress_async(msg: str) -> Callable:
     """
     Decorator to print a progress spinner with a given message while the function executes.
