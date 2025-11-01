@@ -213,6 +213,8 @@ def __parse_base_entities(
                     locator_path = (
                         pathlib.Path(getattr(entity, "property")) / locator_path  # noqa: B009
                     )
+                case b.EntityType.FOLDERS:
+                    locator_path = rel_path.parents[1] / locator_path
 
             base_entities[entity_type].append(
                 wrap_base_entity(entity_type, locator_path, entity)

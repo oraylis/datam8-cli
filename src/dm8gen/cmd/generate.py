@@ -17,7 +17,6 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 import asyncio
-import os
 import sys
 from concurrent import futures
 
@@ -44,6 +43,7 @@ def command(
     log_level: opts.LogLevel = opts.LogLevels.WARNING,
     clean_output: opts.CleanOutput = False,
     payloads: opts.Payload = [],
+    generate_all: opts.AllTargets = False,
 ):
     """Generate a jinja2 template configured in the solution file."""
     config.log_level = log_level
@@ -52,6 +52,9 @@ def command(
 
     model = factory.create_model()
     cache = Cache()
+
+    if generate_all:
+        logger.warning("The --all Option is set, but will currently be ignored")
 
     try:
         if target == "none":
@@ -84,7 +87,7 @@ def command(
             utils.delete_path(output_path_abs, recursive=True)
 
         if not output_path_abs.exists():
-            os.mkdir(output_path_abs)
+            utils.mkdir(output_path_abs, recursive=True)
 
         selected_payloads = {
             order: [
