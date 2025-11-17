@@ -35,10 +35,12 @@ Utility Module to make working with datam8 models more comfortable in jinja2 tem
 * ColorFormatter
 """
 
+import functools
 import logging
 import os
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
@@ -67,7 +69,7 @@ def mkdir(path: Path, recursive: bool = False) -> None:
     os.mkdir(path)
 
 
-def print_progress_async(msg: str) -> Callable:
+def print_progress_async(msg: str):
     """
     Decorator to print a progress spinner with a given message while the function executes.
 
@@ -79,7 +81,8 @@ def print_progress_async(msg: str) -> Callable:
         The message to show behind the spinner while the function runs.
     """
 
-    def decorator_print_progress_async(func: Callable) -> Callable:
+    def decorator_print_progress_async(func):
+        @functools.wraps(func)
         async def wrapper(*args, **kwargs) -> Callable:
             result = func(*args, **kwargs)
 
@@ -102,7 +105,7 @@ def print_progress_async(msg: str) -> Callable:
     return decorator_print_progress_async
 
 
-def get_logger(func: Callable) -> Callable:
+def get_logger(func):
     """
     Descorator to refresh the logger object within a package, otherwise
     settings like log level are not updated based on cli input.
@@ -113,7 +116,8 @@ def get_logger(func: Callable) -> Callable:
         The function to decorate.
     """
 
-    def wrapper(*args, **kwargs) -> Callable:
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs) -> Callable[..., Any]:
         start_logger(func.__module__)
         return func(*args, **kwargs)
 

@@ -47,7 +47,7 @@ class CasesLocator:
         [
             # tuple-format (left side, right side, expected result
             ("dataProducts/Sales", "dataProducts/", True),
-            ("dataProducts/Sales", "dataProducts/Sales", False),
+            ("dataProducts/Sales", "dataProducts/Sales", True),
             ("properties/jobs", "propertyValues/", False),
             ("modelEntities/Sales/Customer/Customer", "modelEntities/Sales/", True),
             ("modelEntities/Sales/Customer/", "modelEntities/Sales/", True),

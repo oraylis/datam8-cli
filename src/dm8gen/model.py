@@ -16,9 +16,9 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Self
 
 from pydantic import BaseModel, ConfigDict, Field, SkipValidation
 
@@ -33,8 +33,8 @@ from dm8model import property as p
 from dm8model import solution as s
 from dm8model import zone as z
 
-from . import factory, utils
 from . import model_exceptions as errors
+from . import utils
 
 logger = utils.start_logger(__name__)
 
@@ -278,9 +278,14 @@ class EntityWrapper[T](BaseModel):
         Additional properties than are dynamically defined within the solution.
         Contains actual properties based on the property references with the
         `entity.properties` attribute.
+
+        Raises
+        ------
+        PropertiesNotResolvedError
+            If the property references within the entity have not been resolved yet.
         """
         if not self.resolved:
-            factory._resolve_wrapper_properties(self)
+            raise errors.PropertiesNotResolvedError(self.locator)
 
         return self._properties
 
@@ -297,20 +302,55 @@ class EntityWrapper[T](BaseModel):
         -------
         bool
             If true the property name is assigned.
-
-        Raises
-        ------
-        PropertiesNotResolvedError
-            If the property references within the entity have not been resolved yet.
         """
-        if not self.resolved:
-            factory._resolve_wrapper_properties(self)
-
         for pr in self.properties:
             if self.properties[pr].property == property_name:
                 return True
 
         return False
+
+    def resolve(self, model: "Model") -> Self:
+        if self.resolved:
+            logger.warning(
+                "Tried resolving an already resolved entity, this should not happend and indicates a bug"
+            )
+            return self
+
+        if not hasattr(self.entity, "properties"):
+            self.resolved = True
+            return self
+
+        property_references: list[p.PropertyReference] | None = getattr(
+            self.entity, "properties"
+        )
+
+        if property_references is not None:
+            self._resolve_properties(model, property_references)
+
+        self.resolved = True
+        return self
+
+    def _resolve_properties(
+        self, model: "Model", properties: Sequence[p.PropertyReference]
+    ) -> None:
+        if len(properties) == 0:
+            return
+
+        converted_properties = [PropertyReference.from_model_ref(pr) for pr in properties]
+
+        logger.debug(
+            "%s - %s",
+            self.locator,
+            [f"{p.property}:{p.value}" for p in converted_properties],
+        )
+
+        for ref in converted_properties:
+            property_value = model.get_property_value(ref.property, ref.value)
+            self._properties[property_value.locator] = property_value.entity
+
+            # NOTE: break recursion
+            if property_value.entity.properties:
+                self._resolve_properties(model, property_value.entity.properties)
 
 
 class Model:
@@ -343,10 +383,17 @@ class Model:
         for k, v in kwargs.items():
             setattr(self, k, v)
 
-    def get_entity_iterator(self) -> Iterator[EntityWrapper]:
+    def resolve(self) -> None:
+        "Resolve all entities by iterating over them."
+        for _ in self.get_entity_iterator():
+            pass
+
+    def get_entity_iterator(self) -> Iterator[EntityWrapper[Any]]:
         for entity_type in b.EntityType:
             entities: EntityDict = getattr(self, entity_type.value)
             for _, wrapper in entities.items():
+                if not wrapper.resolved:
+                    wrapper.resolve(self)
                 yield wrapper
 
     def get_generator_target(self, name: str) -> s.GeneratorTarget:
@@ -364,7 +411,12 @@ class Model:
         if locator not in entity_dict:
             raise errors.EntityNotFoundError(f"{entity_type} {name}")
 
-        return entity_dict[locator]
+        entity = entity_dict[locator]
+
+        if not entity.resolved:
+            entity.resolve(self)
+
+        return entity
 
     def get_zone(self, name: str) -> EntityWrapper[z.Zone]:
         """Get a zone by name."""
@@ -439,7 +491,12 @@ class Model:
         if len(property_values) != 1:
             raise errors.EntityNotFoundError(f"property value {property}/{name}")
 
-        return property_values.pop()
+        property_value = property_values.pop()
+
+        if not property_value.resolved:
+            return property_value.resolve(self)
+
+        return property_value
 
     def get_folder(self, name: str) -> EntityWrapper[f.Folder]:
         """Get a folder by name."""
@@ -466,11 +523,13 @@ class Model:
         """
         for entity in self.modelEntities.values():
             if entity.entity.id == id:
+                if not entity.resolved:
+                    return entity.resolve(self)
                 return entity
 
         raise errors.EntityNotFoundError(f"Model Id {id}")
 
-    def get_entity_by_locator(self, locator: str | Locator) -> EntityWrapper:
+    def get_entity_by_locator(self, locator: str | Locator) -> EntityWrapper[Any]:
         """
         Retrieve a single entity by its locator.
 
@@ -488,10 +547,16 @@ class Model:
             Of an unkown entity type. Needs to be type hinted manually if required.
         """
         locator = _ensure_locator(locator)
+        wrapper: EntityWrapper[b.BaseEntityType] = getattr(self, locator.entityType)[
+            locator
+        ]
 
-        return getattr(self, locator.entityType)[locator]
+        if not wrapper.resolved:
+            wrapper.resolve(self)
 
-    def get_entities(self, search_locator: str | Locator) -> list[EntityWrapper]:
+        return wrapper
+
+    def get_entities(self, search_locator: str | Locator) -> list[EntityWrapper[Any]]:
         """
         Retrieve a list of EntityWrappers that are hierarchically underneath the
         given locator.
@@ -513,9 +578,17 @@ class Model:
         if not child_locators:
             raise Exception("No entites found")
 
-        entities: EntityDict = getattr(self, search_locator.entityType)
+        entity_dict: EntityDict[b.BaseEntityType] = getattr(
+            self, search_locator.entityType
+        )
+        entities = [
+            entity_dict[_loc]
+            if entity_dict[_loc].resolved
+            else entity_dict[_loc].resolve(self)
+            for _loc in child_locators
+        ]
 
-        return [entities[_loc] for _loc in child_locators]
+        return entities
 
     def get_child_locators(self, search_locator: str | Locator) -> list[Locator]:
         """

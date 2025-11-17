@@ -19,12 +19,8 @@
 import asyncio
 import pathlib
 import sys
-from collections.abc import Sequence
-from concurrent import futures
 
 from pydantic_core import ValidationError
-
-from dm8model.property import PropertyReference
 
 from . import config, model, model_exceptions, parser, parser_exceptions, utils
 
@@ -47,7 +43,7 @@ def create_model(solution_path: pathlib.Path | None = None) -> model.Model:
         _model = asyncio.run(parser.parse_full_solution_async(path))
 
         if not config.lazy:
-            _resolve_model_properties(_model)
+            _model.resolve()
 
     except ValidationError as err:
         logger.error(err)
@@ -69,41 +65,3 @@ def create_model(solution_path: pathlib.Path | None = None) -> model.Model:
     # TODO: reference resolution
 
     return _model
-
-
-def _resolve_model_properties(_model: model.Model) -> None:
-    executor = futures.ThreadPoolExecutor()
-
-    executor.map(_resolve_wrapper_properties, _model.get_entity_iterator())
-
-
-def _resolve_wrapper_properties(wrapper: model.EntityWrapper) -> None:
-    entity = wrapper.entity
-    if hasattr(entity, "properties"):
-        if entity.properties is not None:
-            _resolve_properties(wrapper, entity.properties)
-
-
-def _resolve_properties(
-    wrapper: model.EntityWrapper, properties: Sequence[PropertyReference]
-) -> None:
-    if len(properties) == 0:
-        return
-
-    global _model
-    _properties = [
-        model.PropertyReference(property=pr.property, value=pr.value) for pr in properties
-    ]
-
-    logger.debug(
-        "%s - %s", wrapper.locator, [f"{p.property}:{p.value}" for p in properties]
-    )
-
-    for ref in _properties:
-        property_value = _model.get_property_value(ref.property, ref.value)
-        wrapper._properties[property_value.locator] = property_value.entity
-
-        if property_value.entity.properties:
-            _resolve_properties(wrapper, property_value.entity.properties)
-
-    wrapper.resolved = True
