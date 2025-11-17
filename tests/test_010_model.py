@@ -32,7 +32,7 @@ def test_lookup_entity__valid(locator: str, model: Model):
     assert isinstance(entity, EntityWrapper), (
         f"Returned type is not `EntityWrapper` but {type(entity)}"
     )
-    assert not entity.resolved, "Resolved attribute should be false after initialization"
+    assert entity.resolved, "Entity properties have not been resolved."
 
 
 @pytest_cases.parametrize_with_cases("locator", cases=CasesLocator, glob="*_invalid")
@@ -43,8 +43,9 @@ def test_lookup_entity__invalid(locator: str, model: Model):
         model.get_entity_by_locator(locator)
 
 
-def test_has_property(model: Model):
-    entity = model.get_entity_by_locator("dataProducts/Sales")
+def test_has_property__raises(model_lazy: Model):
+    locator = Locator.from_path("dataProducts/Sales")
+    entity = model_lazy.dataProducts[locator]
 
     with pytest.raises(errors.PropertiesNotResolvedError):
         entity.has_property("test")

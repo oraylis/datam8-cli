@@ -7,7 +7,7 @@ import pytest
 from pytest_cases import fixture
 
 from dm8gen import config as dm8gen_config
-from dm8gen.model import Model
+from dm8gen import model as dm8gen_model
 from dm8gen.parser import parse_full_solution_async
 
 solution_file_path_key = pytest.StashKey[pathlib.Path]()
@@ -50,6 +50,8 @@ class TestConfig:
 def config(request: pytest.FixtureRequest) -> TestConfig:
     """DataM8 Solution configuration."""
 
+    dm8gen_config.lazy = True
+
     return TestConfig(
         solution_file_path=request.config.stash[solution_file_path_key],
         log_level=request.config.stash[log_level_key],
@@ -58,11 +60,24 @@ def config(request: pytest.FixtureRequest) -> TestConfig:
 
 
 @fixture
-def model(config: TestConfig) -> Model:
-    """Initialized Model object."""
+def model_lazy(config: TestConfig) -> dm8gen_model.Model:
+    "Initialized Model object."
 
     dm8gen_config.solution_folder_path = config.solution_file_path.parent
-    return asyncio.run(parse_full_solution_async(config.solution_file_path))
+    model = asyncio.run(parse_full_solution_async(config.solution_file_path))
+    return model
+
+
+@fixture
+def model(config: TestConfig) -> dm8gen_model.Model:
+    "Initialized a lazy Model object."
+
+    dm8gen_config.solution_folder_path = config.solution_file_path.parent
+    model = asyncio.run(parse_full_solution_async(config.solution_file_path))
+
+    model.resolve()
+
+    return model
 
 
 def __get_variable(
