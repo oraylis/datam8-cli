@@ -58,9 +58,6 @@ quote-style = "double"
 [tool.hatch.build.targets.wheel]
 packages = ["src/dm8gen", "src/dm8model"]
 
-[tool.hatch.build.targets.sdist]
-exclude = ["off"]
-
 [tool.hatch.build.hooks.custom]
 path = "hatch_build_datamodel.py"
 dependencies = ["datamodel-code-generator>=0.33.0", "ruff"]
