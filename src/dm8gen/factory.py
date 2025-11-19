@@ -22,6 +22,9 @@ import sys
 
 from pydantic_core import ValidationError
 
+from dm8model import folder as f
+from dm8model.property import PropertyReference, PropertyValue
+
 from . import config, model, model_exceptions, parser, parser_exceptions, utils
 
 logger = utils.start_logger(__name__)
@@ -42,9 +45,14 @@ def create_model(solution_path: pathlib.Path | None = None) -> model.Model:
     try:
         _model = asyncio.run(parser.parse_full_solution_async(path))
 
+        create_undefined_folders(_model)
+
         if not config.lazy:
             _model.resolve()
 
+    except RecursionError as err:
+        logger.error(err)
+        sys.exit(1)
     except ValidationError as err:
         logger.error(err)
         sys.exit(1)
@@ -62,6 +70,79 @@ def create_model(solution_path: pathlib.Path | None = None) -> model.Model:
         logger.error(err)
         sys.exit(1)
 
-    # TODO: reference resolution
-
     return _model
+
+
+def resolve_property(
+    model: model.Model, reference: PropertyReference
+) -> list[PropertyValue]:
+    """
+    Lookup and Resolve a single PropertyReference. Useful to resolve properties that are not
+    set directly on the entity, e.g. a property on an attribute.
+
+    Parameters
+    ----------
+    model : `Model`
+        The DataM8 Model that will be used to lookup the PropertyReference
+    reference : `PropertyReference`
+        The PropertyReference, i.e. property-value-pair, that will be recursively resolved
+        with the provided model.
+
+    Returns
+    -------
+    list[PropertyValue]
+        A list of all properties that are related to the provided reference. The PropertyValue
+        includes all custom attributes.
+    """
+    properties: list[PropertyValue] = []
+
+    for pv in model.propertyValues.values():
+        if (pv.entity.property, pv.entity.name) != (reference.property, reference.value):
+            continue
+
+        properties.append(pv.entity)
+
+        for nested_ref in pv.entity.properties or []:
+            properties.extend(resolve_property(model, nested_ref))
+
+        # early exit of loop if match was found
+        break
+
+    return properties
+
+
+def create_undefined_folders(_model: model.Model):
+    """
+    Goes through all model entities and adds folder wrappers for every parent locator
+    of an entity that does not exist yet.
+
+    Folder IDs are simply sequential increased during runtime.
+
+    Parameters
+    ----------
+    _model : `model.Model`
+        A fully parsed DataM8 folder. Can be run pre or post property resolution.
+    """
+    next_id = max(*[w.entity.id for w in _model.folders.values()]) + 1
+
+    undefined_folders: model.EntityDict[f.Folder] = {}
+
+    for wrapper in _model.get_entity_iterator():
+        loc = wrapper.locator
+        for ploc in loc.parents:
+            if ploc in _model.folders or ploc.entityName is None:
+                continue
+
+            undefined_folders[ploc] = model.EntityWrapper(
+                locator=ploc,
+                entity=f.Folder(
+                    id=next_id,
+                    name=ploc.entityName,
+                ),
+            )
+
+            next_id += 1
+
+    for loc in undefined_folders:
+        if loc not in _model.folders:
+            _model.folders[loc] = undefined_folders[loc]
