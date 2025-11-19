@@ -167,9 +167,9 @@ class TransformationFunction(BaseModel):
         return model
 
 
-class ModelRelationshipAttribute(BaseModel):
+class ModelAttributeMapping(BaseModel):
     """
-    Single attribute mapping from source to target.
+    Single attribute mapping.
     """
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
@@ -180,11 +180,11 @@ class ModelRelationshipAttribute(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> ModelRelationshipAttribute:
-        return ModelRelationshipAttribute.model_validate(obj, from_attributes=False)
+    def from_dict(obj) -> ModelAttributeMapping:
+        return ModelAttributeMapping.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> ModelRelationshipAttribute:
+    def from_json_file(path: Path) -> ModelAttributeMapping:
         """Loads ands validates a json file from the given path.
 
         Parameters
@@ -194,7 +194,7 @@ class ModelRelationshipAttribute(BaseModel):
 
         Returns
         -------
-        ModelRelationshipAttribute
+        ModelAttributeMapping
             Instantiated and validated pydantic model
 
         Raises
@@ -203,19 +203,17 @@ class ModelRelationshipAttribute(BaseModel):
             If the data in the json file does not much the model constraints.
         """
         with open(path) as file:
-            model = ModelRelationshipAttribute.model_validate_json(file.read())
+            model = ModelAttributeMapping.model_validate_json(file.read())
 
         return model
 
 
-class SourceAttributeMapping(BaseModel):
+class SourceAttributeMapping(ModelAttributeMapping):
     """
     Map an attribute in the source to one in the current entity. May optionally contain an explicit source data type.
     """
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
-    targetName: str
-    sourceName: str
     sourceDataType: data_type.DataType | None = None
     properties: Sequence[property.PropertyReference] | None = None
 
@@ -310,7 +308,7 @@ class ModelRelationship(BaseModel):
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
     targetLocation: int
-    attributes: Annotated[Sequence[ModelRelationshipAttribute], Field(min_length=1)]
+    attributes: Annotated[Sequence[ModelAttributeMapping], Field(min_length=1)]
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
