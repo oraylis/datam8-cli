@@ -36,7 +36,7 @@ class DataType(BaseModel):
     nullable: bool
     charLen: Annotated[int | None, Field(gt=0)] = None
     precision: Annotated[int | None, Field(gt=0)] = None
-    scale: Annotated[int | None, Field(gt=0)] = None
+    scale: Annotated[int | None, Field(ge=0)] = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
