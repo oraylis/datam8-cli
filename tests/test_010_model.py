@@ -71,6 +71,7 @@ def test_locator_comparison(test_case: tuple[str, str, bool]):
     "input", cases=CasesEntityLookup, glob="*_dict_valid"
 )
 def test_get_entity_dict(input: tuple[str, list[str]], model: Model):
+    model.resolve()
     entity_type, entity_names = input
 
     for entity_name in entity_names:

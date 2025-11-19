@@ -36,7 +36,7 @@ class Locator(BaseModel):
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
     entityType: str
-    folders: Sequence[str]
+    folders: list[str]
     """
     Hierarchical list of olders under the base-/modelpath. Order is relevant.
     """

@@ -211,7 +211,9 @@ def __parse_base_entities(
             match entity_type:
                 case b.EntityType.PROPERTY_VALUES:
                     locator_path = (
-                        pathlib.Path(getattr(entity, "property")) / locator_path  # noqa: B009
+                        pathlib.Path(
+                            entity_type.value, getattr(entity, "property"), locator_path
+                        )  # noqa: B009
                     )
                 case b.EntityType.FOLDERS:
                     locator_path = rel_path.parents[1] / locator_path

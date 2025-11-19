@@ -194,6 +194,34 @@ class Locator(m.Locator):
 
         return locator
 
+    @property
+    def parent(self) -> "Locator | None":
+        "Get the parent folder of this entity."
+
+        if len(self.folders) < 1:
+            return None
+
+        new_folders = self.folders[:]
+        entity_name = new_folders.pop()
+
+        ploc = Locator(
+            entityType=b.EntityType.FOLDERS.value,
+            folders=new_folders,
+            entityName=entity_name,
+        )
+
+        return ploc
+
+    @property
+    def parents(self) -> Iterator["Locator"]:
+        "Returns all parent folders for this locator."
+
+        current = self
+
+        while current.parent:
+            yield current.parent
+            current = current.parent
+
 
 class PropertyReference(p.PropertyReference):
     """
@@ -264,7 +292,7 @@ class EntityWrapper[T](BaseModel):
     Marks if references to other entities, e.g. Properties have  been resolved.
     """
     _properties: dict[Locator, p.PropertyValue] = {}
-    "Use `properties` instead"
+    "Use `properties` instead when accessing them. This is meant for internal generator usage."
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, EntityWrapper):
@@ -310,9 +338,25 @@ class EntityWrapper[T](BaseModel):
         return False
 
     def resolve(self, model: "Model") -> Self:
+        """
+        Recursively lookup concrete property value objects and write them to
+        `EntityWrapper.properties`
+
+        Parameters
+        ----------
+        model : `model.Model`
+            The DataM8 model to lookup up the property values. This normally is the same
+            model as the one this EntityWrapper resides in, but could also be a sperate model.
+
+        Returns
+        -------
+        `EntityWrapper[T]`
+            The resolved entity itself.
+        """
         if self.resolved:
             logger.warning(
-                "Tried resolving an already resolved entity, this should not happend and indicates a bug"
+                "Tried resolving an already resolved entity, this should not be done"
+                f" - {self.locator}"
             )
             return self
 
@@ -320,19 +364,82 @@ class EntityWrapper[T](BaseModel):
             self.resolved = True
             return self
 
-        property_references: list[p.PropertyReference] | None = getattr(
-            self.entity, "properties"
+        property_references: list[p.PropertyReference] = (
+            getattr(self.entity, "properties") or []
         )
 
-        if property_references is not None:
+        property_references += [
+            pr
+            for pr in self.get_inherited_property_references(model)
+            # NOTE: properties set on the entity itself takes precedene to
+            # inherited properties
+            if pr not in property_references
+        ]
+
+        if len(property_references) > 0:
             self._resolve_properties(model, property_references)
 
+        self._resolve_model_attributes(model)
         self.resolved = True
+
         return self
+
+    def _resolve_model_attributes(self, model: "Model") -> None:
+        if not isinstance(self.entity, m.ModelEntity):
+            return
+
+        for attr in self.entity.attributes:
+            pass
+            # logger.error(attr.properties)
+
+    def get_inherited_property_references(
+        self, model: "Model"
+    ) -> list[p.PropertyReference]:
+        """
+        Get a distinct list of properties of parent Entities (most likely foldres).
+
+        Returns
+        -------
+        list[PropertyReference]
+            A list of PropertyReference of parent locators. They are not yet resolved recursivley.
+        """
+        parent_properties: list[p.PropertyReference] = []
+
+        for parent in self.locator.parents:
+            if parent not in model.folders:
+                continue
+
+            parent_folder = model.folders[parent].entity
+
+            if not parent_folder.properties:
+                continue
+
+            parent_properties.extend(
+                iter(
+                    [pr for pr in parent_folder.properties if pr not in parent_properties]
+                )
+            )
+
+        return parent_properties
 
     def _resolve_properties(
         self, model: "Model", properties: Sequence[p.PropertyReference]
     ) -> None:
+        """
+        Recursivly resolve properties assigned to this entity, directly or indirectly via
+        folders.
+
+        Parent property references are currently only being resolved for modelEntities.
+
+        Parameters
+        ----------
+        model : `model.model`
+            The DataM8 model to lookup up the property values. This normally is the same
+            model as the one this EntityWrapper resides in, but could technically be a
+            sperate model.
+        properties : `Sequence[PropertyReference]`
+            PropertyReferences that should be looked up recursively.
+        """
         if len(properties) == 0:
             return
 
@@ -385,15 +492,13 @@ class Model:
 
     def resolve(self) -> None:
         "Resolve all entities by iterating over them."
-        for _ in self.get_entity_iterator():
-            pass
+        for wrapper in self.get_entity_iterator():
+            wrapper.resolve(self)
 
     def get_entity_iterator(self) -> Iterator[EntityWrapper[Any]]:
         for entity_type in b.EntityType:
             entities: EntityDict = getattr(self, entity_type.value)
             for _, wrapper in entities.items():
-                if not wrapper.resolved:
-                    wrapper.resolve(self)
                 yield wrapper
 
     def get_generator_target(self, name: str) -> s.GeneratorTarget:
