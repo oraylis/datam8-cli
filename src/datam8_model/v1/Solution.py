@@ -16,35 +16,31 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
 
-class DataType(BaseModel):
-    """
-    An datam8 abstract internal data type.
-    """
-
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
-    type: str
-    nullable: bool
-    charLen: Annotated[int | None, Field(gt=0)] = None
-    precision: Annotated[int | None, Field(gt=0)] = None
-    scale: Annotated[int | None, Field(gt=0)] = None
+class AreaTypes(BaseModel):
+    Raw: str
+    Stage: str
+    Core: str
+    Curated: str
+    Diagram: str
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> DataType:
-        return DataType.model_validate(obj, from_attributes=False)
+    def from_dict(obj) -> AreaTypes:
+        return AreaTypes.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> DataType:
+    def from_json_file(path: Path) -> AreaTypes:
         """Loads ands validates a json file from the given path.
 
         Parameters
@@ -54,7 +50,7 @@ class DataType(BaseModel):
 
         Returns
         -------
-        DataType
+        AreaTypes
             Instantiated and validated pydantic model
 
         Raises
@@ -63,41 +59,31 @@ class DataType(BaseModel):
             If the data in the json file does not much the model constraints.
         """
         with open(path) as file:
-            model = DataType.model_validate_json(file.read())
+            model = AreaTypes.model_validate_json(file.read())
 
         return model
 
 
-class DataTypeDefinition(BaseModel):
-    """
-    Defines a class of data type to configure which `DataType` properties are relevant for a specific type.
-    """
-
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
-    name: str
-    displayName: str | None = None
-    description: str | None = None
-    hasCharLen: bool | None = False
-    hasPrecision: bool | None = False
-    hasScale: bool | None = False
-    parquetType: str
-    """
-    The actual parquet data type that this datam8 internal type will map to.
-    """
-    sqlType: str
-    """
-    The atual sql data type that this datam8 internal type will map to.
-    """
+class Model(BaseModel):
+    basePath: str
+    rawPath: str
+    stagingPath: str
+    corePath: str
+    curatedPath: str
+    generatePath: str
+    diagramPath: str
+    outputPath: str
+    AreaTypes_1: Annotated[AreaTypes, Field(alias="AreaTypes")]
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> DataTypeDefinition:
-        return DataTypeDefinition.model_validate(obj, from_attributes=False)
+    def from_dict(obj) -> Model:
+        return Model.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> DataTypeDefinition:
+    def from_json_file(path: Path) -> Model:
         """Loads ands validates a json file from the given path.
 
         Parameters
@@ -107,7 +93,7 @@ class DataTypeDefinition(BaseModel):
 
         Returns
         -------
-        DataTypeDefinition
+        Model
             Instantiated and validated pydantic model
 
         Raises
@@ -116,6 +102,6 @@ class DataTypeDefinition(BaseModel):
             If the data in the json file does not much the model constraints.
         """
         with open(path) as file:
-            model = DataTypeDefinition.model_validate_json(file.read())
+            model = Model.model_validate_json(file.read())
 
         return model

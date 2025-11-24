@@ -70,6 +70,7 @@ async def parse_full_solution_async(solution_path: pathlib.Path) -> Model:
     executor = futures.ThreadPoolExecutor()
 
     solution = __parse_solution_file(solution_path)
+
     worker_model = executor.submit(__parse_model_entities, solution.modelPath)
     worker_base = executor.submit(
         __parse_base_entities, solution.basePath, solution.modelPath

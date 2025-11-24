@@ -1,4 +1,5 @@
 import pathlib
+import os
 
 import datamodel_code_generator as dcg
 from hatchling.builders.hooks.plugin import interface
@@ -48,7 +49,8 @@ class GenerateDatamodelHook(interface.BuildHookInterface):
         self.convert_crlf_to_lf()
 
     def clean(self, versions):
-        self.__output_dir.rmdir()
+        for file in self.__output_dir.glob("*.py"):
+            os.remove(file)
 
     def convert_crlf_to_lf(self):
         for file in self.__output_dir.glob("**/*.py"):

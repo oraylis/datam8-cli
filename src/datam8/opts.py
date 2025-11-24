@@ -99,3 +99,12 @@ Payload = Annotated[
         help="The name of a payload registrated via decorator. Can be provided multiple times",
     ),
 ]
+
+MigrationOutputDir = Annotated[
+    Path,
+    typer.Option(
+        "--output-dir",
+        "-od",
+        help="Directory where the migrated model will be written to",
+    ),
+]

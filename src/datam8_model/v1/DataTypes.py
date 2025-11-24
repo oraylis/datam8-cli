@@ -16,25 +16,31 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+
 from __future__ import annotations
 
+from collections.abc import Sequence
+from enum import Enum
 from pathlib import Path
 from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class DataType(BaseModel):
-    """
-    An datam8 abstract internal data type.
-    """
+class Type(Enum):
+    DATA_TYPE = "dataType"
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
-    type: str
-    nullable: bool
-    charLen: Annotated[int | None, Field(gt=0)] = None
-    precision: Annotated[int | None, Field(gt=0)] = None
-    scale: Annotated[int | None, Field(gt=0)] = None
+
+class DataType(BaseModel):
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+    name: str
+    displayName: str | None = None
+    purpose: str | None = None
+    hasCharLen: bool | None = "False"
+    hasPrecision: bool | None = "False"
+    hasScale: bool | None = "False"
+    parquetType: str
+    sqlType: str
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
@@ -68,36 +74,21 @@ class DataType(BaseModel):
         return model
 
 
-class DataTypeDefinition(BaseModel):
-    """
-    Defines a class of data type to configure which `DataType` properties are relevant for a specific type.
-    """
-
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
-    name: str
-    displayName: str | None = None
-    description: str | None = None
-    hasCharLen: bool | None = False
-    hasPrecision: bool | None = False
-    hasScale: bool | None = False
-    parquetType: str
-    """
-    The actual parquet data type that this datam8 internal type will map to.
-    """
-    sqlType: str
-    """
-    The atual sql data type that this datam8 internal type will map to.
-    """
+class Model(BaseModel):
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+    field_schema: Annotated[str | None, Field(alias="$schema")] = None
+    type: Type | None = None
+    items: Sequence[DataType] | None = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> DataTypeDefinition:
-        return DataTypeDefinition.model_validate(obj, from_attributes=False)
+    def from_dict(obj) -> Model:
+        return Model.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> DataTypeDefinition:
+    def from_json_file(path: Path) -> Model:
         """Loads ands validates a json file from the given path.
 
         Parameters
@@ -107,7 +98,7 @@ class DataTypeDefinition(BaseModel):
 
         Returns
         -------
-        DataTypeDefinition
+        Model
             Instantiated and validated pydantic model
 
         Raises
@@ -116,6 +107,6 @@ class DataTypeDefinition(BaseModel):
             If the data in the json file does not much the model constraints.
         """
         with open(path) as file:
-            model = DataTypeDefinition.model_validate_json(file.read())
+            model = Model.model_validate_json(file.read())
 
         return model

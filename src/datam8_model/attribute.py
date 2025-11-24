@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import datetime
-from enum import Enum, StrEnum
+from enum import Enum
 from pathlib import Path
 from typing import Annotated
 
@@ -39,12 +39,6 @@ class HistoryType(Enum):
     SCD2 = "SCD2"
     SCD3 = "SCD3"
     SCD4 = "SCD4"
-
-
-class ExpressionLanguage(StrEnum):
-    SQL = "sql"
-    DAX = "dax"
-    PYTHON = "python"
 
 
 class HasUnit(Enum):
@@ -126,8 +120,6 @@ class Attribute(BaseModel):
     """
     Defines how an attribute in a slowly chaning dimension should behave.
     """
-    expression: str | None = None
-    expressionLanguage: ExpressionLanguage | str | None = ExpressionLanguage.SQL
     unit: str | None = None
     refactorNames: Sequence[str] | None = None
     dateModified: datetime | None = None

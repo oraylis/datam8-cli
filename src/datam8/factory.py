@@ -25,7 +25,7 @@ from pydantic_core import ValidationError
 from datam8_model import folder as f
 from datam8_model.property import PropertyReference, PropertyValue
 
-from . import config, model, model_exceptions, parser, parser_exceptions, utils
+from . import config, model, model_exceptions, parser, parser_exceptions, parser_v1, utils
 
 logger = utils.start_logger(__name__)
 
@@ -62,6 +62,10 @@ def create_model(solution_path: pathlib.Path | None = None) -> model.Model:
     except parser_exceptions.NotSupportedModelVersion as err:
         logger.error(err)
         logger.warning(f"Supported versions are: {config.supported_model_versions}")
+
+        if err.version == "1.0.0":
+            logger.warning(f"Supported versions are: {config.supported_model_versions}")
+
         sys.exit(1)
     except model_exceptions.EntityNotFoundError as err:
         logger.error(err)
@@ -123,7 +127,8 @@ def create_undefined_folders(_model: model.Model):
     _model : `model.Model`
         A fully parsed DataM8 folder. Can be run pre or post property resolution.
     """
-    next_id = max(*[w.entity.id for w in _model.folders.values()]) + 1
+    existing_folders = [w.entity.id for w in _model.folders.values()]
+    next_id = (max(existing_folders) if len(existing_folders) != 0 else 0) + 1
 
     undefined_folders: model.EntityDict[f.Folder] = {}
 
