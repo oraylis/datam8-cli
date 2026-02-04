@@ -22,16 +22,16 @@ from typing import Annotated, Any, Self
 
 from pydantic import BaseModel, ConfigDict, Field, SkipValidation
 
-from dm8model import attribute as a
-from dm8model import base as b
-from dm8model import data_product as dp
-from dm8model import data_source as ds
-from dm8model import data_type as dt
-from dm8model import folder as f
-from dm8model import model as m
-from dm8model import property as p
-from dm8model import solution as s
-from dm8model import zone as z
+from datam8_model import attribute as a
+from datam8_model import base as b
+from datam8_model import data_product as dp
+from datam8_model import data_source as ds
+from datam8_model import data_type as dt
+from datam8_model import folder as f
+from datam8_model import model as m
+from datam8_model import property as p
+from datam8_model import solution as s
+from datam8_model import zone as z
 
 from . import model_exceptions as errors
 from . import utils
@@ -98,7 +98,7 @@ def _ensure_locator(locator: "str | Locator") -> "Locator":
 
 class Locator(m.Locator):
     """
-    Sub-class of `dm8gen.model.Locator` offerting further functionality.
+    Sub-class of `datam8.model.Locator` offerting further functionality.
     Should be used instead of its base class.
     """
 
@@ -201,8 +201,8 @@ class Locator(m.Locator):
         if len(self.folders) < 1:
             return None
 
-        new_folders = self.folders[:]
-        entity_name = new_folders.pop()
+        new_folders = self.folders[:-1]
+        entity_name = self.folders[-1]
 
         ploc = Locator(
             entityType=b.EntityType.FOLDERS.value,
@@ -225,7 +225,7 @@ class Locator(m.Locator):
 
 class PropertyReference(p.PropertyReference):
     """
-    Sub-class of `dm8gen.property.PropertyReference` for actual use with the
+    Sub-class of `datam8.property.PropertyReference` for actual use with the
     generator offering further functionality.
     """
 
@@ -248,7 +248,7 @@ class PropertyReference(p.PropertyReference):
 
         # Parameters
         ----------
-        ref : `dm8model.property.PropertyReference`
+        ref : `datam8_model.property.PropertyReference`
             Reference to a property value, directly parsed from the json files.
         """
         return PropertyReference(

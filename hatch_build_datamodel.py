@@ -13,7 +13,7 @@ class GenerateDatamodelHook(interface.BuildHookInterface):
         super().__init__(*args, **kwargs)
 
         self.__schema_dir = pathlib.Path.cwd() / "datam8-model" / "schema"
-        self.__output_dir = pathlib.Path.cwd() / "src" / "dm8model"
+        self.__output_dir = pathlib.Path.cwd() / "src" / "datam8_model"
         self.__template_dir = pathlib.Path.cwd() / "template"
 
     def initialize(self, version, build_data):

@@ -16,46 +16,28 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
 
-class Zone(BaseModel):
-    """
-    Defines a high-level layer or zone, typically used to clearly seperate different states of data processing, e.g. bronze, silver, gold, semantic.
-    """
-
+class DiagramOption(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
     name: str
-    """
-    Logical name of the zone (e.g., Raw, Core, Curated)
-    """
-    targetName: str
-    """
-    Target system name for the zone (e.g., Bronze, Silver, Gold)
-    """
-    displayName: str
-    """
-    Human-readable display name
-    """
-    localFolderName: str | None = None
-    """
-    Local folder name used in file system structure
-    """
+    value: str
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> Zone:
-        return Zone.model_validate(obj, from_attributes=False)
+    def from_dict(obj) -> DiagramOption:
+        return DiagramOption.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> Zone:
+    def from_json_file(path: Path) -> DiagramOption:
         """Loads ands validates a json file from the given path.
 
         Parameters
@@ -65,7 +47,7 @@ class Zone(BaseModel):
 
         Returns
         -------
-        Zone
+        DiagramOption
             Instantiated and validated pydantic model
 
         Raises
@@ -74,6 +56,44 @@ class Zone(BaseModel):
             If the data in the json file does not much the model constraints.
         """
         with open(path) as file:
-            model = Zone.model_validate_json(file.read())
+            model = DiagramOption.model_validate_json(file.read())
+
+        return model
+
+
+class Diagram(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    diagramType: str | None = None
+    coreEntities: Sequence[str] | None = None
+    diagramOptions: Sequence[DiagramOption] | None = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> Diagram:
+        return Diagram.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> Diagram:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        Diagram
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
+        with open(path) as file:
+            model = Diagram.model_validate_json(file.read())
 
         return model

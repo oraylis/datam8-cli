@@ -1,8 +1,8 @@
 import pytest_cases
 from test_030_factory_cases import CasesPropertyValueResolution
 
-from dm8gen import factory
-from dm8gen.model import Locator, Model, PropertyReference
+from datam8 import factory
+from datam8.model import Locator, Model, PropertyReference
 
 
 @pytest_cases.parametrize_with_cases(

@@ -22,8 +22,8 @@ import sys
 
 from pydantic_core import ValidationError
 
-from dm8model import folder as f
-from dm8model.property import PropertyReference, PropertyValue
+from datam8_model import folder as f
+from datam8_model.property import PropertyReference, PropertyValue
 
 from . import config, model, model_exceptions, parser, parser_exceptions, utils
 

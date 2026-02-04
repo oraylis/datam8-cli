@@ -15,12 +15,11 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
-
 import logging
 import pathlib
 import sys
 from importlib import machinery, util
-from types import ModuleType
+from types import CodeType, ModuleType
 
 from .. import config, generate, utils
 
@@ -45,6 +44,20 @@ def load_modules(module_path: pathlib.Path) -> dict[str, ModuleType]:
             modules[module_name] = load_module(module_files[i], module_name)
         except generate.PayloadRegisteredMultipleTimesError as err:
             logger.error(f"{err}\n{module_files[i]}")
+            sys.exit(1)
+        except ModuleNotFoundError as err:
+            msg = "%s at %s:%s"
+            line = -1
+            code: CodeType
+
+            tb = err.__traceback__
+            while tb is not None:
+                if tb.tb_next is None:
+                    line = tb.tb_lineno
+                    code = tb.tb_frame.f_code
+                tb = tb.tb_next
+
+            logger.error(msg, err, code.co_filename, line)
             sys.exit(1)
 
     logger.info(

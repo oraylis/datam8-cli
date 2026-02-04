@@ -6,7 +6,7 @@ from test_020_helper_cases import (
     UuidCases,
 )
 
-from dm8gen.utils import hasher as hashutils
+from datam8.utils import hasher as hashutils
 
 
 @parametrize_with_cases("algorithm", cases=AlgorithmCases, glob="*_valid")
