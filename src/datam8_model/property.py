@@ -16,7 +16,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -168,7 +167,7 @@ class Property(BaseModel):
     name: str
     displayName: str
     schema_: Annotated[str | None, Field(alias="schema")] = None
-    scopes: Sequence[PropertyScope] | None = []
+    scopes: Annotated[Sequence[PropertyScope] | None, Field(default_factory=list)] = []
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")

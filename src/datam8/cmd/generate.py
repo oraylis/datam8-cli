@@ -23,9 +23,9 @@ from concurrent import futures
 import rich
 import typer
 
-from dm8gen.model_exceptions import InvalidGeneratorTargetError
-from dm8gen.utils.cache import Cache
-from dm8model.solution import GeneratorTarget
+from datam8.model_exceptions import InvalidGeneratorTargetError
+from datam8.utils.cache import Cache
+from datam8_model.solution import GeneratorTarget
 
 from .. import config, factory, generate, opts, utils
 from ..utils import importer

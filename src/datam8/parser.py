@@ -26,9 +26,9 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from dm8model import base as b
-from dm8model import model as m
-from dm8model import solution as s
+from datam8_model import base as b
+from datam8_model import model as m
+from datam8_model import solution as s
 
 from . import config, utils
 from . import parser_exceptions as errors

@@ -16,29 +16,37 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-
 from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+from . import property
 
 
-class DiagramOption(BaseModel):
+class DataModule(BaseModel):
+    """
+    Defines ...
+    """
+
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
     name: str
-    value: str
+    displayName: str | None = None
+    description: str | None = None
+    properties: Sequence[property.PropertyReference] | None = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> DiagramOption:
-        return DiagramOption.model_validate(obj, from_attributes=False)
+    def from_dict(obj) -> DataModule:
+        return DataModule.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> DiagramOption:
+    def from_json_file(path: Path) -> DataModule:
         """Loads ands validates a json file from the given path.
 
         Parameters
@@ -48,7 +56,7 @@ class DiagramOption(BaseModel):
 
         Returns
         -------
-        DiagramOption
+        DataModule
             Instantiated and validated pydantic model
 
         Raises
@@ -57,26 +65,32 @@ class DiagramOption(BaseModel):
             If the data in the json file does not much the model constraints.
         """
         with open(path) as file:
-            model = DiagramOption.model_validate_json(file.read())
+            model = DataModule.model_validate_json(file.read())
 
         return model
 
 
-class Diagram(BaseModel):
+class DataProduct(BaseModel):
+    """
+    Defines ...
+    """
+
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
-    diagramType: str | None = None
-    coreEntities: Sequence[str] | None = None
-    diagramOptions: Sequence[DiagramOption] | None = None
+    name: str
+    displayName: str | None = None
+    description: str | None = None
+    properties: Sequence[property.PropertyReference] | None = None
+    dataModules: Annotated[Sequence[DataModule], Field(min_length=1)]
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> Diagram:
-        return Diagram.model_validate(obj, from_attributes=False)
+    def from_dict(obj) -> DataProduct:
+        return DataProduct.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> Diagram:
+    def from_json_file(path: Path) -> DataProduct:
         """Loads ands validates a json file from the given path.
 
         Parameters
@@ -86,7 +100,7 @@ class Diagram(BaseModel):
 
         Returns
         -------
-        Diagram
+        DataProduct
             Instantiated and validated pydantic model
 
         Raises
@@ -95,6 +109,6 @@ class Diagram(BaseModel):
             If the data in the json file does not much the model constraints.
         """
         with open(path) as file:
-            model = Diagram.model_validate_json(file.read())
+            model = DataProduct.model_validate_json(file.read())
 
         return model
