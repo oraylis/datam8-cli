@@ -16,7 +16,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -36,6 +35,20 @@ from . import (
     property,
     zone,
 )
+
+
+class EntityType(Enum):
+    PROPERTIES = "properties"
+    PROPERTY_VALUES = "propertyValues"
+    ZONES = "zones"
+    DATA_TYPES = "dataTypes"
+    DATA_SOURCE_TYPES = "dataSourceTypes"
+    DATA_PRODUCTS = "dataProducts"
+    DATA_MODULES = "dataModules"
+    ATTRIBUTE_TYPES = "attributeTypes"
+    DATA_SOURCES = "dataSources"
+    FOLDERS = "folders"
+    MODEL_ENTITIES = "modelEntities"
 
 
 class AttributeTypes(BaseModel):
@@ -87,20 +100,6 @@ class AttributeTypes(BaseModel):
             model = AttributeTypes.model_validate_json(file.read())
 
         return model
-
-
-class EntityType(Enum):
-    PROPERTIES = "properties"
-    PROPERTY_VALUES = "propertyValues"
-    ZONES = "zones"
-    DATA_TYPES = "dataTypes"
-    DATA_SOURCE_TYPES = "dataSourceTypes"
-    DATA_PRODUCTS = "dataProducts"
-    DATA_MODULES = "dataModules"
-    ATTRIBUTE_TYPES = "attributeTypes"
-    DATA_SOURCES = "dataSources"
-    FOLDERS = "folders"
-    MODEL_ENTITIES = "modelEntities"
 
 
 class PropertyValues(BaseModel):

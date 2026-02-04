@@ -1,7 +1,7 @@
 [project]
-name = "datam8-generator"
+name = "datam8"
 version = "2.0.0"
-description = "ORAYLIS DataM8 Generator"
+description = "ORAYLIS DataM8 CLI"
 license = "GPL-3.0"
 requires-python = ">=3.12"
 readme = "README.md"
@@ -13,6 +13,8 @@ dependencies = [
   "pydantic==2.8.2",
   "sqlparse==0.5.1",
   "typer==0.19.1",
+  "fastapi==0.128.0",
+  "uvicorn==0.40.0",
 ]
 classifiers = [
   "Programming Language :: Python :: 3",
@@ -20,7 +22,7 @@ classifiers = [
 ]
 
 [project.scripts]
-dm8gen = "dm8gen.app:app"
+datam8 = "datam8.app:app"
 
 [project.urls]
 Homepage = "https://github.com/oraylis/datam8-generator"
@@ -56,7 +58,7 @@ quote-style = "double"
 ##############
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/dm8gen", "src/dm8model"]
+packages = ["src/datam8", "src/datam8_model"]
 
 [tool.hatch.build.hooks.custom]
 path = "hatch_build_datamodel.py"

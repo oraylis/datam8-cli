@@ -16,7 +16,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
@@ -36,7 +35,7 @@ class Locator(BaseModel):
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
     entityType: str
-    folders: list[str]
+    folders: Sequence[str]
     """
     Hierarchical list of olders under the base-/modelpath. Order is relevant.
     """

@@ -16,86 +16,41 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class DataType(BaseModel):
+class GeneratorTarget(BaseModel):
     """
-    An datam8 abstract internal data type.
-    """
-
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
-    type: str
-    nullable: bool
-    charLen: Annotated[int | None, Field(gt=0)] = None
-    precision: Annotated[int | None, Field(gt=0)] = None
-    scale: Annotated[int | None, Field(ge=0)] = None
-
-    def to_dict(self) -> dict:
-        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
-
-    @staticmethod
-    def from_dict(obj) -> DataType:
-        return DataType.model_validate(obj, from_attributes=False)
-
-    @staticmethod
-    def from_json_file(path: Path) -> DataType:
-        """Loads ands validates a json file from the given path.
-
-        Parameters
-        ----------
-        path : Path
-          The path to the json to be loaded into the model.
-
-        Returns
-        -------
-        DataType
-            Instantiated and validated pydantic model
-
-        Raises
-        ------
-        ValidationError
-            If the data in the json file does not much the model constraints.
-        """
-        with open(path) as file:
-            model = DataType.model_validate_json(file.read())
-
-        return model
-
-
-class DataTypeDefinition(BaseModel):
-    """
-    Defines a class of data type to configure which `DataType` properties are relevant for a specific type.
+    Defines a target that can be selected when using the generator.
     """
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
     name: str
-    displayName: str | None = None
-    description: str | None = None
-    hasCharLen: bool | None = False
-    hasPrecision: bool | None = False
-    hasScale: bool | None = False
-    targets: Mapping[str, str]
+    isDefault: bool | None = False
+    sourcePath: Path
     """
-    Maps target (e.g. databricks, powerbi, sqlserver) to their data types.
+    A path relative to the folder where the the solution file lies.
+    """
+    outputPath: Path
+    """
+    A path relative to the folder where the the solution file lies.
     """
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> DataTypeDefinition:
-        return DataTypeDefinition.model_validate(obj, from_attributes=False)
+    def from_dict(obj) -> GeneratorTarget:
+        return GeneratorTarget.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> DataTypeDefinition:
+    def from_json_file(path: Path) -> GeneratorTarget:
         """Loads ands validates a json file from the given path.
 
         Parameters
@@ -105,7 +60,7 @@ class DataTypeDefinition(BaseModel):
 
         Returns
         -------
-        DataTypeDefinition
+        GeneratorTarget
             Instantiated and validated pydantic model
 
         Raises
@@ -114,6 +69,65 @@ class DataTypeDefinition(BaseModel):
             If the data in the json file does not much the model constraints.
         """
         with open(path) as file:
-            model = DataTypeDefinition.model_validate_json(file.read())
+            model = GeneratorTarget.model_validate_json(file.read())
+
+        return model
+
+
+class Solution(BaseModel):
+    """
+    A definition to hold various settings for use in the frontend or the generator.
+    """
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    schemaVersion: str
+    """
+    Version of the schema for validation and migration support.
+    """
+    modelPath: Path
+    """
+    Root path for model entities, replacing zone-specific paths.
+    """
+    basePath: Path
+    """
+    Path where base entity files like DataSources are stored.
+    """
+    diagramPath: Path | None = None
+    """
+    tbd
+    """
+    generatorTargets: Annotated[Sequence[GeneratorTarget], Field(min_length=1)]
+    """
+    Targets available to the generator when not explicitly specifying it.
+    """
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> Solution:
+        return Solution.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> Solution:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        Solution
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
+        with open(path) as file:
+            model = Solution.model_validate_json(file.read())
 
         return model

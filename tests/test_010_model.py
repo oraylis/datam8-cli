@@ -4,10 +4,10 @@ import pytest
 import pytest_cases
 from test_010_model_cases import CasesEntityLookup, CasesLocator, CasesModel
 
-from dm8gen import model_exceptions as errors
-from dm8gen.model import EntityWrapper, Locator, Model
-from dm8model.base import EntityType
-from dm8model.data_product import DataModule
+from datam8 import model_exceptions as errors
+from datam8.model import EntityWrapper, Locator, Model
+from datam8_model.base import EntityType
+from datam8_model.data_product import DataModule
 
 
 @pytest_cases.parametrize_with_cases("attribute", cases=CasesModel, glob="*_attributes")
