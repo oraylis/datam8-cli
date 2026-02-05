@@ -1,10 +1,14 @@
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from datam8.core.connectors.registry import connector_registry
 from datam8.core.connectors.validation import validate_connection_config
-from datam8.core.errors import Datam8ExternalSystemError, Datam8NotFoundError, Datam8ValidationError
+from datam8.core.errors import (
+    Datam8ExternalSystemError,
+    Datam8NotFoundError,
+    Datam8ValidationError,
+)
 from datam8.core.workspace_io import list_base_entities
 
 
@@ -12,7 +16,7 @@ def _is_record(value: Any) -> bool:
     return isinstance(value, dict)
 
 
-def _get_bound_connector_id(data_source_type: dict[str, Any]) -> Optional[str]:
+def _get_bound_connector_id(data_source_type: dict[str, Any]) -> str | None:
     ext = data_source_type.get("extendedProperties")
     if not isinstance(ext, dict):
         return None
@@ -25,7 +29,7 @@ def _get_bound_connector_id(data_source_type: dict[str, Any]) -> Optional[str]:
     return None
 
 
-def load_data_source_context(solution_path: Optional[str], data_source_id: str) -> dict[str, Any]:
+def load_data_source_context(solution_path: str | None, data_source_id: str) -> dict[str, Any]:
     base_entities = list_base_entities(solution_path)
 
     data_sources_file = next((e for e in base_entities if e.name == "DataSources"), None)
@@ -76,9 +80,9 @@ def resolve_connector_module(data_source_type: dict[str, Any]):
 
 def resolve_and_validate(
     *,
-    solution_path: Optional[str],
+    solution_path: str | None,
     data_source_id: str,
-    runtime_secrets: Optional[dict[str, str]],
+    runtime_secrets: dict[str, str] | None,
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, str], list[str]]:
     ctx = load_data_source_context(solution_path, data_source_id)
     data_source = ctx["dataSource"]

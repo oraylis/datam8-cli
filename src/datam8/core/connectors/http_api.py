@@ -2,13 +2,18 @@ from __future__ import annotations
 
 import base64
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from datam8.core.errors import Datam8ExternalSystemError, Datam8PermissionError, Datam8ValidationError
+from datam8.core.errors import (
+    Datam8ExternalSystemError,
+    Datam8PermissionError,
+    Datam8ValidationError,
+)
 
 if TYPE_CHECKING:
-    import httpx  # pragma: no cover
+    pass  # pragma: no cover
 
 
 DEFAULT_REQUEST_TIMEOUT_MS = 30_000
@@ -16,7 +21,7 @@ TOKEN_EXPIRY_SKEW_MS = 60_000
 SAMPLE_ROW_LIMIT = 75
 
 
-def _get_by_path(obj: Any, path: Optional[str]) -> Any:
+def _get_by_path(obj: Any, path: str | None) -> Any:
     if not path:
         return obj
     cur = obj
@@ -39,11 +44,11 @@ class HttpApiRestConnector:
         config: dict[str, Any],
         runtime_secrets: dict[str, str],
         *,
-        http_client_factory: Optional[Callable[[], Any]] = None,
+        http_client_factory: Callable[[], Any] | None = None,
     ) -> None:
         self._config = config or {}
         self._secrets = runtime_secrets or {}
-        self._token_cache: Optional[_OAuthTokenCache] = None
+        self._token_cache: _OAuthTokenCache | None = None
         self._http_client_factory = http_client_factory
 
     def request_json_array(self, *, source_location: str) -> list[Any]:
@@ -187,7 +192,7 @@ class HttpApiRestConnector:
             if not username.strip():
                 raise Datam8ValidationError(message="auth.username is required for basic auth.", details=None)
             password = self._require_secret("password")
-            creds = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
+            creds = base64.b64encode(f"{username}:{password}".encode()).decode("ascii")
             headers["authorization"] = f"Basic {creds}"
             return
         if kind == "bearer-static":
@@ -252,7 +257,7 @@ class HttpApiRestConnector:
             raise Datam8ExternalSystemError(code="oauth_error", message="No access_token in OAuth2 response.", details={"url": token_url})
 
         raw_expires = token_data.get("expires_in") if isinstance(token_data, dict) else None
-        expires_in_s: Optional[int] = None
+        expires_in_s: int | None = None
         if isinstance(raw_expires, (int, float)) and raw_expires > 0:
             expires_in_s = int(raw_expires)
         elif isinstance(raw_expires, str) and raw_expires.strip().isdigit():

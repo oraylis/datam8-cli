@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 from datam8.core.errors import Datam8NotFoundError, Datam8ValidationError
 
@@ -14,7 +12,7 @@ class ResolvedSolution:
     root_dir: Path
 
 
-def resolve_solution(candidate: Optional[str]) -> ResolvedSolution:
+def resolve_solution(candidate: str | None) -> ResolvedSolution:
     if not candidate:
         raise Datam8ValidationError(
             message="No solution specified. Use --solution/-s (or --solution-path) or set DATAM8_SOLUTION_PATH.",

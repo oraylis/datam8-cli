@@ -5,12 +5,15 @@ import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from datam8.core.atomic import atomic_write_json
-from datam8.core.errors import Datam8ExternalSystemError, Datam8NotFoundError, Datam8ValidationError
+from datam8.core.errors import (
+    Datam8ExternalSystemError,
+    Datam8NotFoundError,
+    Datam8ValidationError,
+)
 from datam8.core.paths import resolve_solution
-
 
 SERVICE_NAME = "datam8"
 
@@ -25,7 +28,7 @@ class SecretRef:
         return f"secretRef://{self.scheme}/{self.scope}/{self.name}"
 
 
-def solution_scope(solution_path: Optional[str]) -> str:
+def solution_scope(solution_path: str | None) -> str:
     resolved = resolve_solution(solution_path or os.environ.get("DATAM8_SOLUTION_PATH"))
     p = str(resolved.solution_file).replace("\\", "/").lower().strip()
     h = hashlib.sha256(p.encode("utf-8")).hexdigest()
@@ -65,7 +68,7 @@ def is_keyring_available() -> bool:
         return False
 
 
-def _keyring_get(name: str) -> Optional[str]:
+def _keyring_get(name: str) -> str | None:
     import keyring  # type: ignore
 
     return keyring.get_password(SERVICE_NAME, name)
@@ -94,7 +97,7 @@ def _secret_name(scope: str, data_source: str, key: str) -> str:
     return f"runtime:{scope}:{ds}:{k}"
 
 
-def list_runtime_secret_keys(solution_path: Optional[str], data_source_name: str) -> list[dict[str, Any]]:
+def list_runtime_secret_keys(solution_path: str | None, data_source_name: str) -> list[dict[str, Any]]:
     scope = solution_scope(solution_path)
     reg = _load_registry()
     out = []
@@ -114,7 +117,7 @@ def list_runtime_secret_keys(solution_path: Optional[str], data_source_name: str
 
 def set_runtime_secret(
     *,
-    solution_path: Optional[str],
+    solution_path: str | None,
     data_source_name: str,
     key: str,
     value: str,
@@ -145,7 +148,7 @@ def set_runtime_secret(
     return SecretRef(scheme="keyring", scope=scope, name=name)
 
 
-def delete_runtime_secret(*, solution_path: Optional[str], data_source_name: str, key: str) -> None:
+def delete_runtime_secret(*, solution_path: str | None, data_source_name: str, key: str) -> None:
     if not is_keyring_available():
         raise Datam8ExternalSystemError(
             code="secrets_unavailable",
@@ -163,7 +166,7 @@ def delete_runtime_secret(*, solution_path: Optional[str], data_source_name: str
 
 def get_runtime_secret(
     *,
-    solution_path: Optional[str],
+    solution_path: str | None,
     data_source_name: str,
     key: str,
     reveal: bool = False,
@@ -197,10 +200,10 @@ def get_runtime_secret(
 
 def get_runtime_secrets_map(
     *,
-    solution_path: Optional[str],
+    solution_path: str | None,
     data_source_name: str,
     include_values: bool = True,
-    override: Optional[dict[str, str]] = None,
+    override: dict[str, str] | None = None,
 ) -> dict[str, str]:
     override = override or {}
     items = list_runtime_secret_keys(solution_path, data_source_name)

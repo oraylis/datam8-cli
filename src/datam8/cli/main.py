@@ -7,29 +7,49 @@ import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import click
 import typer
 
 from datam8.cli.output import emit_error_json, emit_human, emit_json
+from datam8.cmd import generate as generate_cmd
+from datam8.cmd import reverse as reverse_cmd
+from datam8.cmd import serve as serve_cmd
+from datam8.cmd import validate as validate_cmd
 from datam8.core.connectors.builtins import register_builtin_connectors
 from datam8.core.connectors.registry import connector_registry
 from datam8.core.connectors.resolve import resolve_and_validate
 from datam8.core.duration import parse_duration_seconds
 from datam8.core.entity_resolution import resolve_model_entity
-from datam8.core.errors import Datam8Error, Datam8NotImplementedError, as_datam8_error
-from datam8.core.errors import Datam8ValidationError
+from datam8.core.errors import (
+    Datam8Error,
+    Datam8NotImplementedError,
+    Datam8ValidationError,
+    as_datam8_error,
+)
 from datam8.core.indexing import read_index, validate_index
 from datam8.core.jsonops import merge_patch, set_by_pointer
 from datam8.core.lock import SolutionLock
 from datam8.core.plugins.manager import (
     default_plugin_dir,
+)
+from datam8.core.plugins.manager import (
     install_git_url as plugins_install_git_url,
+)
+from datam8.core.plugins.manager import (
     install_zip as plugins_install_zip,
+)
+from datam8.core.plugins.manager import (
     reload as plugins_reload,
+)
+from datam8.core.plugins.manager import (
     set_enabled as plugins_set_enabled,
+)
+from datam8.core.plugins.manager import (
     uninstall as plugins_uninstall,
+)
+from datam8.core.plugins.manager import (
     verify_zip_bundle as plugins_verify_zip_bundle,
 )
 from datam8.core.refactor import refactor_entity_id as core_refactor_entity_id
@@ -55,35 +75,29 @@ from datam8.core.workspace_io import (
     delete_model_entity,
     duplicate_model_entity,
     list_base_entities,
-    list_directory,
     list_function_sources,
     list_model_entities,
     move_model_entity,
     read_function_source,
     read_solution,
     read_workspace_json,
+    refactor_properties,
     regenerate_index,
     rename_folder,
     rename_function_source,
-    refactor_properties,
     write_base_entity,
     write_function_source,
     write_model_entity,
 )
 
-from datam8.cmd import generate as generate_cmd
-from datam8.cmd import reverse as reverse_cmd
-from datam8.cmd import serve as serve_cmd
-from datam8.cmd import validate as validate_cmd
-
 
 @dataclass(frozen=True)
 class GlobalOptions:
-    solution: Optional[str]
+    solution: str | None
     json: bool
     quiet: bool
     verbose: bool
-    log_file: Optional[str]
+    log_file: str | None
     lock_timeout: str
     no_lock: bool
 
@@ -147,7 +161,7 @@ def _version_callback(value: bool) -> None:
 @app.callback()
 def main_callback(
     ctx: typer.Context,
-    solution: Optional[str] = typer.Option(
+    solution: str | None = typer.Option(
         None,
         "--solution",
         "--solution-path",
@@ -157,7 +171,7 @@ def main_callback(
     json: bool = typer.Option(False, "--json", help="Output JSON only to stdout (no extra text)."),
     quiet: bool = typer.Option(False, "--quiet", help="Minimal output."),
     verbose: bool = typer.Option(False, "--verbose", help="More logs (redacted)."),
-    log_file: Optional[str] = typer.Option(None, "--log-file", help="Structured logs to file."),
+    log_file: str | None = typer.Option(None, "--log-file", help="Structured logs to file."),
     lock_timeout: str = typer.Option("10s", "--lock-timeout", help="Solution lock timeout (e.g. 10s, 2m)."),
     no_lock: bool = typer.Option(False, "--no-lock", help="Disable solution lock (dangerous)."),
     version: bool = typer.Option(False, "--version", callback=_version_callback, is_eager=True),
@@ -269,8 +283,8 @@ def solution_init(
     name: str = typer.Option(..., "--name", help="Solution/project name."),
     root: str = typer.Option(..., "--root", help="Directory where the project folder is created."),
     target: str = typer.Option(..., "--target", help="Generator target name (scaffolded only)."),
-    base_path: Optional[str] = typer.Option(None, "--base-path", help="Base folder name (default: Base)."),
-    model_path: Optional[str] = typer.Option(None, "--model-path", help="Model folder name (default: Model)."),
+    base_path: str | None = typer.Option(None, "--base-path", help="Base folder name (default: Base)."),
+    model_path: str | None = typer.Option(None, "--model-path", help="Model folder name (default: Model)."),
 ) -> None:
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
@@ -453,7 +467,7 @@ def model_get(
 def model_create(
     ctx: typer.Context,
     rel_path: str = typer.Argument(..., help="New entity relPath (under Model/...)."),
-    name: Optional[str] = typer.Option(None, "--name", help="Optional entity name."),
+    name: str | None = typer.Option(None, "--name", help="Optional entity name."),
 ) -> None:
     """Create a new model entity JSON file."""
     opts: GlobalOptions = ctx.obj
@@ -669,7 +683,7 @@ def script_list(
     ctx: typer.Context,
     entity_selector: str = typer.Argument(..., help="Model entity selector owning the scripts."),
     by: str = typer.Option("auto", "--by"),
-    entity_name: Optional[str] = typer.Option(None, "--entity-name", help="Optional entity name hint for folder resolution."),
+    entity_name: str | None = typer.Option(None, "--entity-name", help="Optional entity name hint for folder resolution."),
     referenced_only: bool = typer.Option(False, "--referenced-only", help="Only list scripts referenced in transformations."),
 ) -> None:
     """List function sources (scripts) for a model entity."""
@@ -691,7 +705,7 @@ def script_get(
     entity_selector: str = typer.Argument(...),
     source: str = typer.Argument(...),
     by: str = typer.Option("auto", "--by"),
-    entity_name: Optional[str] = typer.Option(None, "--entity-name"),
+    entity_name: str | None = typer.Option(None, "--entity-name"),
 ) -> None:
     """Print a function source (script) for a model entity."""
     opts: GlobalOptions = ctx.obj
@@ -709,7 +723,7 @@ def script_save(
     source: str = typer.Argument(...),
     content: str = typer.Argument(..., help="Script content, @file, or '-' for stdin."),
     by: str = typer.Option("auto", "--by"),
-    entity_name: Optional[str] = typer.Option(None, "--entity-name"),
+    entity_name: str | None = typer.Option(None, "--entity-name"),
 ) -> None:
     """Write a function source (script) for a model entity."""
     opts: GlobalOptions = ctx.obj
@@ -739,7 +753,7 @@ def script_rename(
     from_source: str = typer.Argument(...),
     to_source: str = typer.Argument(...),
     by: str = typer.Option("auto", "--by"),
-    entity_name: Optional[str] = typer.Option(None, "--entity-name"),
+    entity_name: str | None = typer.Option(None, "--entity-name"),
 ) -> None:
     """Rename a function source (script) for a model entity."""
     opts: GlobalOptions = ctx.obj
@@ -762,7 +776,7 @@ def script_delete(
     entity_selector: str = typer.Argument(...),
     source: str = typer.Argument(...),
     by: str = typer.Option("auto", "--by"),
-    entity_name: Optional[str] = typer.Option(None, "--entity-name"),
+    entity_name: str | None = typer.Option(None, "--entity-name"),
 ) -> None:
     """Delete a function source (script) for a model entity."""
     opts: GlobalOptions = ctx.obj
@@ -871,7 +885,7 @@ def refactor_values_cmd(
     ctx: typer.Context,
     old: str = typer.Argument(..., help="Old string value (exact match)."),
     new: str = typer.Argument(..., help="New string value."),
-    key: Optional[str] = typer.Option(None, "--key", help="Only replace values under this key."),
+    key: str | None = typer.Option(None, "--key", help="Only replace values under this key."),
     apply: bool = typer.Option(False, "--apply", help="Apply changes (default is dry-run)."),
 ) -> None:
     opts: GlobalOptions = ctx.obj
@@ -1222,7 +1236,7 @@ def diag_bundle() -> None:
     raise Datam8NotImplementedError(message="Bundle diagnostics are not implemented.")
 
 
-def main(argv: Optional[list[str]] = None) -> None:
+def main(argv: list[str] | None = None) -> None:
     argv = argv if argv is not None else sys.argv[1:]
     trace_id = new_trace_id()
     try:

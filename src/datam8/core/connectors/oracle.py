@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from datam8.core.errors import Datam8ExternalSystemError, Datam8PermissionError, Datam8ValidationError
+from datam8.core.errors import (
+    Datam8ExternalSystemError,
+    Datam8PermissionError,
+    Datam8ValidationError,
+)
 
 
 class OracleMetadataConnector:

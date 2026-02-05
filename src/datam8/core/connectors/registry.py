@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 from datam8.core.connectors.types import ConnectorModule
 
@@ -13,8 +13,8 @@ def _norm(value: str) -> str:
 @dataclass(frozen=True)
 class ConnectorSource:
     kind: str
-    pluginId: Optional[str] = None
-    entryPath: Optional[str] = None
+    pluginId: str | None = None
+    entryPath: str | None = None
 
 
 class ConnectorRegistry:
@@ -53,11 +53,11 @@ class ConnectorRegistry:
             out.append({"manifest": module.manifest, "source": source.__dict__})
         return out
 
-    def resolve_by_id(self, id: str) -> Optional[ConnectorModule]:
+    def resolve_by_id(self, id: str) -> ConnectorModule | None:
         v = self._connectors_by_id.get(_norm(id))
         return v[0] if v else None
 
-    def resolve_by_alias(self, alias: str) -> Optional[ConnectorModule]:
+    def resolve_by_alias(self, alias: str) -> ConnectorModule | None:
         cid = self._connector_id_by_alias.get(_norm(alias))
         if not cid:
             return None

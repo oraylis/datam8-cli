@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from datam8.core.errors import Datam8NotFoundError, Datam8ValidationError
 from datam8.core.indexing import read_index
@@ -15,15 +15,15 @@ from datam8.core.workspace_io import list_model_entities, read_solution
 class ResolvedEntity:
     rel_path: str
     abs_path: str
-    locator: Optional[str] = None
-    name: Optional[str] = None
-    id: Optional[int] = None
+    locator: str | None = None
+    name: str | None = None
+    id: int | None = None
 
 
 def resolve_model_entity(
     selector: str,
     *,
-    solution_path: Optional[str],
+    solution_path: str | None,
     by: str = "auto",
 ) -> ResolvedEntity:
     sel = (selector or "").strip()
@@ -57,7 +57,7 @@ def resolve_model_entity(
     return _resolve_by_name(sel, solution_path)
 
 
-def _resolve_by_relpath(rel_path: str, solution_path: Optional[str]) -> ResolvedEntity:
+def _resolve_by_relpath(rel_path: str, solution_path: str | None) -> ResolvedEntity:
     resolved, _sol = read_solution(solution_path)
     abs_path = safe_join(resolved.root_dir, rel_path)
     if not abs_path.exists():
@@ -66,7 +66,7 @@ def _resolve_by_relpath(rel_path: str, solution_path: Optional[str]) -> Resolved
     return ResolvedEntity(rel_path=abs_path.relative_to(resolved.root_dir).as_posix(), abs_path=str(abs_path), **info)
 
 
-def _resolve_by_locator(locator: str, solution_path: Optional[str]) -> ResolvedEntity:
+def _resolve_by_locator(locator: str, solution_path: str | None) -> ResolvedEntity:
     resolved, _sol = read_solution(solution_path)
     root = resolved.root_dir
     loc = locator.strip()
@@ -104,7 +104,7 @@ def _resolve_by_locator(locator: str, solution_path: Optional[str]) -> ResolvedE
     raise Datam8NotFoundError(message="Entity not found by locator.", details={"locator": locator})
 
 
-def _resolve_by_id(entity_id: int, solution_path: Optional[str]) -> ResolvedEntity:
+def _resolve_by_id(entity_id: int, solution_path: str | None) -> ResolvedEntity:
     if entity_id < 0:
         raise Datam8ValidationError(message="Invalid id.", details={"id": entity_id})
     resolved, _sol = read_solution(solution_path)
@@ -135,7 +135,7 @@ def _resolve_by_id(entity_id: int, solution_path: Optional[str]) -> ResolvedEnti
     raise Datam8NotFoundError(message="Entity not found by id.", details={"id": entity_id})
 
 
-def _resolve_by_name(name: str, solution_path: Optional[str]) -> ResolvedEntity:
+def _resolve_by_name(name: str, solution_path: str | None) -> ResolvedEntity:
     resolved, _sol = read_solution(solution_path)
     root = resolved.root_dir
     n = name.strip()
@@ -206,14 +206,14 @@ def _iter_index_entries(index: dict[str, Any]) -> list[dict[str, Any]]:
     return entries
 
 
-def _find_index_entry_by_locator(index: dict[str, Any], locator: str) -> Optional[dict[str, Any]]:
+def _find_index_entry_by_locator(index: dict[str, Any], locator: str) -> dict[str, Any] | None:
     for e in _iter_index_entries(index):
         if e.get("locator") == locator:
             return e
     return None
 
 
-def _rel_from_index_entry(entry: dict[str, Any], root: Path) -> Optional[str]:
+def _rel_from_index_entry(entry: dict[str, Any], root: Path) -> str | None:
     abs_path = entry.get("absPath")
     if isinstance(abs_path, str) and abs_path:
         try:

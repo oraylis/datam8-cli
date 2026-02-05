@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 JobStatus = Literal["queued", "running", "succeeded", "failed", "canceled"]
 
@@ -20,11 +20,11 @@ class Job:
     params: dict[str, Any]
     status: JobStatus = "queued"
     created_at_ms: int = 0
-    started_at_ms: Optional[int] = None
-    finished_at_ms: Optional[int] = None
-    progress: Optional[float] = None
+    started_at_ms: int | None = None
+    finished_at_ms: int | None = None
+    progress: float | None = None
     result: Any = None
-    error: Optional[JobError] = None
+    error: JobError | None = None
     canceled: bool = False
     logs: list[str] = field(default_factory=list)
 
