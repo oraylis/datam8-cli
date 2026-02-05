@@ -123,7 +123,8 @@ def create_undefined_folders(_model: model.Model):
     _model : `model.Model`
         A fully parsed DataM8 folder. Can be run pre or post property resolution.
     """
-    next_id = max(*[w.entity.id for w in _model.folders.values()]) + 1
+    folder_ids = [w.entity.id for w in _model.folders.values()]
+    next_id = (max(folder_ids) + 1) if folder_ids else 1
 
     undefined_folders: model.EntityDict[f.Folder] = {}
 
