@@ -172,6 +172,15 @@ def _run_editor(*, suffix: str, initial_text: str) -> str:
             pass
 
 
+def _read_json_arg(arg: str) -> Any:
+    s = (arg or "").strip()
+    if s == "-":
+        s = sys.stdin.read()
+    elif s.startswith("@"):
+        s = Path(s[1:]).read_text(encoding="utf-8")
+    return json.loads(s)
+
+
 def _lock_if_needed(opts: GlobalOptions, root_dir: Path):
     if opts.no_lock:
         return None
@@ -257,6 +266,11 @@ def solution_init(
     emit_json(payload) if opts.json else emit_human(solution_path)
 
 
+@solution_app.command("migrate")
+def solution_migrate() -> None:
+    raise Datam8NotImplementedError(message="Solution migration is not implemented.")
+
+
 @base_app.command("list")
 def base_list(ctx: typer.Context) -> None:
     opts: GlobalOptions = ctx.obj
@@ -283,13 +297,7 @@ def base_get(ctx: typer.Context, rel_path: str = typer.Argument(..., help="Path 
 def base_save(ctx: typer.Context, rel_path: str = typer.Argument(...), content: str = typer.Argument(..., help="JSON string, @file, or '-' for stdin.")) -> None:
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
-    if content == "-":
-        raw = sys.stdin.read()
-    elif content.startswith("@"):
-        raw = Path(content[1:]).read_text(encoding="utf-8")
-    else:
-        raw = content
-    doc = json.loads(raw)
+    doc = _read_json_arg(content)
     resolved, _sol = read_solution(opts.solution)
     lock = _lock_if_needed(opts, resolved.root_dir)
     if lock:
@@ -298,6 +306,76 @@ def base_save(ctx: typer.Context, rel_path: str = typer.Argument(...), content: 
     else:
         abs_path = write_base_entity(rel_path, doc, opts.solution)
     payload = {"status": "ok", "result": {"status": "saved", "affectedFiles": [abs_path], "traceId": trace_id}, "traceId": trace_id}
+    emit_json(payload) if opts.json else emit_human(f"saved: {abs_path}")
+
+
+@base_app.command("set")
+def base_set(
+    ctx: typer.Context,
+    rel_path: str = typer.Argument(..., help="Path relative to solution root."),
+    pointer: str = typer.Argument(..., help="JSON pointer (e.g. /a/b/0)."),
+    value_json: str = typer.Argument(..., help="JSON value (string, @file.json, or '-' for stdin)."),
+    create_missing: bool = typer.Option(True, "--create-missing/--no-create-missing"),
+) -> None:
+    opts: GlobalOptions = ctx.obj
+    trace_id = new_trace_id()
+    current = read_workspace_json(rel_path, opts.solution)
+    value = _read_json_arg(value_json)
+    next_doc = set_by_pointer(current, pointer, value, create_missing=create_missing)
+
+    resolved, _sol = read_solution(opts.solution)
+    lock = _lock_if_needed(opts, resolved.root_dir)
+    if lock:
+        with lock:
+            abs_path = write_base_entity(rel_path, next_doc, opts.solution)
+    else:
+        abs_path = write_base_entity(rel_path, next_doc, opts.solution)
+    payload = {"status": "ok", "result": {"status": "saved", "entity": rel_path, "affectedFiles": [abs_path], "traceId": trace_id}, "traceId": trace_id}
+    emit_json(payload) if opts.json else emit_human(f"saved: {abs_path}")
+
+
+@base_app.command("patch")
+def base_patch(
+    ctx: typer.Context,
+    rel_path: str = typer.Argument(..., help="Path relative to solution root."),
+    patch_json: str = typer.Argument(..., help="JSON merge patch (string, @file.json, or '-' for stdin)."),
+) -> None:
+    opts: GlobalOptions = ctx.obj
+    trace_id = new_trace_id()
+    current = read_workspace_json(rel_path, opts.solution)
+    patch = _read_json_arg(patch_json)
+    next_doc = merge_patch(current, patch)
+
+    resolved, _sol = read_solution(opts.solution)
+    lock = _lock_if_needed(opts, resolved.root_dir)
+    if lock:
+        with lock:
+            abs_path = write_base_entity(rel_path, next_doc, opts.solution)
+    else:
+        abs_path = write_base_entity(rel_path, next_doc, opts.solution)
+    payload = {"status": "ok", "result": {"status": "saved", "entity": rel_path, "affectedFiles": [abs_path], "traceId": trace_id}, "traceId": trace_id}
+    emit_json(payload) if opts.json else emit_human(f"saved: {abs_path}")
+
+
+@base_app.command("edit")
+def base_edit(ctx: typer.Context, rel_path: str = typer.Argument(..., help="Path relative to solution root.")) -> None:
+    opts: GlobalOptions = ctx.obj
+    trace_id = new_trace_id()
+    current = read_workspace_json(rel_path, opts.solution)
+    edited_raw = _run_editor(suffix=".json", initial_text=json.dumps(current, indent=4, ensure_ascii=False) + "\n")
+    try:
+        next_doc = json.loads(edited_raw)
+    except Exception as e:
+        raise Datam8Error(code="validation_error", message="Edited JSON is invalid.", details={"error": str(e)}, exit_code=2)
+
+    resolved, _sol = read_solution(opts.solution)
+    lock = _lock_if_needed(opts, resolved.root_dir)
+    if lock:
+        with lock:
+            abs_path = write_base_entity(rel_path, next_doc, opts.solution)
+    else:
+        abs_path = write_base_entity(rel_path, next_doc, opts.solution)
+    payload = {"status": "ok", "result": {"status": "saved", "entity": rel_path, "affectedFiles": [abs_path], "traceId": trace_id}, "traceId": trace_id}
     emit_json(payload) if opts.json else emit_human(f"saved: {abs_path}")
 
 
@@ -371,13 +449,7 @@ def model_save(
 ) -> None:
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
-    if content == "-":
-        raw = sys.stdin.read()
-    elif content.startswith("@"):
-        raw = Path(content[1:]).read_text(encoding="utf-8")
-    else:
-        raw = content
-    doc = json.loads(raw)
+    doc = _read_json_arg(content)
     ent = resolve_model_entity(selector, solution_path=opts.solution, by=by)
     resolved, _sol = read_solution(opts.solution)
     lock = _lock_if_needed(opts, resolved.root_dir)
@@ -386,6 +458,71 @@ def model_save(
             abs_path = write_model_entity(ent.rel_path, doc, opts.solution)
     else:
         abs_path = write_model_entity(ent.rel_path, doc, opts.solution)
+    payload = {"status": "ok", "result": {"status": "saved", "entity": ent.rel_path, "affectedFiles": [abs_path], "traceId": trace_id}, "traceId": trace_id}
+    emit_json(payload) if opts.json else emit_human(f"saved: {abs_path}")
+
+
+@model_app.command("validate")
+def model_validate_cmd(ctx: typer.Context, selector: str = typer.Argument(...), by: str = typer.Option("auto", "--by")) -> None:
+    opts: GlobalOptions = ctx.obj
+    trace_id = new_trace_id()
+    ent = resolve_model_entity(selector, solution_path=opts.solution, by=by)
+    content = read_workspace_json(ent.rel_path, opts.solution)
+    ok = isinstance(content, dict)
+    payload = {"status": "ok" if ok else "error", "relPath": ent.rel_path, "traceId": trace_id}
+    if not ok:
+        raise Datam8Error(code="validation_error", message="Model entity must be a JSON object.", details={"relPath": ent.rel_path}, exit_code=2)
+    emit_json(payload) if opts.json else emit_human(f"ok: {ent.rel_path}")
+
+
+@model_app.command("set")
+def model_set_cmd(
+    ctx: typer.Context,
+    selector: str = typer.Argument(...),
+    pointer: str = typer.Argument(...),
+    value_json: str = typer.Argument(...),
+    by: str = typer.Option("auto", "--by"),
+    create_missing: bool = typer.Option(True, "--create-missing/--no-create-missing"),
+) -> None:
+    opts: GlobalOptions = ctx.obj
+    trace_id = new_trace_id()
+    ent = resolve_model_entity(selector, solution_path=opts.solution, by=by)
+    current = read_workspace_json(ent.rel_path, opts.solution)
+    value = _read_json_arg(value_json)
+    next_doc = set_by_pointer(current, pointer, value, create_missing=create_missing)
+
+    resolved, _sol = read_solution(opts.solution)
+    lock = _lock_if_needed(opts, resolved.root_dir)
+    if lock:
+        with lock:
+            abs_path = write_model_entity(ent.rel_path, next_doc, opts.solution)
+    else:
+        abs_path = write_model_entity(ent.rel_path, next_doc, opts.solution)
+    payload = {"status": "ok", "result": {"status": "saved", "entity": ent.rel_path, "affectedFiles": [abs_path], "traceId": trace_id}, "traceId": trace_id}
+    emit_json(payload) if opts.json else emit_human(f"saved: {abs_path}")
+
+
+@model_app.command("patch")
+def model_patch_cmd(
+    ctx: typer.Context,
+    selector: str = typer.Argument(...),
+    patch_json: str = typer.Argument(...),
+    by: str = typer.Option("auto", "--by"),
+) -> None:
+    opts: GlobalOptions = ctx.obj
+    trace_id = new_trace_id()
+    ent = resolve_model_entity(selector, solution_path=opts.solution, by=by)
+    current = read_workspace_json(ent.rel_path, opts.solution)
+    patch = _read_json_arg(patch_json)
+    next_doc = merge_patch(current, patch)
+
+    resolved, _sol = read_solution(opts.solution)
+    lock = _lock_if_needed(opts, resolved.root_dir)
+    if lock:
+        with lock:
+            abs_path = write_model_entity(ent.rel_path, next_doc, opts.solution)
+    else:
+        abs_path = write_model_entity(ent.rel_path, next_doc, opts.solution)
     payload = {"status": "ok", "result": {"status": "saved", "entity": ent.rel_path, "affectedFiles": [abs_path], "traceId": trace_id}, "traceId": trace_id}
     emit_json(payload) if opts.json else emit_human(f"saved: {abs_path}")
 
@@ -635,6 +772,15 @@ def index_read_cmd(ctx: typer.Context) -> None:
     emit_json(payload) if opts.json else emit_human(json.dumps(idx, indent=2, ensure_ascii=False))
 
 
+@index_app.command("show")
+def index_show_cmd(ctx: typer.Context) -> None:
+    opts: GlobalOptions = ctx.obj
+    trace_id = new_trace_id()
+    idx = read_index(opts.solution)
+    payload = {"status": "ok", "index": idx, "traceId": trace_id}
+    emit_json(payload) if opts.json else emit_human(json.dumps(idx, indent=2, ensure_ascii=False))
+
+
 @refactor_app.command("properties")
 def refactor_properties_cmd(ctx: typer.Context) -> None:
     opts: GlobalOptions = ctx.obj
@@ -651,31 +797,45 @@ def refactor_properties_cmd(ctx: typer.Context) -> None:
 
 
 @refactor_app.command("keys")
-def refactor_keys_cmd(ctx: typer.Context, prefix: str = typer.Argument(...), replacement: str = typer.Argument(...), apply: bool = typer.Option(False, "--apply")) -> None:
+def refactor_keys_cmd(
+    ctx: typer.Context,
+    mapping_json: str = typer.Argument(..., help="JSON object of {oldKey:newKey} (string, @file.json, or '-' for stdin)."),
+    apply: bool = typer.Option(False, "--apply", help="Apply changes (default is dry-run)."),
+) -> None:
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
+    mapping = _read_json_arg(mapping_json)
+    if not isinstance(mapping, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in mapping.items()):
+        raise Datam8Error(code="validation_error", message="Invalid mapping JSON.", details=None, exit_code=2)
+
     resolved, _sol = read_solution(opts.solution)
-    lock = _lock_if_needed(opts, resolved.root_dir) if apply else None
+    lock = _lock_if_needed(opts, resolved.root_dir) if (apply and not opts.no_lock) else None
     if lock:
         with lock:
-            result = core_refactor_keys(solution_path=opts.solution, prefix=prefix, replacement=replacement, apply=True)
+            result = core_refactor_keys(solution_path=opts.solution, renames=dict(mapping), apply=True)
     else:
-        result = core_refactor_keys(solution_path=opts.solution, prefix=prefix, replacement=replacement, apply=apply)
+        result = core_refactor_keys(solution_path=opts.solution, renames=dict(mapping), apply=apply)
     payload = {"status": "ok", "dryRun": not apply, "result": result, "traceId": trace_id}
     emit_json(payload) if opts.json else emit_human(f"updatedFiles: {result['updatedFiles']} (dryRun={not apply})")
 
 
 @refactor_app.command("values")
-def refactor_values_cmd(ctx: typer.Context, prefix: str = typer.Argument(...), replacement: str = typer.Argument(...), apply: bool = typer.Option(False, "--apply")) -> None:
+def refactor_values_cmd(
+    ctx: typer.Context,
+    old: str = typer.Argument(..., help="Old string value (exact match)."),
+    new: str = typer.Argument(..., help="New string value."),
+    key: Optional[str] = typer.Option(None, "--key", help="Only replace values under this key."),
+    apply: bool = typer.Option(False, "--apply", help="Apply changes (default is dry-run)."),
+) -> None:
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
     resolved, _sol = read_solution(opts.solution)
-    lock = _lock_if_needed(opts, resolved.root_dir) if apply else None
+    lock = _lock_if_needed(opts, resolved.root_dir) if (apply and not opts.no_lock) else None
     if lock:
         with lock:
-            result = core_refactor_values(solution_path=opts.solution, prefix=prefix, replacement=replacement, apply=True)
+            result = core_refactor_values(solution_path=opts.solution, old=old, new=new, key=key, apply=True)
     else:
-        result = core_refactor_values(solution_path=opts.solution, prefix=prefix, replacement=replacement, apply=apply)
+        result = core_refactor_values(solution_path=opts.solution, old=old, new=new, key=key, apply=apply)
     payload = {"status": "ok", "dryRun": not apply, "result": result, "traceId": trace_id}
     emit_json(payload) if opts.json else emit_human(f"updatedFiles: {result['updatedFiles']} (dryRun={not apply})")
 
