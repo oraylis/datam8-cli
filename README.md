@@ -67,7 +67,10 @@ uv tool run ruff check src
 ```
 
 ## Local execution
-`datam8` is a Typer-based CLI. Use `datam8 generate` for template generation and `datam8 serve` to start the FastAPI backend used by DataM8 Neon.
+`datam8` is a Typer-based CLI:
+- Workspace/file operations (direct filesystem): `datam8 solution|base|model|script|index|refactor|search|connector|secret|plugin|diag ...`
+- Template generation: `datam8 generate ...`
+- Desktop backend: `datam8 serve ...` (FastAPI + Jobs)
 
 See:
 - `docs/server.md` for the `datam8 serve` readiness/auth/CORS protocol.
