@@ -16,21 +16,9 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-import typer
+from datam8.cli.main import app, main
 
-from .cmd import generate, migrate, reverse, serve, validate
-
-app = typer.Typer(
-    pretty_exceptions_enable=True,
-    pretty_exceptions_show_locals=True,
-    pretty_exceptions_short=False,
-)
-
-app.add_typer(generate.app)
-app.add_typer(validate.app)
-app.add_typer(reverse.app)
-app.add_typer(serve.app)
-app.add_typer(migrate.app)
+__all__ = ["app", "main"]
 
 if __name__ == "__main__":
-    app()
+    main()

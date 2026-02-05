@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from datam8.app import app
+from datam8.app import main
 
 
 def main() -> None:
-    app()
+    main()
 
 
 if __name__ == "__main__":
