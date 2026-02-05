@@ -210,7 +210,8 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
 
     source_solution_path = args.get("sourceSolutionPath")
     target_dir = args.get("targetDir")
-    options = args.get("options") if isinstance(args.get("options"), dict) else {}
+    options_raw = args.get("options")
+    options: dict[str, Any] = options_raw if isinstance(options_raw, dict) else {}
     copy_generate = bool(options.get("copyGenerate", True))
     copy_diagram = bool(options.get("copyDiagram", True))
     copy_output = bool(options.get("copyOutput", False))
@@ -511,13 +512,18 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
                 continue
             ent = j.get("entity") if isinstance(j, dict) else {}
             ent = ent if isinstance(ent, dict) else {}
-            data_product = ent.get("dataProduct").strip() if isinstance(ent.get("dataProduct"), str) and ent.get("dataProduct").strip() else "UnknownProduct"
-            data_module = ent.get("dataModule").strip() if isinstance(ent.get("dataModule"), str) and ent.get("dataModule").strip() else "UnknownModule"
-            name = ent.get("name").strip() if isinstance(ent.get("name"), str) and ent.get("name").strip() else abs_path.stem
-            display_name = ent.get("displayName").strip() if isinstance(ent.get("displayName"), str) and ent.get("displayName").strip() else None
+            dp_raw = ent.get("dataProduct")
+            dm_raw = ent.get("dataModule")
+            name_raw = ent.get("name")
+            dn_raw = ent.get("displayName")
+            data_product = dp_raw.strip() if isinstance(dp_raw, str) and dp_raw.strip() else "UnknownProduct"
+            data_module = dm_raw.strip() if isinstance(dm_raw, str) and dm_raw.strip() else "UnknownModule"
+            name = name_raw.strip() if isinstance(name_raw, str) and name_raw.strip() else abs_path.stem
+            display_name = dn_raw.strip() if isinstance(dn_raw, str) and dn_raw.strip() else None
             key = f"{data_product}::{data_module}::{name}"
 
-            attrs = ent.get("attribute") if isinstance(ent.get("attribute"), list) else []
+            attrs_raw = ent.get("attribute")
+            attrs = attrs_raw if isinstance(attrs_raw, list) else []
             attributes = []
             for a in attrs:
                 if not isinstance(a, dict):
@@ -539,9 +545,18 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
 
             fn = j.get("function") if isinstance(j, dict) else None
             fn = fn if isinstance(fn, dict) else {}
-            fn_data_source = fn.get("dataSource").strip() if isinstance(fn.get("dataSource"), str) and fn.get("dataSource").strip() else None
-            fn_source_location = fn.get("sourceLocation").strip() if isinstance(fn.get("sourceLocation"), str) and fn.get("sourceLocation").strip() else None
-            fn_info = {"dataSource": fn_data_source, "sourceLocation": fn_source_location} if (fn_data_source or fn_source_location) else None
+            ds_raw = fn.get("dataSource")
+            sl_raw = fn.get("sourceLocation")
+            fn_data_source = ds_raw.strip() if isinstance(ds_raw, str) and ds_raw.strip() else None
+            fn_source_location = sl_raw.strip() if isinstance(sl_raw, str) and sl_raw.strip() else None
+            fn_info: dict[str, str] | None = None
+            if fn_data_source or fn_source_location:
+                tmp: dict[str, str] = {}
+                if fn_data_source:
+                    tmp["dataSource"] = fn_data_source
+                if fn_source_location:
+                    tmp["sourceLocation"] = fn_source_location
+                fn_info = tmp or None
 
             if key in raw_by_key:
                 warnings.append(f"Raw: duplicate entity key '{key}' detected; keeping first entry.")
@@ -573,10 +588,14 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
                 continue
             ent = j.get("entity") if isinstance(j, dict) else {}
             ent = ent if isinstance(ent, dict) else {}
-            data_product = ent.get("dataProduct").strip() if isinstance(ent.get("dataProduct"), str) and ent.get("dataProduct").strip() else "UnknownProduct"
-            data_module = ent.get("dataModule").strip() if isinstance(ent.get("dataModule"), str) and ent.get("dataModule").strip() else "UnknownModule"
-            name = ent.get("name").strip() if isinstance(ent.get("name"), str) and ent.get("name").strip() else abs_path.stem
-            display_name = ent.get("displayName").strip() if isinstance(ent.get("displayName"), str) and ent.get("displayName").strip() else None
+            dp_raw = ent.get("dataProduct")
+            dm_raw = ent.get("dataModule")
+            name_raw = ent.get("name")
+            dn_raw = ent.get("displayName")
+            data_product = dp_raw.strip() if isinstance(dp_raw, str) and dp_raw.strip() else "UnknownProduct"
+            data_module = dm_raw.strip() if isinstance(dm_raw, str) and dm_raw.strip() else "UnknownModule"
+            name = name_raw.strip() if isinstance(name_raw, str) and name_raw.strip() else abs_path.stem
+            display_name = dn_raw.strip() if isinstance(dn_raw, str) and dn_raw.strip() else None
 
             zone_folder = _v2_zone_folder(zone)
             v2_rel_path = "/".join(["Model", zone_folder, data_product, data_module, f"{name}.json"])
@@ -688,7 +707,8 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
         for p in params:
             if not isinstance(p, dict):
                 continue
-            name = p.get("name") if isinstance(p.get("name"), str) else ""
+            name_raw = p.get("name")
+            name = name_raw if isinstance(name_raw, str) else ""
             if not name.strip():
                 continue
             prop_name = get_param_prop_name(name.strip())
@@ -706,16 +726,20 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
             "type": raw_attr.get("type"),
             "nullable": bool(raw_attr.get("nullable")) if raw_attr.get("nullable") is not None else True,
         }
-        if isinstance(raw_attr.get("charLength"), (int, float)) and float(raw_attr.get("charLength")) > 0:
-            out["charLen"] = int(raw_attr["charLength"])
-        if isinstance(raw_attr.get("precision"), (int, float)) and float(raw_attr.get("precision")) > 0:
-            out["precision"] = int(raw_attr["precision"])
-        if isinstance(raw_attr.get("scale"), (int, float)) and float(raw_attr.get("scale")) >= 0:
-            out["scale"] = int(raw_attr["scale"])
+        char_len_raw = raw_attr.get("charLength")
+        prec_raw = raw_attr.get("precision")
+        scale_raw = raw_attr.get("scale")
+        if isinstance(char_len_raw, (int, float)) and float(char_len_raw) > 0:
+            out["charLen"] = int(char_len_raw)
+        if isinstance(prec_raw, (int, float)) and float(prec_raw) > 0:
+            out["precision"] = int(prec_raw)
+        if isinstance(scale_raw, (int, float)) and float(scale_raw) >= 0:
+            out["scale"] = int(scale_raw)
         return out
 
     def convert_entity(meta: _V1EntityMeta) -> dict[str, Any]:
-        ent = meta.v1.get("entity") if isinstance(meta.v1.get("entity"), dict) else {}
+        ent_raw = meta.v1.get("entity")
+        ent = ent_raw if isinstance(ent_raw, dict) else {}
 
         entity_kept = {
             "dataModule",
@@ -735,7 +759,8 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
         build_property_refs_from_tags(ent.get("tags"), entity_properties)
         build_property_refs_from_parameters(ent.get("parameters"), entity_properties, meta.v2_rel_path)
 
-        v1_attrs = ent.get("attribute") if isinstance(ent.get("attribute"), list) else []
+        v1_attrs_raw = ent.get("attribute")
+        v1_attrs = v1_attrs_raw if isinstance(v1_attrs_raw, list) else []
         attrs_out: list[dict[str, Any]] = []
         if not v1_attrs:
             warnings.append(f"{meta.v2_rel_path}: entity has no attributes; generated placeholder attribute.")
@@ -753,8 +778,14 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
             for idx, a in enumerate(v1_attrs):
                 if not isinstance(a, dict):
                     continue
-                name = a.get("name").strip() if isinstance(a.get("name"), str) and a.get("name").strip() else f"attr_{idx+1}"
-                attribute_type = a.get("attributeType").strip() if isinstance(a.get("attributeType"), str) and a.get("attributeType").strip() else "ID"
+                name_raw = a.get("name")
+                attribute_type_raw = a.get("attributeType")
+                name = name_raw.strip() if isinstance(name_raw, str) and name_raw.strip() else f"attr_{idx+1}"
+                attribute_type = (
+                    attribute_type_raw.strip()
+                    if isinstance(attribute_type_raw, str) and attribute_type_raw.strip()
+                    else "ID"
+                )
                 v1_type = a.get("dataType") if a.get("dataType") is not None else a.get("type")
                 dt: dict[str, Any] = {
                     "type": _normalize_internal_type(v1_type),
@@ -763,10 +794,12 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
                 char_len = a.get("charLength") if a.get("charLength") is not None else a.get("charLen")
                 if isinstance(char_len, (int, float)) and float(char_len) > 0:
                     dt["charLen"] = int(char_len)
-                if isinstance(a.get("precision"), (int, float)) and float(a.get("precision")) > 0:
-                    dt["precision"] = int(a.get("precision"))
-                if isinstance(a.get("scale"), (int, float)) and float(a.get("scale")) >= 0:
-                    dt["scale"] = int(a.get("scale"))
+                prec_raw = a.get("precision")
+                if isinstance(prec_raw, (int, float)) and float(prec_raw) > 0:
+                    dt["precision"] = int(prec_raw)
+                scale_raw = a.get("scale")
+                if isinstance(scale_raw, (int, float)) and float(scale_raw) >= 0:
+                    dt["scale"] = int(scale_raw)
 
                 attribute_properties: list[dict[str, str]] = []
                 build_property_refs_from_tags(a.get("tags"), attribute_properties)
@@ -794,32 +827,39 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
         transformations_out: list[dict[str, Any]] = []
 
         if meta.zone == "stage":
-            stage_fn = meta.v1.get("function") if isinstance(meta.v1.get("function"), dict) else {}
+            stage_fn_raw = meta.v1.get("function")
+            stage_fn = stage_fn_raw if isinstance(stage_fn_raw, dict) else {}
             raw = raw_by_key.get(meta.raw_key) if meta.raw_key else None
             data_source = None
             source_location = None
             if raw and raw.function:
                 data_source = raw.function.get("dataSource") or data_source
                 source_location = raw.function.get("sourceLocation") or source_location
-            if isinstance(stage_fn.get("dataSource"), str) and stage_fn.get("dataSource").strip():
-                data_source = stage_fn.get("dataSource").strip()
-            if isinstance(stage_fn.get("sourceLocation"), str) and stage_fn.get("sourceLocation").strip():
-                source_location = stage_fn.get("sourceLocation").strip()
+            stage_ds_raw = stage_fn.get("dataSource")
+            if isinstance(stage_ds_raw, str) and stage_ds_raw.strip():
+                data_source = stage_ds_raw.strip()
+            stage_sl_raw = stage_fn.get("sourceLocation")
+            if isinstance(stage_sl_raw, str) and stage_sl_raw.strip():
+                source_location = stage_sl_raw.strip()
 
             raw_attr_by_name: dict[str, dict[str, Any]] = {}
             if raw and raw.attributes:
                 for ra in raw.attributes:
-                    if isinstance(ra.get("name"), str):
-                        raw_attr_by_name[ra["name"]] = ra
+                    ra_name = ra.get("name")
+                    if isinstance(ra_name, str):
+                        raw_attr_by_name[ra_name] = ra
 
             mapping_out: list[dict[str, Any]] = []
-            v1_map = stage_fn.get("attributeMapping") if isinstance(stage_fn.get("attributeMapping"), list) else None
+            v1_map_raw = stage_fn.get("attributeMapping")
+            v1_map = v1_map_raw if isinstance(v1_map_raw, list) else None
             if v1_map:
                 for m in v1_map:
                     if not isinstance(m, dict):
                         continue
-                    source_name = m.get("source") if isinstance(m.get("source"), str) else ""
-                    target_name = m.get("target") if isinstance(m.get("target"), str) else ""
+                    source_name_raw = m.get("source")
+                    target_name_raw = m.get("target")
+                    source_name = source_name_raw if isinstance(source_name_raw, str) else ""
+                    target_name = target_name_raw if isinstance(target_name_raw, str) else ""
                     if not source_name.strip() or not target_name.strip():
                         continue
                     row: dict[str, Any] = {"sourceName": source_name.strip(), "targetName": target_name.strip()}
@@ -829,7 +869,8 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
                     mapping_out.append(row)
             else:
                 for a in attrs_out:
-                    n = a.get("name") if isinstance(a.get("name"), str) else ""
+                    n_raw = a.get("name")
+                    n = n_raw if isinstance(n_raw, str) else ""
                     if not n.strip():
                         continue
                     row: dict[str, Any] = {"sourceName": n, "targetName": n}
@@ -852,13 +893,15 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
                 }
             )
         elif meta.zone == "curated":
-            v1_fns = meta.v1.get("function") if isinstance(meta.v1.get("function"), list) else []
+            v1_fns_raw = meta.v1.get("function")
+            v1_fns = v1_fns_raw if isinstance(v1_fns_raw, list) else []
             if v1_fns:
                 warnings.append(f"{meta.v2_rel_path}: curated function metadata (merge_type/frequency/etc.) is not migrated.")
             for idx, fn in enumerate(v1_fns):
                 if not isinstance(fn, dict):
                     continue
-                name = fn.get("name").strip() if isinstance(fn.get("name"), str) else ""
+                fn_name_raw = fn.get("name")
+                name = fn_name_raw.strip() if isinstance(fn_name_raw, str) else ""
                 if not name:
                     continue
                 transformations_out.append(
@@ -868,10 +911,13 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
             for fn in v1_fns:
                 if not isinstance(fn, dict):
                     continue
-                for s in fn.get("source") if isinstance(fn.get("source"), list) else []:
+                sources_raw = fn.get("source")
+                sources = sources_raw if isinstance(sources_raw, list) else []
+                for s in sources:
                     if not isinstance(s, dict):
                         continue
-                    dm8l = s.get("dm8l").strip() if isinstance(s.get("dm8l"), str) else ""
+                    dm8l_raw = s.get("dm8l")
+                    dm8l = dm8l_raw.strip() if isinstance(dm8l_raw, str) else ""
                     if dm8l.startswith("/"):
                         locator_set.add(dm8l)
             for loc in sorted(locator_set):
@@ -881,12 +927,15 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
                     continue
                 sources_out.append({"sourceLocation": target_id})
         else:
-            fn = meta.v1.get("function") if isinstance(meta.v1.get("function"), dict) else {}
-            v1_sources = fn.get("source") if isinstance(fn.get("source"), list) else []
+            fn_raw = meta.v1.get("function")
+            fn = fn_raw if isinstance(fn_raw, dict) else {}
+            v1_sources_raw = fn.get("source")
+            v1_sources = v1_sources_raw if isinstance(v1_sources_raw, list) else []
             for s in v1_sources:
                 if not isinstance(s, dict):
                     continue
-                dm8l = s.get("dm8l") if isinstance(s.get("dm8l"), str) else ""
+                dm8l_raw = s.get("dm8l")
+                dm8l = dm8l_raw if isinstance(dm8l_raw, str) else ""
                 if not dm8l.strip():
                     continue
                 dm8l = dm8l.strip()
@@ -897,27 +946,31 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
                     warnings.append(f"{meta.v2_rel_path}: dropped unrecognized source '{dm8l}'.")
                     continue
                 target_id = v1_locator_to_new_id.get(dm8l)
-                mapping_out: list[dict[str, str]] = []
-                for m in s.get("mapping") if isinstance(s.get("mapping"), list) else []:
+                mapping_out2: list[dict[str, str]] = []
+                mapping_raw = s.get("mapping")
+                mapping_list = mapping_raw if isinstance(mapping_raw, list) else []
+                for m in mapping_list:
                     if not isinstance(m, dict):
                         continue
                     if isinstance(m.get("name"), str) and isinstance(m.get("sourceName"), str):
-                        mapping_out.append({"targetName": m["name"], "sourceName": m["sourceName"]})
+                        mapping_out2.append({"targetName": m["name"], "sourceName": m["sourceName"]})
                 sources_out.append(
                     {
                         "sourceLocation": target_id if target_id is not None else dm8l,
-                        "mapping": mapping_out if mapping_out else None,
+                        "mapping": mapping_out2 if mapping_out2 else None,
                     }
                 )
 
         rel_out: list[dict[str, Any]] = []
-        v1_rels = ent.get("relationship") if isinstance(ent.get("relationship"), list) else []
+        v1_rels_raw = ent.get("relationship")
+        v1_rels = v1_rels_raw if isinstance(v1_rels_raw, list) else []
         for r in v1_rels:
             if not isinstance(r, dict):
                 continue
             target = r.get("dm8lKey") if isinstance(r.get("dm8lKey"), str) else ""
             target_id = v1_locator_to_new_id.get(target) if target else None
-            fields = r.get("fields") if isinstance(r.get("fields"), list) else []
+            fields_raw = r.get("fields")
+            fields = fields_raw if isinstance(fields_raw, list) else []
             attrs = []
             for f in fields:
                 if not isinstance(f, dict):
@@ -956,7 +1009,8 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
         migrated_model_entities += 1
 
         if meta.zone == "curated":
-            v1_fns = meta.v1.get("function") if isinstance(meta.v1.get("function"), list) else []
+            v1_fns_raw = meta.v1.get("function")
+            v1_fns = v1_fns_raw if isinstance(v1_fns_raw, list) else []
             v1_entity_dir = meta.src_abs_path.parent if meta.src_abs_path else None
             v2_entity_dir = abs_out.parent
 
@@ -966,7 +1020,8 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
             for fn in v1_fns:
                 if not isinstance(fn, dict):
                     continue
-                fn_name = fn.get("name").strip() if isinstance(fn.get("name"), str) else ""
+                fn_name_raw = fn.get("name")
+                fn_name = fn_name_raw.strip() if isinstance(fn_name_raw, str) else ""
                 if not fn_name:
                     continue
                 if not is_safe_fn_name(fn_name):
@@ -1093,4 +1148,3 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
             "errors": errors,
         },
     }
-

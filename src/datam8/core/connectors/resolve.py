@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from datam8.core.connectors.registry import connector_registry
+from datam8.core.connectors.types import ConnectorModule
 from datam8.core.connectors.validation import validate_connection_config
 from datam8.core.errors import (
     Datam8ExternalSystemError,
@@ -59,7 +60,7 @@ def load_data_source_context(solution_path: str | None, data_source_id: str) -> 
     return {"dataSource": data_source, "dataSourceType": data_source_type}
 
 
-def resolve_connector_module(data_source_type: dict[str, Any]):
+def resolve_connector_module(data_source_type: dict[str, Any]) -> ConnectorModule:
     bound_id = _get_bound_connector_id(data_source_type)
     if bound_id:
         mod = connector_registry.resolve_by_id(bound_id)
@@ -83,7 +84,7 @@ def resolve_and_validate(
     solution_path: str | None,
     data_source_id: str,
     runtime_secrets: dict[str, str] | None,
-) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, str], list[str]]:
+) -> tuple[ConnectorModule, dict[str, Any], dict[str, Any], dict[str, str], list[str]]:
     ctx = load_data_source_context(solution_path, data_source_id)
     data_source = ctx["dataSource"]
     data_source_type = ctx["dataSourceType"]

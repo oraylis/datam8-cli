@@ -285,10 +285,11 @@ def _get_data_type_mapping(solution_path: str | None, data_source_name: str) -> 
     type_name = data_source.get("type") or data_source.get("dataSourceType")
     data_source_type = next((t for t in dst_list if isinstance(t, dict) and t.get("name") == type_name), None)
 
-    source_mapping = data_source.get("dataTypeMapping") if isinstance(data_source.get("dataTypeMapping"), list) else []
-    type_mapping = (
-        data_source_type.get("dataTypeMapping") if isinstance(data_source_type, dict) and isinstance(data_source_type.get("dataTypeMapping"), list) else []
-    )
+    source_mapping_raw = data_source.get("dataTypeMapping")
+    source_mapping = [m for m in source_mapping_raw if isinstance(m, dict)] if isinstance(source_mapping_raw, list) else []
+
+    type_mapping_raw = data_source_type.get("dataTypeMapping") if isinstance(data_source_type, dict) else None
+    type_mapping = [m for m in type_mapping_raw if isinstance(m, dict)] if isinstance(type_mapping_raw, list) else []
 
     return {"sourceMapping": source_mapping, "typeMapping": type_mapping}
 
@@ -350,8 +351,10 @@ def preview_schema_changes(
             runtime_secrets=runtime_secrets,
         )
 
-        mapping = source.get("mapping") if isinstance(source.get("mapping"), list) else []
-        attributes = entity.get("attributes") if isinstance(entity.get("attributes"), list) else []
+        mapping_raw = source.get("mapping")
+        mapping = mapping_raw if isinstance(mapping_raw, list) else []
+        attributes_raw = entity.get("attributes")
+        attributes = attributes_raw if isinstance(attributes_raw, list) else []
 
         changes: list[dict[str, Any]] = []
 
@@ -518,7 +521,8 @@ def apply_schema_changes(
         now = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
         new_mapping: list[dict[str, Any]] = []
-        current_mapping = source.get("mapping") if isinstance(source.get("mapping"), list) else []
+        current_mapping_raw = source.get("mapping")
+        current_mapping = current_mapping_raw if isinstance(current_mapping_raw, list) else []
 
         for src_col in source_metadata:
             if not isinstance(src_col, dict) or not isinstance(src_col.get("name"), str):
@@ -550,7 +554,8 @@ def apply_schema_changes(
         source["mapping"] = new_mapping
 
         # Apply to entity schema (selected changes only)
-        changes = diff_item.get("changes") if isinstance(diff_item.get("changes"), list) else []
+        changes_raw = diff_item.get("changes")
+        changes = changes_raw if isinstance(changes_raw, list) else []
         if not isinstance(entity.get("attributes"), list):
             entity["attributes"] = []
 
