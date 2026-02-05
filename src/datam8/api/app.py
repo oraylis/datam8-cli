@@ -66,15 +66,6 @@ def create_app(*, token: str, enable_openapi: bool = False, job_manager: Any = N
     if not allow_origin_regex:
         allow_origin_regex = r"^http://(localhost|127\.0\.0\.1):\d+$"
 
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=allow_origins,
-        allow_origin_regex=allow_origin_regex,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-
     @app.middleware("http")
     async def trace_middleware(request: Request, call_next):
         request.state.trace_id = new_trace_id()
@@ -82,8 +73,6 @@ def create_app(*, token: str, enable_openapi: bool = False, job_manager: Any = N
 
     @app.middleware("http")
     async def auth_middleware(request: Request, call_next):
-        if request.method == "OPTIONS":
-            return JSONResponse(status_code=204, content=None)
         if _is_exempt_path(request.url.path):
             return await call_next(request)
 
@@ -107,6 +96,17 @@ def create_app(*, token: str, enable_openapi: bool = False, job_manager: Any = N
             return JSONResponse(status_code=401, content=env.__dict__)
 
         return await call_next(request)
+
+    # Add CORS outermost so preflight OPTIONS are handled before auth and
+    # CORS headers are present on all responses (including errors).
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=allow_origins,
+        allow_origin_regex=allow_origin_regex,
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     @app.exception_handler(Datam8Error)
     async def datam8_error_handler(request: Request, exc: Datam8Error):
