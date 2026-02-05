@@ -60,6 +60,8 @@ def build(*, clean: bool = True, onefile: bool = True) -> Path:
         str(spec_dir),
         "--distpath",
         str(dist_root),
+        "--exclude-module",
+        "pkg_resources",
         "--collect-submodules",
         "datam8",
         "--collect-submodules",

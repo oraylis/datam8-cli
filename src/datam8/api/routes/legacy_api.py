@@ -562,7 +562,7 @@ async def sources_tables(name: str, body: ListSourceTablesBody) -> dict[str, Any
 
 
 class TableMetadataBody(DataSourceAuthBody):
-    schema: str
+    schema_: str = Field(alias="schema")
     table: str
 
 
@@ -574,7 +574,7 @@ async def datasources_table_metadata(dataSourceId: str, body: TableMetadataBody)
     connector = module.create_connector(cfg, secrets)
     if not hasattr(connector, "get_table_metadata"):
         raise Datam8ValidationError(message=f"Connector '{manifest.get('name')}' does not support metadata operations.", details=None)
-    metadata = connector.get_table_metadata(schema=body.schema, table=body.table)
+    metadata = connector.get_table_metadata(schema=body.schema_, table=body.table)
     return {"metadata": metadata}
 
 
