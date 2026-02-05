@@ -19,7 +19,7 @@ import logging
 import pathlib
 import sys
 from importlib import machinery, util
-from types import CodeType, ModuleType
+from types import ModuleType
 
 from .. import config, generate, utils
 
@@ -48,16 +48,16 @@ def load_modules(module_path: pathlib.Path) -> dict[str, ModuleType]:
         except ModuleNotFoundError as err:
             msg = "%s at %s:%s"
             line = -1
-            code: CodeType
+            code_filename = "<unknown>"
 
             tb = err.__traceback__
             while tb is not None:
                 if tb.tb_next is None:
                     line = tb.tb_lineno
-                    code = tb.tb_frame.f_code
+                    code_filename = tb.tb_frame.f_code.co_filename
                 tb = tb.tb_next
 
-            logger.error(msg, err, code.co_filename, line)
+            logger.error(msg, err, code_filename, line)
             sys.exit(1)
 
     logger.info(

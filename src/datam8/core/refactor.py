@@ -131,7 +131,7 @@ def _rename_keys(node: Any, renames: dict[str, str]) -> tuple[Any, int]:
         changes = 0
         next_dict: dict[str, Any] = {}
         for k, v in node.items():
-            nk = renames.get(k, k)
+            nk = renames.get(k) or k
             if nk != k:
                 changes += 1
             vv, c = _rename_keys(v, renames)
@@ -189,4 +189,3 @@ def _replace_int_values_for_keys(node: Any, *, keys: set[str], old: int, new: in
             next_dict[k] = vv
         return next_dict, changes
     return node, 0
-

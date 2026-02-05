@@ -289,11 +289,11 @@ def solution_init(
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
     solution_path = create_new_project(
-        name=name,
-        root=root,
-        target=target,
+        solution_name=name,
+        project_root=root,
         base_path=base_path,
         model_path=model_path,
+        target=target,
     )
     payload = {"status": "ok", "solutionPath": solution_path, "traceId": trace_id}
     emit_json(payload) if opts.json else emit_human(solution_path)
@@ -628,9 +628,9 @@ def model_duplicate(
     lock = _lock_if_needed(opts, resolved.root_dir)
     if lock:
         with lock:
-            result = duplicate_model_entity(from_rel_path, to_rel_path, opts.solution)
+            result = duplicate_model_entity(from_rel_path, to_rel_path, solution_path=opts.solution)
     else:
-        result = duplicate_model_entity(from_rel_path, to_rel_path, opts.solution)
+        result = duplicate_model_entity(from_rel_path, to_rel_path, solution_path=opts.solution)
     payload = {"status": "ok", "result": {"status": "duplicated", **result, "traceId": trace_id}, "traceId": trace_id}
     emit_json(payload) if opts.json else emit_human(f"duplicated: {result['fromAbsPath']} -> {result['toAbsPath']}")
 
@@ -843,16 +843,41 @@ def index_show_cmd(ctx: typer.Context) -> None:
 
 
 @refactor_app.command("properties")
-def refactor_properties_cmd(ctx: typer.Context) -> None:
+def refactor_properties_cmd(
+    ctx: typer.Context,
+    property_renames: str = typer.Option("[]", "--property-renames", help="JSON array of {oldName,newName}."),
+    value_renames: str = typer.Option("[]", "--value-renames", help="JSON array of {property,oldValue,newValue}."),
+    deleted_properties: str = typer.Option("[]", "--deleted-properties", help="JSON array of property names."),
+    deleted_values: str = typer.Option("[]", "--deleted-values", help="JSON array of {property,value}."),
+) -> None:
+    """Refactor property/value references in Base/ and Model/ JSON files."""
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
     resolved, _sol = read_solution(opts.solution)
     lock = _lock_if_needed(opts, resolved.root_dir)
+    prop_renames = _read_json_arg(property_renames)
+    val_renames = _read_json_arg(value_renames)
+    del_props = _read_json_arg(deleted_properties)
+    del_vals = _read_json_arg(deleted_values)
+    if not isinstance(prop_renames, list) or not isinstance(val_renames, list) or not isinstance(del_props, list) or not isinstance(del_vals, list):
+        raise Datam8Error(code="validation_error", message="Invalid refactor JSON payload.", details=None, exit_code=2)
     if lock:
         with lock:
-            result = refactor_properties(opts.solution)
+            result = refactor_properties(
+                solution_path=opts.solution,
+                property_renames=prop_renames,
+                value_renames=val_renames,
+                deleted_properties=del_props,
+                deleted_values=del_vals,
+            )
     else:
-        result = refactor_properties(opts.solution)
+        result = refactor_properties(
+            solution_path=opts.solution,
+            property_renames=prop_renames,
+            value_renames=val_renames,
+            deleted_properties=del_props,
+            deleted_values=del_vals,
+        )
     payload = {"status": "ok", "result": result, "traceId": trace_id}
     emit_json(payload) if opts.json else emit_human("ok")
 
@@ -1073,9 +1098,12 @@ def secret_list(ctx: typer.Context, data_source_name: str = typer.Argument(...))
 def secret_get(ctx: typer.Context, data_source_name: str = typer.Argument(...), key: str = typer.Argument(...)) -> None:
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
-    value = get_runtime_secret(opts.solution, data_source_name, key)
-    payload = {"status": "ok", "dataSourceName": data_source_name, "key": key, "value": value, "traceId": trace_id}
-    emit_json(payload) if opts.json else emit_human(value or "")
+    entry = get_runtime_secret(solution_path=opts.solution, data_source_name=data_source_name, key=key, reveal=True)
+    payload = {"status": "ok", "dataSourceName": data_source_name, "key": key, "secret": entry, "traceId": trace_id}
+    if opts.json:
+        emit_json(payload)
+    else:
+        emit_human(str(entry.get("value") or ""))
 
 
 @secret_app.command("set")
@@ -1093,7 +1121,7 @@ def secret_set(ctx: typer.Context, data_source_name: str = typer.Argument(...), 
 def secret_delete(ctx: typer.Context, data_source_name: str = typer.Argument(...), key: str = typer.Argument(...)) -> None:
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
-    delete_runtime_secret(opts.solution, data_source_name, key)
+    delete_runtime_secret(solution_path=opts.solution, data_source_name=data_source_name, key=key)
     payload = {"status": "ok", "result": {"status": "deleted", "traceId": trace_id}, "traceId": trace_id}
     emit_json(payload) if opts.json else emit_human("ok")
 

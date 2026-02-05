@@ -176,19 +176,23 @@ class HttpApiRestConnector:
         return v
 
     def _apply_auth(self, headers: dict[str, str]) -> None:
-        auth = self._config.get("auth") if isinstance(self._config.get("auth"), dict) else {}
-        kind = auth.get("kind") if isinstance(auth.get("kind"), str) else "none"
+        auth_raw = self._config.get("auth")
+        auth: dict[str, Any] = auth_raw if isinstance(auth_raw, dict) else {}
+        kind_raw = auth.get("kind")
+        kind = kind_raw if isinstance(kind_raw, str) else "none"
 
         if kind == "none":
             return
         if kind == "api-key-header":
-            header_name = auth.get("headerName") if isinstance(auth.get("headerName"), str) else ""
+            header_name_raw = auth.get("headerName")
+            header_name = header_name_raw if isinstance(header_name_raw, str) else ""
             if not header_name.strip():
                 raise Datam8ValidationError(message="auth.headerName is required for api-key-header.", details=None)
             headers[header_name] = self._require_secret("apiKey")
             return
         if kind == "basic":
-            username = auth.get("username") if isinstance(auth.get("username"), str) else ""
+            username_raw = auth.get("username")
+            username = username_raw if isinstance(username_raw, str) else ""
             if not username.strip():
                 raise Datam8ValidationError(message="auth.username is required for basic auth.", details=None)
             password = self._require_secret("password")
@@ -210,10 +214,14 @@ class HttpApiRestConnector:
         if self._token_cache and now_ms < (self._token_cache.expires_at_ms - TOKEN_EXPIRY_SKEW_MS):
             return self._token_cache.access_token
 
-        auth = self._config.get("auth") if isinstance(self._config.get("auth"), dict) else {}
-        token_url = auth.get("tokenUrl") if isinstance(auth.get("tokenUrl"), str) else ""
-        client_id = auth.get("clientId") if isinstance(auth.get("clientId"), str) else ""
-        scope = auth.get("scope") if isinstance(auth.get("scope"), str) else None
+        auth_raw = self._config.get("auth")
+        auth: dict[str, Any] = auth_raw if isinstance(auth_raw, dict) else {}
+        token_url_raw = auth.get("tokenUrl")
+        token_url = token_url_raw if isinstance(token_url_raw, str) else ""
+        client_id_raw = auth.get("clientId")
+        client_id = client_id_raw if isinstance(client_id_raw, str) else ""
+        scope_raw = auth.get("scope")
+        scope = scope_raw if isinstance(scope_raw, str) else None
         if not token_url.strip() or not client_id.strip():
             raise Datam8ValidationError(message="auth.tokenUrl and auth.clientId are required for oauth2.", details=None)
 
@@ -288,8 +296,10 @@ def _import_httpx():
 
 
 def create_http_api_connector(config: dict[str, Any], runtime_secrets: dict[str, str]) -> HttpApiRestConnector:
-    auth = config.get("auth") if isinstance(config.get("auth"), dict) else {}
+    auth_raw = config.get("auth")
+    auth: dict[str, Any] = auth_raw if isinstance(auth_raw, dict) else {}
     if "kind" not in auth:
-        config = dict(config)
-        config["auth"] = {**auth, "kind": "none"}
+        next_config = dict(config)
+        next_config["auth"] = {**auth, "kind": "none"}
+        config = next_config
     return HttpApiRestConnector(config, runtime_secrets)
