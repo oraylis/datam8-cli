@@ -17,8 +17,10 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 import asyncio
+import os
 import sys
 from concurrent import futures
+from pathlib import Path
 
 import rich
 import typer
@@ -38,7 +40,15 @@ sys.tracebacklimit = 0
 
 @app.command("generate")
 def command(
-    solution_path: opts.SolutionPath,
+    ctx: typer.Context,
+    solution_path: Path | None = typer.Option(
+        None,
+        "--solution",
+        "-s",
+        "--solution-path",
+        help="Path to .dm8s solution file (or folder containing exactly one .dm8s file).",
+        envvar="DATAM8_SOLUTION_PATH",
+    ),
     target: opts.GeneratorTarget = config.target,
     log_level: opts.LogLevel = opts.LogLevels.WARNING,
     clean_output: opts.CleanOutput = False,
@@ -47,6 +57,15 @@ def command(
     lazy: opts.Lazy = False,
 ):
     """Generate a jinja2 template configured in the solution file."""
+    if solution_path is None:
+        parent_obj = getattr(ctx, "obj", None)
+        candidate = getattr(parent_obj, "solution", None) if parent_obj is not None else None
+        if not isinstance(candidate, str) or not candidate.strip():
+            candidate = os.environ.get("DATAM8_SOLUTION_PATH")
+        if not isinstance(candidate, str) or not candidate.strip():
+            raise typer.BadParameter("No solution specified. Use --solution/-s (or set DATAM8_SOLUTION_PATH).")
+        solution_path = Path(candidate)
+
     config.log_level = log_level
     config.solution_path = solution_path
     config.lazy = lazy

@@ -57,9 +57,11 @@ LogLevel = Annotated[
 SolutionPath = Annotated[
     Path,
     typer.Option(
-        "--solution-path",
+        ...,
+        "--solution",
         "-s",
-        help="Path to .dm8s solution file",
+        "--solution-path",
+        help="Path to .dm8s solution file (or folder containing exactly one .dm8s file)",
         envvar="DATAM8_SOLUTION_PATH",
     ),
 ]
