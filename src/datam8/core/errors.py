@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -9,8 +9,8 @@ class ErrorEnvelope:
     code: str
     message: str
     details: Any = None
-    hint: Optional[str] = None
-    traceId: Optional[str] = None
+    hint: str | None = None
+    traceId: str | None = None
 
 
 class Datam8Error(Exception):

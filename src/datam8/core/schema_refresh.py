@@ -2,20 +2,27 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 import httpx
 
 from datam8.core.connectors.resolve import resolve_and_validate
-from datam8.core.errors import Datam8ExternalSystemError, Datam8PermissionError, Datam8ValidationError
-from datam8.core.workspace_io import list_base_entities, list_model_entities, write_model_entity
-
+from datam8.core.errors import (
+    Datam8ExternalSystemError,
+    Datam8PermissionError,
+    Datam8ValidationError,
+)
+from datam8.core.workspace_io import (
+    list_base_entities,
+    list_model_entities,
+    write_model_entity,
+)
 
 DataType = dict[str, Any]
 
 
-def _opt_int_gt0(v: Any) -> Optional[int]:
+def _opt_int_gt0(v: Any) -> int | None:
     if isinstance(v, bool):
         return None
     if isinstance(v, (int, float)) and float(v).is_integer() and int(v) > 0:
@@ -23,7 +30,7 @@ def _opt_int_gt0(v: Any) -> Optional[int]:
     return None
 
 
-def _opt_int_gte0(v: Any) -> Optional[int]:
+def _opt_int_gte0(v: Any) -> int | None:
     if isinstance(v, bool):
         return None
     if isinstance(v, (int, float)) and float(v).is_integer() and int(v) >= 0:
@@ -111,11 +118,11 @@ def _split_source_location(source_location: str) -> tuple[str, str]:
     return "", src
 
 
-def _list_model_entities(solution_path: Optional[str]) -> list[dict[str, Any]]:
+def _list_model_entities(solution_path: str | None) -> list[dict[str, Any]]:
     return [e.__dict__ for e in list_model_entities(solution_path)]
 
 
-def find_data_source_usages(solution_path: Optional[str], data_source_name: str) -> list[dict[str, Any]]:
+def find_data_source_usages(solution_path: str | None, data_source_name: str) -> list[dict[str, Any]]:
     usages: list[dict[str, Any]] = []
     entities = _list_model_entities(solution_path)
 
@@ -126,7 +133,7 @@ def find_data_source_usages(solution_path: Optional[str], data_source_name: str)
         if not isinstance(sources, list):
             continue
 
-        layer: Optional[str] = None
+        layer: str | None = None
         parts = [p for p in rel_path.split("/") if p]
         for p in parts:
             if re.match(r"^\d+-", p):
@@ -215,10 +222,10 @@ def _fetch_http_api_virtual_table_metadata_columns(
 
 def fetch_source_metadata(
     *,
-    solution_path: Optional[str],
+    solution_path: str | None,
     data_source_name: str,
     source_location: str,
-    runtime_secrets: Optional[dict[str, str]],
+    runtime_secrets: dict[str, str] | None,
 ) -> list[dict[str, Any]]:
     module, manifest, cfg, secrets, _req = resolve_and_validate(
         solution_path=solution_path,
@@ -259,7 +266,7 @@ def fetch_source_metadata(
     )
 
 
-def _get_data_type_mapping(solution_path: Optional[str], data_source_name: str) -> dict[str, list[dict[str, Any]]]:
+def _get_data_type_mapping(solution_path: str | None, data_source_name: str) -> dict[str, list[dict[str, Any]]]:
     base_entities = list_base_entities(solution_path)
     ds_entry = next((e for e in base_entities if e.name == "DataSources"), None)
     dst_entry = next((e for e in base_entities if e.name == "DataSourceTypes"), None)
@@ -314,9 +321,9 @@ class UsageRef:
 
 def preview_schema_changes(
     *,
-    solution_path: Optional[str],
+    solution_path: str | None,
     usages: list[UsageRef],
-    runtime_secrets: Optional[dict[str, str]],
+    runtime_secrets: dict[str, str] | None,
 ) -> list[dict[str, Any]]:
     diffs: list[dict[str, Any]] = []
     entities = _list_model_entities(solution_path)
@@ -462,9 +469,9 @@ def preview_schema_changes(
 
 def apply_schema_changes(
     *,
-    solution_path: Optional[str],
+    solution_path: str | None,
     diffs: list[dict[str, Any]],
-    runtime_secrets: Optional[dict[str, str]],
+    runtime_secrets: dict[str, str] | None,
 ) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     entities = _list_model_entities(solution_path)
@@ -508,7 +515,7 @@ def apply_schema_changes(
 
         attributes_changed = 0
         mappings_changed = 0
-        now = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        now = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
         new_mapping: list[dict[str, Any]] = []
         current_mapping = source.get("mapping") if isinstance(source.get("mapping"), list) else []

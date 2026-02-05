@@ -9,15 +9,18 @@ import sys
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from platformdirs import user_data_dir
 
 from datam8.core.atomic import atomic_write_json, atomic_write_text
 from datam8.core.connectors.registry import ConnectorSource, connector_registry
 from datam8.core.connectors.types import ConnectorModule
-from datam8.core.errors import Datam8ExternalSystemError, Datam8NotFoundError, Datam8ValidationError
-
+from datam8.core.errors import (
+    Datam8ExternalSystemError,
+    Datam8NotFoundError,
+    Datam8ValidationError,
+)
 
 BUILTIN_CONNECTOR_IDS = {"sqlserver", "oracle", "http-api"}
 
@@ -75,7 +78,7 @@ def _safe_relpath(dest: Path, zip_name: str) -> Path:
     return rel
 
 
-def _read_zip_text(zip_bytes: bytes, path: str) -> Optional[str]:
+def _read_zip_text(zip_bytes: bytes, path: str) -> str | None:
     with zipfile.ZipFile(io.BytesIO(zip_bytes), "r") as z:
         if path not in z.namelist():
             return None
@@ -86,7 +89,7 @@ def _read_zip_text(zip_bytes: bytes, path: str) -> Optional[str]:
             return None
 
 
-def _read_zip_json(zip_bytes: bytes, path: str) -> Optional[dict[str, Any]]:
+def _read_zip_json(zip_bytes: bytes, path: str) -> dict[str, Any] | None:
     raw = _read_zip_text(zip_bytes, path)
     if raw is None:
         return None
@@ -104,7 +107,7 @@ class PluginDescriptor:
     version: str
     entrypoint: str
     connector_ids: list[str]
-    min_datam8_version: Optional[str] = None
+    min_datam8_version: str | None = None
 
 
 def _parse_plugin_json(data: dict[str, Any]) -> PluginDescriptor:
@@ -237,8 +240,8 @@ def install_zip(
     *,
     plugin_dir: Path,
     zip_bytes: bytes,
-    file_name: Optional[str] = None,
-    source: Optional[dict[str, Any]] = None,
+    file_name: str | None = None,
+    source: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     desc = verify_zip_bundle(zip_bytes=zip_bytes)
     sha = _sha256(zip_bytes)

@@ -1,37 +1,36 @@
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Query, Request, Response
 from pydantic import BaseModel, Field
 
+from datam8.core.connectors.builtins import register_builtin_connectors
+from datam8.core.connectors.registry import connector_registry
+from datam8.core.connectors.resolve import resolve_and_validate
 from datam8.core.duration import parse_duration_seconds
 from datam8.core.errors import Datam8NotImplementedError, Datam8ValidationError
-from datam8.core.lock import SolutionLock
-from datam8.core.workspace_io import (
-    create_new_project,
-    list_base_entities,
-    list_directory,
-    list_model_entities,
-    move_model_entity,
-    read_function_source,
-    read_solution,
-    regenerate_index,
-    rename_folder,
-    rename_function_source,
-    write_base_entity,
-    write_function_source,
-    write_model_entity,
-    delete_model_entity,
-    refactor_properties,
-)
 from datam8.core.indexing import read_index, validate_index
+from datam8.core.lock import SolutionLock
+from datam8.core.migration_v1_to_v2 import migrate_solution_v1_to_v2
+from datam8.core.plugins.manager import (
+    default_plugin_dir,
+    install_git_url,
+    install_zip,
+    set_enabled,
+    uninstall,
+)
+from datam8.core.plugins.manager import reload as reload_plugins
+from datam8.core.refactor import refactor_entity_id, refactor_keys, refactor_values
+from datam8.core.schema_refresh import (
+    UsageRef,
+    apply_schema_changes,
+    find_data_source_usages,
+    preview_schema_changes,
+)
 from datam8.core.search import search_entities, search_text
-from datam8.core.refactor import refactor_keys, refactor_values, refactor_entity_id
-from datam8.core.workspace_io import delete_base_entity, delete_function_source, list_function_sources
 from datam8.core.secrets import (
     delete_runtime_secret,
     get_runtime_secrets_map,
@@ -39,15 +38,27 @@ from datam8.core.secrets import (
     list_runtime_secret_keys,
     set_runtime_secret,
 )
-from fastapi import Response
-
-from datam8.core.connectors.builtins import register_builtin_connectors
-from datam8.core.connectors.registry import connector_registry
-from datam8.core.connectors.resolve import resolve_and_validate
-from datam8.core.plugins.manager import default_plugin_dir, install_git_url, install_zip, reload as reload_plugins, set_enabled, uninstall
-from datam8.core.schema_refresh import UsageRef, apply_schema_changes, find_data_source_usages, preview_schema_changes
 from datam8.core.solution_files import detect_solution_version
-from datam8.core.migration_v1_to_v2 import migrate_solution_v1_to_v2
+from datam8.core.workspace_io import (
+    create_new_project,
+    delete_base_entity,
+    delete_function_source,
+    delete_model_entity,
+    list_base_entities,
+    list_directory,
+    list_function_sources,
+    list_model_entities,
+    move_model_entity,
+    read_function_source,
+    read_solution,
+    refactor_properties,
+    regenerate_index,
+    rename_folder,
+    rename_function_source,
+    write_base_entity,
+    write_function_source,
+    write_model_entity,
+)
 
 router = APIRouter()
 
@@ -94,7 +105,7 @@ async def solution_inspect(path: str = Query(...)) -> dict[str, str]:
 class MigrateV1ToV2Body(BaseModel):
     sourceSolutionPath: str
     targetDir: str
-    options: Optional[dict[str, Any]] = None
+    options: dict[str, Any] | None = None
 
 
 @router.post("/api/migration/v1-to-v2")
@@ -106,13 +117,13 @@ async def migration_v1_to_v2(body: MigrateV1ToV2Body) -> dict[str, Any]:
 
 
 @router.get("/api/solution")
-async def solution(path: Optional[str] = Query(None)) -> dict[str, Any]:
+async def solution(path: str | None = Query(None)) -> dict[str, Any]:
     _resolved, sol = read_solution(path)
     return {"solution": sol.model_dump(), "resolvedPaths": {"base": sol.basePath, "model": sol.modelPath}}
 
 
 @router.get("/api/solution/full")
-async def solution_full(path: Optional[str] = Query(None)) -> dict[str, Any]:
+async def solution_full(path: str | None = Query(None)) -> dict[str, Any]:
     _resolved, sol = read_solution(path)
     base_entities = [e.__dict__ for e in list_base_entities(path)]
     model_entities = [e.__dict__ for e in list_model_entities(path)]
@@ -122,8 +133,8 @@ async def solution_full(path: Optional[str] = Query(None)) -> dict[str, Any]:
 class NewProjectBody(BaseModel):
     solutionName: str
     projectRoot: str
-    basePath: Optional[str] = None
-    modelPath: Optional[str] = None
+    basePath: str | None = None
+    modelPath: str | None = None
     target: str
 
 
@@ -140,7 +151,7 @@ async def solution_new_project(body: NewProjectBody) -> dict[str, str]:
 
 
 @router.get("/api/model/entities")
-async def model_entities(path: Optional[str] = Query(None)) -> dict[str, Any]:
+async def model_entities(path: str | None = Query(None)) -> dict[str, Any]:
     entities = [e.__dict__ for e in list_model_entities(path)]
     return {"count": len(entities), "entities": entities}
 
@@ -148,9 +159,9 @@ async def model_entities(path: Optional[str] = Query(None)) -> dict[str, Any]:
 class SaveEntityBody(BaseModel):
     relPath: str
     content: Any
-    solutionPath: Optional[str] = None
-    lockTimeout: Optional[str] = None
-    noLock: Optional[bool] = None
+    solutionPath: str | None = None
+    lockTimeout: str | None = None
+    noLock: bool | None = None
 
 
 @router.post("/api/model/entities")
@@ -166,9 +177,9 @@ async def model_entities_save(body: SaveEntityBody) -> dict[str, Any]:
 
 class DeleteEntityBody(BaseModel):
     relPath: str
-    solutionPath: Optional[str] = None
-    lockTimeout: Optional[str] = None
-    noLock: Optional[bool] = None
+    solutionPath: str | None = None
+    lockTimeout: str | None = None
+    noLock: bool | None = None
 
 
 @router.delete("/api/model/entities")
@@ -185,9 +196,9 @@ async def model_entities_delete(body: DeleteEntityBody) -> dict[str, Any]:
 class MoveEntityBody(BaseModel):
     fromRelPath: str
     toRelPath: str
-    solutionPath: Optional[str] = None
-    lockTimeout: Optional[str] = None
-    noLock: Optional[bool] = None
+    solutionPath: str | None = None
+    lockTimeout: str | None = None
+    noLock: bool | None = None
 
 
 @router.post("/api/model/entities/move")
@@ -204,9 +215,9 @@ async def model_entities_move(body: MoveEntityBody) -> dict[str, Any]:
 class RenameFolderBody(BaseModel):
     fromFolderRelPath: str
     toFolderRelPath: str
-    solutionPath: Optional[str] = None
-    lockTimeout: Optional[str] = None
-    noLock: Optional[bool] = None
+    solutionPath: str | None = None
+    lockTimeout: str | None = None
+    noLock: bool | None = None
 
 
 @router.post("/api/model/folder/rename")
@@ -225,13 +236,13 @@ async def model_folder_rename(body: RenameFolderBody) -> dict[str, Any]:
 
 
 class RefactorPropertiesBody(BaseModel):
-    solutionPath: Optional[str] = None
+    solutionPath: str | None = None
     propertyRenames: list[dict[str, str]] = Field(default_factory=list)
     valueRenames: list[dict[str, str]] = Field(default_factory=list)
     deletedProperties: list[str] = Field(default_factory=list)
     deletedValues: list[dict[str, str]] = Field(default_factory=list)
-    lockTimeout: Optional[str] = None
-    noLock: Optional[bool] = None
+    lockTimeout: str | None = None
+    noLock: bool | None = None
 
 
 @router.post("/api/refactor/properties")
@@ -270,12 +281,12 @@ async def index_regenerate(body: dict[str, Any]) -> dict[str, Any]:
 
 
 @router.get("/api/index/show")
-async def index_show(path: Optional[str] = Query(None)) -> dict[str, Any]:
+async def index_show(path: str | None = Query(None)) -> dict[str, Any]:
     return {"index": read_index(path)}
 
 
 @router.get("/api/index/validate")
-async def index_validate_route(path: Optional[str] = Query(None)) -> dict[str, Any]:
+async def index_validate_route(path: str | None = Query(None)) -> dict[str, Any]:
     return {"report": validate_index(path)}
 
 
@@ -289,7 +300,7 @@ async def generator_run(body: dict[str, Any]) -> dict[str, Any]:
 
 
 @router.get("/api/base/entities")
-async def base_entities(path: Optional[str] = Query(None)) -> dict[str, Any]:
+async def base_entities(path: str | None = Query(None)) -> dict[str, Any]:
     entities = [e.__dict__ for e in list_base_entities(path)]
     return {"count": len(entities), "entities": entities}
 
@@ -317,7 +328,7 @@ async def base_entities_delete(body: DeleteEntityBody) -> dict[str, Any]:
 
 
 @router.get("/api/fs/list")
-async def fs_list(path: Optional[str] = Query(None)) -> dict[str, Any]:
+async def fs_list(path: str | None = Query(None)) -> dict[str, Any]:
     return {"entries": list_directory(path)}
 
 
@@ -325,8 +336,8 @@ async def fs_list(path: Optional[str] = Query(None)) -> dict[str, Any]:
 async def model_function_source_get(
     relPath: str = Query(""),
     source: str = Query(""),
-    entityName: Optional[str] = Query(None),
-    solutionPath: Optional[str] = Query(None),
+    entityName: str | None = Query(None),
+    solutionPath: str | None = Query(None),
 ) -> dict[str, Any]:
     content = read_function_source(relPath, source, solutionPath, entityName)
     return {"content": content}
@@ -335,9 +346,9 @@ async def model_function_source_get(
 class FunctionSourceSaveBody(BaseModel):
     relPath: str
     source: str
-    entityName: Optional[str] = None
+    entityName: str | None = None
     content: str
-    solutionPath: Optional[str] = None
+    solutionPath: str | None = None
 
 
 @router.post("/api/model/function/source")
@@ -352,8 +363,8 @@ class FunctionSourceRenameBody(BaseModel):
     relPath: str
     fromSource: str
     toSource: str
-    entityName: Optional[str] = None
-    solutionPath: Optional[str] = None
+    entityName: str | None = None
+    solutionPath: str | None = None
 
 
 @router.post("/api/model/function/rename")
@@ -365,7 +376,7 @@ async def model_function_source_rename(body: FunctionSourceRenameBody) -> dict[s
 
 
 @router.get("/api/script/list")
-async def script_list(path: str = Query(...), solutionPath: Optional[str] = Query(None)) -> dict[str, Any]:
+async def script_list(path: str = Query(...), solutionPath: str | None = Query(None)) -> dict[str, Any]:
     scripts = list_function_sources(path, solutionPath, None, include_unreferenced=True)
     return {"count": len(scripts), "scripts": scripts}
 
@@ -374,7 +385,7 @@ async def script_list(path: str = Query(...), solutionPath: Optional[str] = Quer
 async def script_delete(
     path: str = Query(...),
     source: str = Query(...),
-    solutionPath: Optional[str] = Query(None),
+    solutionPath: str | None = Query(None),
 ) -> dict[str, Any]:
     resolved, _sol = read_solution(solutionPath)
     with SolutionLock(resolved.root_dir / ".datam8.lock", timeout_seconds=parse_duration_seconds("10s")):
@@ -383,17 +394,17 @@ async def script_delete(
 
 
 @router.get("/api/search/entities")
-async def search_entities_route(q: str = Query(...), path: Optional[str] = Query(None)) -> dict[str, Any]:
+async def search_entities_route(q: str = Query(...), path: str | None = Query(None)) -> dict[str, Any]:
     return search_entities(solution_path=path, query=q)
 
 
 @router.get("/api/search/text")
-async def search_text_route(q: str = Query(...), path: Optional[str] = Query(None)) -> dict[str, Any]:
+async def search_text_route(q: str = Query(...), path: str | None = Query(None)) -> dict[str, Any]:
     return search_text(solution_path=path, pattern=q)
 
 
 class RefactorKeysBody(BaseModel):
-    solutionPath: Optional[str] = None
+    solutionPath: str | None = None
     mapping: dict[str, str]
     apply: bool = False
 
@@ -410,10 +421,10 @@ async def refactor_keys_route(body: RefactorKeysBody) -> dict[str, Any]:
 
 
 class RefactorValuesBody(BaseModel):
-    solutionPath: Optional[str] = None
+    solutionPath: str | None = None
     old: str
     new: str
-    key: Optional[str] = None
+    key: str | None = None
     apply: bool = False
 
 
@@ -429,7 +440,7 @@ async def refactor_values_route(body: RefactorValuesBody) -> dict[str, Any]:
 
 
 class RefactorEntityIdBody(BaseModel):
-    solutionPath: Optional[str] = None
+    solutionPath: str | None = None
     old: int
     new: int
     apply: bool = False
@@ -528,7 +539,7 @@ async def plugins_uninstall(body: PluginIdBody) -> dict[str, Any]:
 
 class DataSourceAuthBody(BaseModel):
     solutionPath: str
-    runtimeSecrets: Optional[dict[str, str]] = None
+    runtimeSecrets: dict[str, str] | None = None
 
 
 @router.post("/api/datasources/{dataSourceId}/list-tables")
@@ -545,8 +556,8 @@ async def datasources_list_tables(dataSourceId: str, body: DataSourceAuthBody) -
 
 # Legacy compatibility (UI wizard): /api/sources/:name/tables
 class ListSourceTablesBody(BaseModel):
-    solutionPath: Optional[str] = None
-    runtimeSecrets: Optional[dict[str, str]] = None
+    solutionPath: str | None = None
+    runtimeSecrets: dict[str, str] | None = None
 
 
 @router.post("/api/sources/{name}/tables")
@@ -599,15 +610,15 @@ async def http_virtual_table_metadata(dataSourceId: str, body: HttpVirtualTableB
 
 
 @router.get("/api/datasources/{dataSourceId}/usages")
-async def datasources_usages(dataSourceId: str, path: Optional[str] = Query(None, alias="path")) -> dict[str, Any]:
+async def datasources_usages(dataSourceId: str, path: str | None = Query(None, alias="path")) -> dict[str, Any]:
     usages = find_data_source_usages(path, dataSourceId)
     return {"usages": usages}
 
 
 class RefreshPreviewBody(BaseModel):
-    solutionPath: Optional[str] = None
+    solutionPath: str | None = None
     usages: list[dict[str, Any]]
-    runtimeSecrets: Optional[dict[str, str]] = None
+    runtimeSecrets: dict[str, str] | None = None
 
 
 @router.post("/api/datasources/{dataSourceId}/refresh-external-schemas/preview")
@@ -627,11 +638,11 @@ async def datasources_refresh_preview(dataSourceId: str, body: RefreshPreviewBod
 
 
 class RefreshApplyBody(BaseModel):
-    solutionPath: Optional[str] = None
+    solutionPath: str | None = None
     diffs: list[dict[str, Any]]
-    runtimeSecrets: Optional[dict[str, str]] = None
-    lockTimeout: Optional[str] = None
-    noLock: Optional[bool] = None
+    runtimeSecrets: dict[str, str] | None = None
+    lockTimeout: str | None = None
+    noLock: bool | None = None
 
 
 @router.post("/api/datasources/{dataSourceId}/refresh-external-schemas/apply")
@@ -654,7 +665,7 @@ async def secrets_available() -> dict[str, Any]:
 
 @router.get("/api/secrets/runtime")
 async def secrets_runtime_get(
-    solutionPath: Optional[str] = Query(None),
+    solutionPath: str | None = Query(None),
     dataSourceName: str = Query(...),
 ) -> dict[str, Any]:
     if not is_keyring_available():
@@ -664,7 +675,7 @@ async def secrets_runtime_get(
 
 
 class SecretsRuntimePutBody(BaseModel):
-    solutionPath: Optional[str] = None
+    solutionPath: str | None = None
     dataSourceName: str
     runtimeSecrets: dict[str, str]
 
@@ -683,7 +694,7 @@ async def secrets_runtime_put(body: SecretsRuntimePutBody) -> Response:
 
 
 class SecretsRuntimeDeleteBody(BaseModel):
-    solutionPath: Optional[str] = None
+    solutionPath: str | None = None
     dataSourceName: str
 
 

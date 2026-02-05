@@ -3,20 +3,25 @@ from __future__ import annotations
 import json
 import os
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ValidationError
 
 from datam8.core.atomic import atomic_write_json, atomic_write_text
-from datam8.core.errors import Datam8ConflictError, Datam8NotFoundError, Datam8ValidationError
+from datam8.core.errors import (
+    Datam8ConflictError,
+    Datam8NotFoundError,
+    Datam8ValidationError,
+)
 from datam8.core.paths import ResolvedSolution, resolve_solution, safe_join
 
 
 class GeneratorTarget(BaseModel):
     name: str
-    isDefault: Optional[bool] = None
+    isDefault: bool | None = None
     sourcePath: str
     outputPath: str
 
@@ -28,7 +33,7 @@ class Solution(BaseModel):
     generatorTargets: list[GeneratorTarget]
 
 
-def read_solution(solution_path: Optional[str]) -> tuple[ResolvedSolution, Solution]:
+def read_solution(solution_path: str | None) -> tuple[ResolvedSolution, Solution]:
     resolved = resolve_solution(solution_path or os.environ.get("DATAM8_SOLUTION_PATH"))
     try:
         raw = resolved.solution_file.read_text(encoding="utf-8")
@@ -89,7 +94,7 @@ def _read_json_file(abs_path: Path) -> Any:
         raise Datam8ValidationError(message="Invalid JSON.", details={"path": str(abs_path), "error": str(e)})
 
 
-def read_workspace_json(rel_path: str, solution_path: Optional[str]) -> Any:
+def read_workspace_json(rel_path: str, solution_path: str | None) -> Any:
     resolved, _sol = read_solution(solution_path)
     abs_path = safe_join(resolved.root_dir, rel_path)
     return _read_json_file(abs_path)
@@ -112,7 +117,7 @@ class BaseEntityEntry:
     content: Any
 
 
-def list_base_entities(solution_path: Optional[str]) -> list[BaseEntityEntry]:
+def list_base_entities(solution_path: str | None) -> list[BaseEntityEntry]:
     resolved, sol = read_solution(solution_path)
     root = resolved.root_dir
     files = _iter_json_files(root, sol.basePath)
@@ -130,7 +135,7 @@ def list_base_entities(solution_path: Optional[str]) -> list[BaseEntityEntry]:
     return entries
 
 
-def list_model_entities(solution_path: Optional[str]) -> list[ModelEntityEntry]:
+def list_model_entities(solution_path: str | None) -> list[ModelEntityEntry]:
     resolved, sol = read_solution(solution_path)
     root = resolved.root_dir
     files = _iter_json_files(root, sol.modelPath, ignore=[".properties.json"])
@@ -253,7 +258,7 @@ def _move_function_source_folder(*, root: Path, from_rel_path: str, to_rel_path:
     from_abs.rename(to_abs)
 
 
-def write_model_entity(rel_path: str, content: Any, solution_path: Optional[str]) -> str:
+def write_model_entity(rel_path: str, content: Any, solution_path: str | None) -> str:
     resolved, _sol = read_solution(solution_path)
     root = resolved.root_dir
     abs_path = safe_join(root, rel_path)
@@ -270,7 +275,7 @@ def write_model_entity(rel_path: str, content: Any, solution_path: Optional[str]
     return str(abs_path)
 
 
-def create_model_entity(rel_path: str, *, name: Optional[str], solution_path: Optional[str]) -> str:
+def create_model_entity(rel_path: str, *, name: str | None, solution_path: str | None) -> str:
     resolved, _sol = read_solution(solution_path)
     root = resolved.root_dir
     abs_path = safe_join(root, rel_path)
@@ -282,7 +287,7 @@ def create_model_entity(rel_path: str, *, name: Optional[str], solution_path: Op
     return str(abs_path)
 
 
-def delete_model_entity(rel_path: str, solution_path: Optional[str]) -> str:
+def delete_model_entity(rel_path: str, solution_path: str | None) -> str:
     resolved, _sol = read_solution(solution_path)
     root = resolved.root_dir
     abs_path = safe_join(root, rel_path)
@@ -292,7 +297,7 @@ def delete_model_entity(rel_path: str, solution_path: Optional[str]) -> str:
     return str(abs_path)
 
 
-def delete_base_entity(rel_path: str, solution_path: Optional[str]) -> str:
+def delete_base_entity(rel_path: str, solution_path: str | None) -> str:
     resolved, _sol = read_solution(solution_path)
     root = resolved.root_dir
     abs_path = safe_join(root, rel_path)
@@ -302,7 +307,7 @@ def delete_base_entity(rel_path: str, solution_path: Optional[str]) -> str:
     return str(abs_path)
 
 
-def move_model_entity(from_rel_path: str, to_rel_path: str, solution_path: Optional[str]) -> dict[str, str]:
+def move_model_entity(from_rel_path: str, to_rel_path: str, solution_path: str | None) -> dict[str, str]:
     resolved, _sol = read_solution(solution_path)
     root = resolved.root_dir
     from_abs = safe_join(root, from_rel_path)
@@ -320,9 +325,9 @@ def duplicate_model_entity(
     from_rel_path: str,
     to_rel_path: str,
     *,
-    solution_path: Optional[str],
-    new_name: Optional[str] = None,
-    new_id: Optional[int] = None,
+    solution_path: str | None,
+    new_name: str | None = None,
+    new_id: int | None = None,
 ) -> dict[str, str]:
     resolved, _sol = read_solution(solution_path)
     root = resolved.root_dir
@@ -355,7 +360,7 @@ def duplicate_model_entity(
     return {"from": str(from_abs), "to": str(to_abs)}
 
 
-def write_base_entity(rel_path: str, content: Any, solution_path: Optional[str]) -> str:
+def write_base_entity(rel_path: str, content: Any, solution_path: str | None) -> str:
     resolved, _sol = read_solution(solution_path)
     root = resolved.root_dir
     abs_path = safe_join(root, rel_path)
@@ -363,7 +368,7 @@ def write_base_entity(rel_path: str, content: Any, solution_path: Optional[str])
     return str(abs_path)
 
 
-def regenerate_index(solution_path: Optional[str]) -> dict[str, Any]:
+def regenerate_index(solution_path: str | None) -> dict[str, Any]:
     resolved, sol = read_solution(solution_path)
     root = resolved.root_dir
     entities = list_model_entities(solution_path)
@@ -392,7 +397,7 @@ def regenerate_index(solution_path: Optional[str]) -> dict[str, Any]:
     return index
 
 
-def list_directory(dir_path: Optional[str]) -> list[dict[str, str]]:
+def list_directory(dir_path: str | None) -> list[dict[str, str]]:
     target = Path(dir_path).expanduser() if dir_path else Path.cwd()
     if not target.exists():
         raise Datam8NotFoundError(message="Directory not found.", details={"path": str(target)})
@@ -441,7 +446,7 @@ def _resolve_function_source_folder_name(
     *,
     root: Path,
     rel_path: str,
-    preferred_entity_name: Optional[str] = None,
+    preferred_entity_name: str | None = None,
 ) -> tuple[str, str]:
     entity_abs = safe_join(root, rel_path)
     entity_name = (preferred_entity_name or "").strip() or (_read_model_entity_name(entity_abs) if entity_abs.exists() else "")
@@ -455,7 +460,7 @@ def _resolve_function_source_abs_path(
     root: Path,
     rel_path: str,
     source_file: str,
-    preferred_folder_name: Optional[str] = None,
+    preferred_folder_name: str | None = None,
 ) -> Path:
     _ensure_basename(source_file)
     dir_rel = Path(rel_path).parent.as_posix()
@@ -523,7 +528,7 @@ def _migrate_legacy_function_sources(*, root: Path, rel_path: str, content: Any)
             continue
 
 
-def read_function_source(rel_path: str, source_file: str, solution_path: Optional[str], entity_name: Optional[str]) -> str:
+def read_function_source(rel_path: str, source_file: str, solution_path: str | None, entity_name: str | None) -> str:
     resolved, _sol = read_solution(solution_path)
     root = resolved.root_dir
     dir_rel = Path(rel_path).parent.as_posix()
@@ -542,8 +547,8 @@ def write_function_source(
     rel_path: str,
     source_file: str,
     content: str,
-    solution_path: Optional[str],
-    entity_name: Optional[str],
+    solution_path: str | None,
+    entity_name: str | None,
 ) -> str:
     resolved, _sol = read_solution(solution_path)
     root = resolved.root_dir
@@ -572,8 +577,8 @@ def rename_function_source(
     rel_path: str,
     from_source: str,
     to_source: str,
-    solution_path: Optional[str],
-    entity_name: Optional[str],
+    solution_path: str | None,
+    entity_name: str | None,
 ) -> dict[str, Any]:
     resolved, _sol = read_solution(solution_path)
     root = resolved.root_dir
@@ -604,7 +609,7 @@ def rename_function_source(
     return {"fromAbsPath": str(from_abs), "toAbsPath": str(to_abs)}
 
 
-def delete_function_source(rel_path: str, source_file: str, solution_path: Optional[str], entity_name: Optional[str]) -> str:
+def delete_function_source(rel_path: str, source_file: str, solution_path: str | None, entity_name: str | None) -> str:
     resolved, _sol = read_solution(solution_path)
     root = resolved.root_dir
     dir_rel = Path(rel_path).parent.as_posix()
@@ -623,7 +628,7 @@ def delete_function_source(rel_path: str, source_file: str, solution_path: Optio
 
 
 def list_function_sources(
-    rel_path: str, solution_path: Optional[str], entity_name: Optional[str], *, include_unreferenced: bool = True
+    rel_path: str, solution_path: str | None, entity_name: str | None, *, include_unreferenced: bool = True
 ) -> list[str]:
     resolved, _sol = read_solution(solution_path)
     root = resolved.root_dir
@@ -677,8 +682,8 @@ def create_new_project(
     *,
     solution_name: str,
     project_root: str,
-    base_path: Optional[str],
-    model_path: Optional[str],
+    base_path: str | None,
+    model_path: str | None,
     target: str,
 ) -> str:
     if not solution_name or not project_root or not target:
@@ -766,7 +771,7 @@ def create_new_project(
     return str(solution_file_path)
 
 
-def rename_folder(from_folder_rel_path: str, to_folder_rel_path: str, solution_path: Optional[str]) -> dict[str, str]:
+def rename_folder(from_folder_rel_path: str, to_folder_rel_path: str, solution_path: str | None) -> dict[str, str]:
     resolved, _sol = read_solution(solution_path)
     root = resolved.root_dir
     from_abs = safe_join(root, from_folder_rel_path)
@@ -778,7 +783,7 @@ def rename_folder(from_folder_rel_path: str, to_folder_rel_path: str, solution_p
 
 def refactor_properties(
     *,
-    solution_path: Optional[str],
+    solution_path: str | None,
     property_renames: list[dict[str, str]],
     value_renames: list[dict[str, str]],
     deleted_properties: list[str],

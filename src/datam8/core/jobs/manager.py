@@ -11,10 +11,14 @@ import uuid
 from collections import deque
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
-from datam8.core.errors import Datam8NotFoundError, Datam8NotImplementedError, Datam8ValidationError
-from datam8.core.jobs.models import Job, JobError, JobEvent, JobStatus
+from datam8.core.errors import (
+    Datam8NotFoundError,
+    Datam8NotImplementedError,
+    Datam8ValidationError,
+)
+from datam8.core.jobs.models import Job, JobError, JobEvent
 
 
 def _now_ms() -> int:
@@ -53,7 +57,7 @@ def _kill_process_tree(pid: int) -> None:
 
 @dataclass(frozen=True)
 class _Subscriber:
-    queue: "asyncio.Queue[JobEvent]"
+    queue: asyncio.Queue[JobEvent]
 
 
 class JobManager:
@@ -77,7 +81,7 @@ class JobManager:
         self._subs: dict[str, set[_Subscriber]] = {}
         self._procs: dict[str, asyncio.subprocess.Process] = {}
 
-        self._queue: "asyncio.Queue[str]" = asyncio.Queue()
+        self._queue: asyncio.Queue[str] = asyncio.Queue()
         self._workers: list[asyncio.Task[None]] = []
         self._started = False
 
@@ -151,9 +155,9 @@ class JobManager:
         finally:
             close()
 
-    def open_subscription(self, job_id: str) -> tuple["asyncio.Queue[JobEvent]", list[JobEvent], Callable[[], None]]:
+    def open_subscription(self, job_id: str) -> tuple[asyncio.Queue[JobEvent], list[JobEvent], Callable[[], None]]:
         _ = self.get_job(job_id)
-        q: "asyncio.Queue[JobEvent]" = asyncio.Queue()
+        q: asyncio.Queue[JobEvent] = asyncio.Queue()
         sub = _Subscriber(queue=q)
         self._subs[job_id].add(sub)
         initial = list(self._events.get(job_id, []))
@@ -327,7 +331,8 @@ class JobManager:
         return {"report": report}
 
     async def _run_plugin_verify(self, job: Job) -> dict[str, Any]:
-        from datam8.core.plugins.manager import default_plugin_dir, reload as reload_plugins
+        from datam8.core.plugins.manager import default_plugin_dir
+        from datam8.core.plugins.manager import reload as reload_plugins
 
         plugin_dir_raw = job.params.get("pluginDir")
         plugin_dir = default_plugin_dir()

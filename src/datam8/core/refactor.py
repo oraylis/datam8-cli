@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from datam8.core.atomic import atomic_write_json
 from datam8.core.errors import Datam8ValidationError
@@ -19,7 +18,7 @@ class RefactorChange:
 
 def refactor_keys(
     *,
-    solution_path: Optional[str],
+    solution_path: str | None,
     renames: dict[str, str],
     apply: bool,
 ) -> dict[str, Any]:
@@ -51,11 +50,11 @@ def refactor_keys(
 
 def refactor_values(
     *,
-    solution_path: Optional[str],
+    solution_path: str | None,
     old: str,
     new: str,
     apply: bool,
-    key: Optional[str] = None,
+    key: str | None = None,
 ) -> dict[str, Any]:
     if old is None or new is None or old == "":
         raise Datam8ValidationError(message="Invalid value refactor.", details={"old": old, "new": new})
@@ -85,11 +84,11 @@ def refactor_values(
 
 def refactor_entity_id(
     *,
-    solution_path: Optional[str],
+    solution_path: str | None,
     old: int,
     new: int,
     apply: bool,
-    reference_keys: Optional[list[str]] = None,
+    reference_keys: list[str] | None = None,
 ) -> dict[str, Any]:
     if old == new:
         raise Datam8ValidationError(message="old and new ids are identical.", details={"id": old})
@@ -142,7 +141,7 @@ def _rename_keys(node: Any, renames: dict[str, str]) -> tuple[Any, int]:
     return node, 0
 
 
-def _replace_values(node: Any, *, old: str, new: str, key: Optional[str]) -> tuple[Any, int]:
+def _replace_values(node: Any, *, old: str, new: str, key: str | None) -> tuple[Any, int]:
     if isinstance(node, list):
         changes = 0
         next_list = []

@@ -1,16 +1,14 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from datam8.core.errors import Datam8NotFoundError, Datam8ValidationError
 from datam8.core.paths import safe_join
 from datam8.core.workspace_io import read_solution
 
 
-def read_index(solution_path: Optional[str]) -> dict[str, Any]:
+def read_index(solution_path: str | None) -> dict[str, Any]:
     resolved, _sol = read_solution(solution_path)
     idx = resolved.root_dir / "index.json"
     if not idx.exists():
@@ -24,7 +22,7 @@ def read_index(solution_path: Optional[str]) -> dict[str, Any]:
     return data
 
 
-def validate_index(solution_path: Optional[str]) -> dict[str, Any]:
+def validate_index(solution_path: str | None) -> dict[str, Any]:
     resolved, _sol = read_solution(solution_path)
     root = resolved.root_dir
     data = read_index(solution_path)
@@ -63,7 +61,7 @@ def validate_index(solution_path: Optional[str]) -> dict[str, Any]:
     return {"ok": not duplicates and not missing, "checked": checked, "missing": missing, "duplicates": duplicates}
 
 
-def _rel_from_locator(locator: str) -> Optional[str]:
+def _rel_from_locator(locator: str) -> str | None:
     loc = (locator or "").strip()
     if not loc.startswith("/"):
         return None

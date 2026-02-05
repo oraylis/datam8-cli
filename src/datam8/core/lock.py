@@ -4,7 +4,6 @@ import os
 import time
 from contextlib import AbstractContextManager
 from pathlib import Path
-from typing import Optional
 
 from datam8.core.errors import Datam8ConflictError
 
@@ -15,7 +14,7 @@ class SolutionLock(AbstractContextManager["SolutionLock"]):
         self.timeout_seconds = timeout_seconds
         self._fh = None
 
-    def __enter__(self) -> "SolutionLock":
+    def __enter__(self) -> SolutionLock:
         self.lock_file.parent.mkdir(parents=True, exist_ok=True)
         fh = open(self.lock_file, "a+b")
         self._fh = fh

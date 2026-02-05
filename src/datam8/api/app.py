@@ -3,13 +3,13 @@ from __future__ import annotations
 import os
 from typing import Any
 
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from datam8.api.routes.legacy_api import router as legacy_api_router
 from datam8.api.routes.jobs import router as jobs_router
+from datam8.api.routes.legacy_api import router as legacy_api_router
 from datam8.api.routes.system import router as system_router
 from datam8.core.errors import Datam8Error, Datam8ValidationError
 from datam8.core.trace import new_trace_id

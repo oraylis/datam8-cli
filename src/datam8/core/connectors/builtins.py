@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from datam8.core.connectors.registry import ConnectorSource, connector_registry
 from datam8.core.connectors.http_api import create_http_api_connector
 from datam8.core.connectors.oracle import create_oracle_connector
+from datam8.core.connectors.registry import ConnectorSource, connector_registry
 from datam8.core.connectors.sqlserver import create_sqlserver_connector
 from datam8.core.connectors.types import ConnectorModule
-
 
 SQLSERVER_MANIFEST = {
     "name": "sqlserver",

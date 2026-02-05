@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterable, Iterator, Optional
 
-from datam8.core.workspace_io import read_solution
 from datam8.core.errors import Datam8ValidationError
+from datam8.core.workspace_io import read_solution
 
 
-def iter_solution_json_files(solution_path: Optional[str]) -> Iterator[Path]:
+def iter_solution_json_files(solution_path: str | None) -> Iterator[Path]:
     resolved, sol = read_solution(solution_path)
     root = resolved.root_dir
 

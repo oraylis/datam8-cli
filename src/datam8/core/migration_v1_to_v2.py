@@ -4,9 +4,9 @@ import json
 import re
 import shutil
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from datam8.core.errors import Datam8ValidationError
 from datam8.core.workspace_io import regenerate_index
@@ -18,30 +18,30 @@ class _V1RawEntityInfo:
     data_product: str
     data_module: str
     name: str
-    display_name: Optional[str]
+    display_name: str | None
     rel_path_to_v1_json: str
-    function: Optional[dict[str, str]]
+    function: dict[str, str] | None
     attributes: list[dict[str, Any]]
     v1: dict[str, Any]
 
 
 @dataclass
 class _V1EntityMeta:
-    src_abs_path: Optional[Path]
+    src_abs_path: Path | None
     zone: str  # "stage" | "core" | "curated" | "consumer"
     data_product: str
     data_module: str
     name: str
-    display_name: Optional[str]
+    display_name: str | None
     v1_locators: list[str]
     v2_rel_path: str
     entity_id: int
-    raw_key: Optional[str]
+    raw_key: str | None
     v1: dict[str, Any]
 
 
 def _to_iso_now() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
 def _slugify(value: str) -> str:
@@ -72,7 +72,7 @@ def _warn_dropped_fields(warnings: list[str], context: str, source: Any, kept: s
         warnings.append(f"{context}: dropped unsupported fields: {', '.join(sorted(dropped))}")
 
 
-def _stringify_value(value: Any, warnings: list[str], context: str) -> Optional[str]:
+def _stringify_value(value: Any, warnings: list[str], context: str) -> str | None:
     if value is None:
         return None
     if isinstance(value, str):
@@ -107,14 +107,14 @@ def _normalize_internal_type(v1_type: Any) -> str:
     return "string"
 
 
-def _normalize_v2_history(value: Any) -> Optional[str]:
+def _normalize_v2_history(value: Any) -> str | None:
     if not isinstance(value, str):
         return None
     v = value.strip()
     return v if v in {"SCD0", "SCD1", "SCD2", "SCD3", "SCD4"} else None
 
 
-def _to_datetime_iso(value: Any) -> Optional[str]:
+def _to_datetime_iso(value: Any) -> str | None:
     if not isinstance(value, str) or not value.strip():
         return None
     v = value.strip()
@@ -124,7 +124,7 @@ def _to_datetime_iso(value: Any) -> Optional[str]:
         return f"{v.replace(' ', 'T')}Z"
     try:
         d = datetime.fromisoformat(v.replace("Z", "+00:00"))
-        return d.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        return d.astimezone(UTC).isoformat().replace("+00:00", "Z")
     except Exception:
         return None
 

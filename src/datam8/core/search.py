@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from datam8.core.solution_files import iter_solution_json_files
 from datam8.core.workspace_io import list_model_entities
@@ -15,7 +13,7 @@ class TextMatch:
     count: int
 
 
-def search_entities(*, solution_path: Optional[str], query: str) -> dict[str, Any]:
+def search_entities(*, solution_path: str | None, query: str) -> dict[str, Any]:
     q = (query or "").strip().lower()
     entities = list_model_entities(solution_path)
     matches = []
@@ -25,7 +23,7 @@ def search_entities(*, solution_path: Optional[str], query: str) -> dict[str, An
     return {"count": len(matches), "entities": matches}
 
 
-def search_text(*, solution_path: Optional[str], pattern: str) -> dict[str, Any]:
+def search_text(*, solution_path: str | None, pattern: str) -> dict[str, Any]:
     pat = pattern or ""
     if not pat:
         return {"count": 0, "matches": []}
