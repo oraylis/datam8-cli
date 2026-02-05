@@ -50,16 +50,30 @@ def _bind(host: str, port: int) -> tuple[socket.socket, int]:
 
 @app.command("serve")
 def command(
+    ctx: typer.Context,
     host: str = typer.Option("127.0.0.1", "--host"),
     port: int = typer.Option(0, "--port", min=0, max=65535),
     token: str = typer.Option(..., "--token"),
-    solution_path: Path | None = typer.Option(None, "--solution-path"),
+    solution_path: Path | None = typer.Option(
+        None,
+        "--solution",
+        "-s",
+        "--solution-path",
+        help="Path to .dm8s solution file (or folder containing it). Sets DATAM8_SOLUTION_PATH for the server process.",
+        envvar="DATAM8_SOLUTION_PATH",
+    ),
     openapi: bool = typer.Option(False, "--openapi"),
     log_level: str = typer.Option("info", "--log-level"),
 ):
     """Starts the DataM8 HTTP backend (desktop-safe)."""
     if not token or not token.strip():
         raise typer.BadParameter("--token is required.")
+    if solution_path is None:
+        parent_obj = getattr(ctx, "obj", None)
+        candidate = getattr(parent_obj, "solution", None) if parent_obj is not None else None
+        if isinstance(candidate, str) and candidate.strip():
+            solution_path = Path(candidate)
+
     if solution_path is not None:
         os.environ["DATAM8_SOLUTION_PATH"] = str(solution_path)
 

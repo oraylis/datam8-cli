@@ -88,19 +88,36 @@ class GlobalOptions:
     no_lock: bool
 
 
-app = typer.Typer(add_completion=False, no_args_is_help=True)
+app = typer.Typer(add_completion=False, no_args_is_help=True, help="DataM8 CLI (direct filesystem operations).")
 
-solution_app = typer.Typer(name="solution", add_completion=False, no_args_is_help=True)
-base_app = typer.Typer(name="base", add_completion=False, no_args_is_help=True)
-model_app = typer.Typer(name="model", add_completion=False, no_args_is_help=True)
-script_app = typer.Typer(name="script", add_completion=False, no_args_is_help=True)
-index_app = typer.Typer(name="index", add_completion=False, no_args_is_help=True)
-refactor_app = typer.Typer(name="refactor", add_completion=False, no_args_is_help=True)
-search_app = typer.Typer(name="search", add_completion=False, no_args_is_help=True)
-connector_app = typer.Typer(name="connector", add_completion=False, no_args_is_help=True)
-secret_app = typer.Typer(name="secret", add_completion=False, no_args_is_help=True)
-plugin_app = typer.Typer(name="plugin", add_completion=False, no_args_is_help=True)
-diag_app = typer.Typer(name="diag", add_completion=False, no_args_is_help=True)
+solution_app = typer.Typer(
+    name="solution",
+    add_completion=False,
+    no_args_is_help=True,
+    help="Inspect solution metadata and derived workspace information.",
+)
+base_app = typer.Typer(name="base", add_completion=False, no_args_is_help=True, help="Read and edit Base/*.json files.")
+model_app = typer.Typer(
+    name="model", add_completion=False, no_args_is_help=True, help="Read and edit Model/ entities (JSON and scripts)."
+)
+script_app = typer.Typer(
+    name="script", add_completion=False, no_args_is_help=True, help="Manage function source files under Model/."
+)
+index_app = typer.Typer(
+    name="index", add_completion=False, no_args_is_help=True, help="Read/validate/regenerate the solution index."
+)
+refactor_app = typer.Typer(
+    name="refactor", add_completion=False, no_args_is_help=True, help="Refactor entity ids, keys, and values."
+)
+search_app = typer.Typer(name="search", add_completion=False, no_args_is_help=True, help="Search entities and text.")
+connector_app = typer.Typer(
+    name="connector", add_completion=False, no_args_is_help=True, help="Resolve and validate connector definitions."
+)
+secret_app = typer.Typer(
+    name="secret", add_completion=False, no_args_is_help=True, help="Manage runtime secrets (keyring when available)."
+)
+plugin_app = typer.Typer(name="plugin", add_completion=False, no_args_is_help=True, help="Install and manage plugins.")
+diag_app = typer.Typer(name="diag", add_completion=False, no_args_is_help=True, help="Diagnostic and support commands.")
 
 app.add_typer(solution_app)
 app.add_typer(base_app)
@@ -133,6 +150,8 @@ def main_callback(
     solution: Optional[str] = typer.Option(
         None,
         "--solution",
+        "--solution-path",
+        "-s",
         help="Path to .dm8s file (or folder containing it). Defaults to DATAM8_SOLUTION_PATH.",
     ),
     json: bool = typer.Option(False, "--json", help="Output JSON only to stdout (no extra text)."),
@@ -273,6 +292,7 @@ def solution_migrate() -> None:
 
 @base_app.command("list")
 def base_list(ctx: typer.Context) -> None:
+    """List Base entities (relative paths)."""
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
     ents = list_base_entities(opts.solution)
@@ -286,6 +306,7 @@ def base_list(ctx: typer.Context) -> None:
 
 @base_app.command("get")
 def base_get(ctx: typer.Context, rel_path: str = typer.Argument(..., help="Path relative to solution root.")) -> None:
+    """Print a Base entity as JSON."""
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
     content = read_workspace_json(rel_path, opts.solution)
@@ -295,6 +316,7 @@ def base_get(ctx: typer.Context, rel_path: str = typer.Argument(..., help="Path 
 
 @base_app.command("save")
 def base_save(ctx: typer.Context, rel_path: str = typer.Argument(...), content: str = typer.Argument(..., help="JSON string, @file, or '-' for stdin.")) -> None:
+    """Write a Base entity (overwrites the file)."""
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
     doc = _read_json_arg(content)
@@ -317,6 +339,7 @@ def base_set(
     value_json: str = typer.Argument(..., help="JSON value (string, @file.json, or '-' for stdin)."),
     create_missing: bool = typer.Option(True, "--create-missing/--no-create-missing"),
 ) -> None:
+    """Set a JSON pointer value inside a Base entity and save it."""
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
     current = read_workspace_json(rel_path, opts.solution)
@@ -340,6 +363,7 @@ def base_patch(
     rel_path: str = typer.Argument(..., help="Path relative to solution root."),
     patch_json: str = typer.Argument(..., help="JSON merge patch (string, @file.json, or '-' for stdin)."),
 ) -> None:
+    """Apply a JSON merge patch to a Base entity and save it."""
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
     current = read_workspace_json(rel_path, opts.solution)
@@ -359,6 +383,7 @@ def base_patch(
 
 @base_app.command("edit")
 def base_edit(ctx: typer.Context, rel_path: str = typer.Argument(..., help="Path relative to solution root.")) -> None:
+    """Edit a Base entity in $EDITOR and save it."""
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
     current = read_workspace_json(rel_path, opts.solution)
@@ -381,6 +406,7 @@ def base_edit(ctx: typer.Context, rel_path: str = typer.Argument(..., help="Path
 
 @base_app.command("delete")
 def base_delete(ctx: typer.Context, rel_path: str = typer.Argument(...)) -> None:
+    """Delete a Base entity file."""
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
     resolved, _sol = read_solution(opts.solution)
@@ -396,6 +422,7 @@ def base_delete(ctx: typer.Context, rel_path: str = typer.Argument(...)) -> None
 
 @model_app.command("list")
 def model_list(ctx: typer.Context) -> None:
+    """List model entities (relative paths)."""
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
     ents = list_model_entities(opts.solution)
@@ -413,6 +440,7 @@ def model_get(
     selector: str = typer.Argument(..., help="Entity selector (relPath, locator, id, or name)."),
     by: str = typer.Option("auto", "--by", help="Selector type: auto|relPath|locator|id|name."),
 ) -> None:
+    """Print a model entity as JSON."""
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
     ent = resolve_model_entity(selector, solution_path=opts.solution, by=by)
@@ -427,6 +455,7 @@ def model_create(
     rel_path: str = typer.Argument(..., help="New entity relPath (under Model/...)."),
     name: Optional[str] = typer.Option(None, "--name", help="Optional entity name."),
 ) -> None:
+    """Create a new model entity JSON file."""
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
     resolved, _sol = read_solution(opts.solution)
@@ -447,6 +476,7 @@ def model_save(
     content: str = typer.Argument(..., help="JSON string, @file, or '-' for stdin."),
     by: str = typer.Option("auto", "--by"),
 ) -> None:
+    """Write a model entity (overwrites the JSON file)."""
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
     doc = _read_json_arg(content)
@@ -464,6 +494,7 @@ def model_save(
 
 @model_app.command("validate")
 def model_validate_cmd(ctx: typer.Context, selector: str = typer.Argument(...), by: str = typer.Option("auto", "--by")) -> None:
+    """Validate that a model entity is a JSON object."""
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
     ent = resolve_model_entity(selector, solution_path=opts.solution, by=by)
@@ -484,6 +515,7 @@ def model_set_cmd(
     by: str = typer.Option("auto", "--by"),
     create_missing: bool = typer.Option(True, "--create-missing/--no-create-missing"),
 ) -> None:
+    """Set a JSON pointer value inside a model entity and save it."""
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
     ent = resolve_model_entity(selector, solution_path=opts.solution, by=by)
@@ -509,6 +541,7 @@ def model_patch_cmd(
     patch_json: str = typer.Argument(...),
     by: str = typer.Option("auto", "--by"),
 ) -> None:
+    """Apply a JSON merge patch to a model entity and save it."""
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
     ent = resolve_model_entity(selector, solution_path=opts.solution, by=by)
@@ -533,6 +566,7 @@ def model_delete(
     selector: str = typer.Argument(...),
     by: str = typer.Option("auto", "--by"),
 ) -> None:
+    """Delete a model entity JSON file."""
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
     ent = resolve_model_entity(selector, solution_path=opts.solution, by=by)
@@ -553,6 +587,7 @@ def model_move(
     from_rel_path: str = typer.Argument(...),
     to_rel_path: str = typer.Argument(...),
 ) -> None:
+    """Move/rename a model entity path (updates index via workspace IO)."""
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
     resolved, _sol = read_solution(opts.solution)
@@ -572,6 +607,7 @@ def model_duplicate(
     from_rel_path: str = typer.Argument(...),
     to_rel_path: str = typer.Argument(...),
 ) -> None:
+    """Duplicate a model entity file."""
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
     resolved, _sol = read_solution(opts.solution)
@@ -591,6 +627,7 @@ def model_folder_rename(
     from_folder_rel_path: str = typer.Argument(...),
     to_folder_rel_path: str = typer.Argument(...),
 ) -> None:
+    """Rename a model folder path."""
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
     resolved, _sol = read_solution(opts.solution)
@@ -606,6 +643,7 @@ def model_folder_rename(
 
 @model_app.command("edit")
 def model_edit(ctx: typer.Context, selector: str = typer.Argument(...), by: str = typer.Option("auto", "--by")) -> None:
+    """Edit a model entity in $EDITOR and save it."""
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
     ent = resolve_model_entity(selector, solution_path=opts.solution, by=by)
@@ -634,6 +672,7 @@ def script_list(
     entity_name: Optional[str] = typer.Option(None, "--entity-name", help="Optional entity name hint for folder resolution."),
     referenced_only: bool = typer.Option(False, "--referenced-only", help="Only list scripts referenced in transformations."),
 ) -> None:
+    """List function sources (scripts) for a model entity."""
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
     ent = resolve_model_entity(entity_selector, solution_path=opts.solution, by=by)
@@ -654,6 +693,7 @@ def script_get(
     by: str = typer.Option("auto", "--by"),
     entity_name: Optional[str] = typer.Option(None, "--entity-name"),
 ) -> None:
+    """Print a function source (script) for a model entity."""
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
     ent = resolve_model_entity(entity_selector, solution_path=opts.solution, by=by)
@@ -671,6 +711,7 @@ def script_save(
     by: str = typer.Option("auto", "--by"),
     entity_name: Optional[str] = typer.Option(None, "--entity-name"),
 ) -> None:
+    """Write a function source (script) for a model entity."""
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
     if content == "-":
@@ -700,6 +741,7 @@ def script_rename(
     by: str = typer.Option("auto", "--by"),
     entity_name: Optional[str] = typer.Option(None, "--entity-name"),
 ) -> None:
+    """Rename a function source (script) for a model entity."""
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
     ent = resolve_model_entity(entity_selector, solution_path=opts.solution, by=by)
@@ -722,6 +764,7 @@ def script_delete(
     by: str = typer.Option("auto", "--by"),
     entity_name: Optional[str] = typer.Option(None, "--entity-name"),
 ) -> None:
+    """Delete a function source (script) for a model entity."""
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
     ent = resolve_model_entity(entity_selector, solution_path=opts.solution, by=by)
@@ -738,6 +781,7 @@ def script_delete(
 
 @index_app.command("regenerate")
 def index_regenerate_cmd(ctx: typer.Context) -> None:
+    """Regenerate the solution index (writes .datam8-index.json)."""
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
     resolved, _sol = read_solution(opts.solution)
@@ -753,6 +797,7 @@ def index_regenerate_cmd(ctx: typer.Context) -> None:
 
 @index_app.command("validate")
 def index_validate_cmd(ctx: typer.Context) -> None:
+    """Validate the solution index (full scan)."""
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
     report = validate_index(opts.solution)
@@ -765,6 +810,7 @@ def index_validate_cmd(ctx: typer.Context) -> None:
 
 @index_app.command("read")
 def index_read_cmd(ctx: typer.Context) -> None:
+    """Read the solution index as JSON (machine-friendly)."""
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
     idx = read_index(opts.solution)
@@ -774,6 +820,7 @@ def index_read_cmd(ctx: typer.Context) -> None:
 
 @index_app.command("show")
 def index_show_cmd(ctx: typer.Context) -> None:
+    """Show the solution index (human-friendly alias of read)."""
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
     idx = read_index(opts.solution)

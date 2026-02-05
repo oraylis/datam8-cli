@@ -17,7 +17,7 @@ class ResolvedSolution:
 def resolve_solution(candidate: Optional[str]) -> ResolvedSolution:
     if not candidate:
         raise Datam8ValidationError(
-            message="No solution specified. Use --solution or set DATAM8_SOLUTION_PATH.",
+            message="No solution specified. Use --solution/-s (or --solution-path) or set DATAM8_SOLUTION_PATH.",
             details=None,
         )
 
@@ -35,7 +35,7 @@ def resolve_solution(candidate: Optional[str]) -> ResolvedSolution:
     else:
         if p.suffix.lower() != ".dm8s":
             raise Datam8ValidationError(
-                message="--solution must be a .dm8s file or a folder containing exactly one .dm8s file.",
+                message="--solution/--solution-path must be a .dm8s file or a folder containing exactly one .dm8s file.",
                 details={"solution": str(p)},
             )
         if not p.exists():
