@@ -73,7 +73,7 @@ def build(*, clean: bool = True, onefile: bool = True) -> Path:
         + [
             "--name",
             "datam8",
-            str(repo_root / "pyinstaller" / "datam8.py"),
+            str(repo_root / "pyinstaller" / "datam8_entrypoint.py"),
         ],
         cwd=repo_root,
     )
@@ -96,4 +96,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
