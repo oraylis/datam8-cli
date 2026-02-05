@@ -11,10 +11,14 @@ dependencies = [
   "Jinja2==3.1.6",
   "jsonschema==4.23.0",
   "pydantic==2.8.2",
+  "rich==13.9.4",
   "sqlparse==0.5.1",
   "typer==0.19.1",
   "fastapi==0.128.0",
   "uvicorn==0.40.0",
+  "httpx==0.28.1",
+  "platformdirs==4.3.6",
+  "certifi==2025.1.31",
 ]
 classifiers = [
   "Programming Language :: Python :: 3",
@@ -35,6 +39,11 @@ dev = [
   "datamodel-code-generator>=0.33.0",
   "hatchling == 1.27.0",
   "deepdiff ~=8.6",
+]
+
+[project.optional-dependencies]
+build = [
+  "pyinstaller==6.11.1",
 ]
 
 [build-system]

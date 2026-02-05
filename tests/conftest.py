@@ -2,6 +2,7 @@ import asyncio
 import dataclasses
 import os
 import pathlib
+import tempfile
 
 import pytest
 from pytest_cases import fixture
@@ -11,7 +12,7 @@ from datam8 import migration_v1, parser_v1
 from datam8 import model as datam8_model
 from datam8.parser import parse_full_solution_async
 
-solution_file_path_key = pytest.StashKey[pathlib.Path]()
+solution_file_path_key = pytest.StashKey[pathlib.Path | None]()
 log_level_key = pytest.StashKey[str]()
 
 
@@ -31,11 +32,17 @@ def pytest_addoption(parser):
 
 def pytest_configure(config: pytest.Config):
     """Pre run."""
-    solution_file_path = __get_variable(config, "solution-path")
+    # Workaround: on some dev environments TMP/TEMP can point to a Windows path under /mnt/c,
+    # which breaks pytest's capture tempfiles. Force a Linux temp dir for the test session.
+    for k in ("TMPDIR", "TMP", "TEMP"):
+        os.environ[k] = "/tmp"
+    tempfile.tempdir = "/tmp"
+
+    solution_file_path = __get_variable(config, "solution-path", None)
     log_level = __get_variable(config, "log-level", "info")
 
-    config.stash[solution_file_path_key] = pathlib.Path(
-        solution_file_path.replace("\\", "/")
+    config.stash[solution_file_path_key] = (
+        pathlib.Path(solution_file_path.replace("\\", "/")) if solution_file_path else None
     )
     config.stash[log_level_key] = log_level
 
@@ -53,8 +60,12 @@ def config(request: pytest.FixtureRequest) -> TestConfig:
 
     datam8_config.lazy = True
 
+    solution_path = request.config.stash[solution_file_path_key]
+    if solution_path is None:
+        pytest.skip("Set --solution-path (or DATAM8_SOLUTION_PATH) to run model-centric tests.")
+
     return TestConfig(
-        solution_file_path=request.config.stash[solution_file_path_key],
+        solution_file_path=solution_path,
         log_level=request.config.stash[log_level_key],
         pytest_config=request.config,
     )
@@ -110,10 +121,7 @@ def __get_variable(
 
     result = variable_from_cli or variable_from_env or default
 
-    if not result:
-        raise Exception(f"No value could be set for {variable}")
-
-    return result
+    return result or ""
 
 
 def __get_variable_from_env(var: str) -> str | None:
