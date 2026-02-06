@@ -163,7 +163,7 @@ def find_data_source_usages(solution_path: str | None, data_source_name: str) ->
 def _fetch_http_api_virtual_table_metadata_columns(
     *,
     cfg: dict[str, Any],
-    secrets: dict[str, str],
+    resolver: Any,
     source_location: str,
 ) -> list[dict[str, Any]]:
     base_url = str(cfg.get("baseUrl") or "").rstrip("/")
@@ -173,20 +173,20 @@ def _fetch_http_api_virtual_table_metadata_columns(
     url = src if src.lower().startswith(("http://", "https://")) else f"{base_url}/{src.lstrip('/')}"
 
     headers: dict[str, str] = {}
-    kind = ((cfg.get("auth") or {}).get("kind") if isinstance(cfg.get("auth"), dict) else None) or "none"
+    kind = (cfg.get("auth.kind") if isinstance(cfg.get("auth.kind"), str) else None) or "none"
     auth = None
     if kind == "api-key-header":
-        header_name = ((cfg.get("auth") or {}).get("headerName") if isinstance(cfg.get("auth"), dict) else None) or "X-API-Key"
-        api_key = secrets.get("apiKey")
+        header_name = (cfg.get("auth.headerName") if isinstance(cfg.get("auth.headerName"), str) else None) or "X-API-Key"
+        api_key = resolver.resolve(key="apiKey", value=str(cfg.get("apiKey") or ""))
         if api_key:
             headers[str(header_name)] = api_key
     elif kind == "bearer-static":
-        token = secrets.get("token")
+        token = resolver.resolve(key="token", value=str(cfg.get("token") or ""))
         if token:
             headers["authorization"] = f"Bearer {token}"
     elif kind == "basic":
-        username = ((cfg.get("auth") or {}).get("username") if isinstance(cfg.get("auth"), dict) else None) or ""
-        password = secrets.get("password") or ""
+        username = (cfg.get("auth.username") if isinstance(cfg.get("auth.username"), str) else None) or ""
+        password = resolver.resolve(key="password", value=str(cfg.get("password") or ""))
         auth = (username, password)
 
     timeout_ms = int(cfg.get("requestTimeoutMs") or 10000)
@@ -227,16 +227,15 @@ def fetch_source_metadata(
     source_location: str,
     runtime_secrets: dict[str, str] | None,
 ) -> list[dict[str, Any]]:
-    module, manifest, cfg, secrets, _req = resolve_and_validate(
+    connector_cls, manifest, cfg, resolver = resolve_and_validate(
         solution_path=solution_path,
         data_source_id=data_source_name,
         runtime_secrets=runtime_secrets,
     )
 
-    connector = module.create_connector(cfg, secrets)
-    if hasattr(connector, "get_table_metadata"):
+    if hasattr(connector_cls, "get_table_metadata"):
         schema, table = _split_source_location(source_location)
-        md = connector.get_table_metadata(schema=schema, table=table)
+        md = connector_cls.get_table_metadata(cfg, resolver, schema, table)  # type: ignore[attr-defined]
         cols = md.get("columns") if isinstance(md, dict) else None
         if not isinstance(cols, list):
             raise Datam8ExternalSystemError(code="metadata_error", message="Connector metadata response is invalid.", details=None)
@@ -256,13 +255,13 @@ def fetch_source_metadata(
             out.append({"name": c.get("name"), "dataType": dt, "isPrimaryKey": bool(c.get("isPrimaryKey", False))})
         return out
 
-    if manifest.get("name") == "http-api":
-        return _fetch_http_api_virtual_table_metadata_columns(cfg=cfg, secrets=secrets, source_location=source_location)
+    if manifest.get("id") == "http-api":
+        return _fetch_http_api_virtual_table_metadata_columns(cfg=cfg, resolver=resolver, source_location=source_location)
 
     raise Datam8ExternalSystemError(
         code="metadata_unavailable",
         message=f"No metadata connector available for data source '{data_source_name}'.",
-        details={"connector": manifest.get("name")},
+        details={"connector": manifest.get("id")},
     )
 
 

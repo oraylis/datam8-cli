@@ -331,8 +331,8 @@ class JobManager:
         return {"report": report}
 
     async def _run_plugin_verify(self, job: Job) -> dict[str, Any]:
-        from datam8.core.plugins.manager import default_plugin_dir
-        from datam8.core.plugins.manager import reload as reload_plugins
+        from datam8.core.connectors.plugin_manager import default_plugin_dir
+        from datam8.core.connectors.plugin_manager import reload as reload_plugins
 
         plugin_dir_raw = job.params.get("pluginDir")
         plugin_dir = default_plugin_dir()

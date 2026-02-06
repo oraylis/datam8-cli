@@ -1,15 +1,24 @@
 from __future__ import annotations
 
+import os
 from typing import Any
 
-from datam8.core.connectors.registry import connector_registry
-from datam8.core.connectors.types import ConnectorModule
-from datam8.core.connectors.validation import validate_connection_config
+from pathlib import Path
+
+from datam8.core.connectors.binding import decode_connector_binding
+from datam8.core.connectors.plugin_host import (
+    SecretResolver,
+    get_connector,
+    load_connector_class,
+    require_version,
+    validate_connection as validate_connection_via_plugin,
+)
 from datam8.core.errors import (
     Datam8ExternalSystemError,
     Datam8NotFoundError,
     Datam8ValidationError,
 )
+from datam8.core.connectors.plugin_manager import default_plugin_dir
 from datam8.core.workspace_io import list_base_entities
 
 
@@ -17,17 +26,8 @@ def _is_record(value: Any) -> bool:
     return isinstance(value, dict)
 
 
-def _get_bound_connector_id(data_source_type: dict[str, Any]) -> str | None:
-    ext = data_source_type.get("extendedProperties")
-    if not isinstance(ext, dict):
-        return None
-    connector = ext.get("connector")
-    if not isinstance(connector, dict):
-        return None
-    cid = connector.get("id")
-    if isinstance(cid, str) and cid.strip():
-        return cid.strip()
-    return None
+def _plugin_dir() -> Path:
+    return Path(os.environ.get("DATAM8_PLUGIN_DIR") or str(default_plugin_dir()))
 
 
 def load_data_source_context(solution_path: str | None, data_source_id: str) -> dict[str, Any]:
@@ -59,58 +59,55 @@ def load_data_source_context(solution_path: str | None, data_source_id: str) -> 
 
     return {"dataSource": data_source, "dataSourceType": data_source_type}
 
-
-def resolve_connector_module(data_source_type: dict[str, Any]) -> ConnectorModule:
-    bound_id = _get_bound_connector_id(data_source_type)
-    if bound_id:
-        mod = connector_registry.resolve_by_id(bound_id)
-        if not mod:
-            raise Datam8ExternalSystemError(
-                code="connector_missing",
-                message=f"Connector '{bound_id}' is linked on DataSourceType '{data_source_type.get('name')}' but is not registered.",
-                details=None,
-            )
-        return mod
-
-    alias = str(data_source_type.get("name") or "")
-    mod = connector_registry.resolve_by_alias(alias)
-    if not mod:
-        raise Datam8ExternalSystemError(code="connector_missing", message=f"No connector registered for DataSourceType '{alias}'.", details=None)
-    return mod
-
-
 def resolve_and_validate(
     *,
     solution_path: str | None,
     data_source_id: str,
     runtime_secrets: dict[str, str] | None,
-) -> tuple[ConnectorModule, dict[str, Any], dict[str, Any], dict[str, str], list[str]]:
+) -> tuple[Any, dict[str, Any], dict[str, str], SecretResolver]:
     ctx = load_data_source_context(solution_path, data_source_id)
     data_source = ctx["dataSource"]
     data_source_type = ctx["dataSourceType"]
-    module = resolve_connector_module(data_source_type)
-    manifest = module.manifest
-
-    raw_cfg = data_source.get("extendedProperties") if isinstance(data_source, dict) else None
-    if raw_cfg is None:
-        raw_cfg = {}
-    if not _is_record(raw_cfg):
+    binding = decode_connector_binding(data_source_type.get("connectionProperties"))
+    if not binding:
         raise Datam8ValidationError(
-            message=f"Invalid extendedProperties for DataSource '{data_source_id}'. Expected an object.",
-            details=None,
+            code="connector_missing",
+            message=f"DataSourceType '{data_source_type.get('name')}' has no connector binding.",
+            details={"dataSourceType": data_source_type.get("name")},
         )
 
-    validation = validate_connection_config(manifest, raw_cfg)
-    if not validation.ok:
+    plugin = get_connector(plugin_dir=_plugin_dir(), connector_id=binding.connector_id)
+    require_version(plugin=plugin, version_req=binding.version_req)
+    connector_cls = load_connector_class(plugin)
+
+    raw_props = data_source.get("extendedProperties") if isinstance(data_source, dict) else None
+    if raw_props is None:
+        raw_props = {}
+    if not _is_record(raw_props):
+        raise Datam8ValidationError(message=f"Invalid extendedProperties for DataSource '{data_source_id}'. Expected an object.", details=None)
+
+    # Enforce string-only extendedProperties (normalize to strings).
+    props: dict[str, str] = {}
+    for k, v in raw_props.items():
+        if not isinstance(k, str) or not k.strip():
+            continue
+        if v is None:
+            continue
+        props[k] = v if isinstance(v, str) else str(v)
+
+    overrides = {k: (v or "").strip() for k, v in (runtime_secrets or {}).items() if isinstance(k, str) and isinstance(v, str) and v.strip()}
+
+    validation = validate_connection_via_plugin(
+        plugin=plugin,
+        solution_path=solution_path,
+        extended_properties=props,
+        runtime_secret_overrides=overrides or None,
+    )
+    if not validation.get("ok"):
         raise Datam8ValidationError(
-            message=f"Invalid connection config for DataSource '{data_source_id}' ({manifest.get('name')}): " +
-            ", ".join([f"{e['path']}: {e['message']}" for e in validation.errors]),
-            details={"errors": validation.errors},
+            message=f"Invalid connection config for DataSource '{data_source_id}' ({plugin.id}).",
+            details={"errors": validation.get("errors") or []},
         )
 
-    secrets = {k: (v or "").strip() for k, v in (runtime_secrets or {}).items() if isinstance(k, str) and isinstance(v, str) and v.strip()}
-    missing = [k for k in validation.required_secrets if not secrets.get(k)]
-    if missing:
-        raise Datam8ValidationError(message=f"Missing required secrets: {', '.join(missing)}", details={"missing": missing})
-
-    return module, manifest, validation.config, secrets, validation.required_secrets
+    resolver = SecretResolver(solution_path=solution_path, overrides=overrides or None)
+    return connector_cls, plugin.to_summary(), props, resolver
