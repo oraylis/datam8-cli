@@ -143,8 +143,26 @@ def _load_connector_class(plugin: ConnectorPlugin) -> type:
         return cls
 
 
-def load_connector_class(plugin: ConnectorPlugin) -> type:
-    return _load_connector_class(plugin)
+class _ConnectorClassProxy:
+    def __init__(self, *, plugin: ConnectorPlugin, cls: type) -> None:
+        self._plugin = plugin
+        self._cls = cls
+
+    def __getattr__(self, name: str) -> Any:
+        attr = getattr(self._cls, name)
+        if not callable(attr):
+            return attr
+
+        def _wrapped(*args: Any, **kwargs: Any) -> Any:
+            with _plugin_sys_path(self._plugin.root):
+                return attr(*args, **kwargs)
+
+        return _wrapped
+
+
+def load_connector_class(plugin: ConnectorPlugin) -> Any:
+    cls = _load_connector_class(plugin)
+    return _ConnectorClassProxy(plugin=plugin, cls=cls)
 
 
 def discover_connectors(*, plugin_dir: Path) -> tuple[list[ConnectorPlugin], dict[str, str]]:
@@ -244,7 +262,7 @@ def get_connector(*, plugin_dir: Path, connector_id: str) -> ConnectorPlugin:
 
 
 def load_ui_schema(*, plugin: ConnectorPlugin) -> dict[str, Any]:
-    cls = _load_connector_class(plugin)
+    cls = load_connector_class(plugin)
     schema = cls.get_ui_schema()  # type: ignore[attr-defined]
     if not isinstance(schema, dict):
         raise Datam8ValidationError(message="Connector ui schema must be an object.", details={"id": plugin.id})
@@ -258,7 +276,7 @@ def validate_connection(
     extended_properties: Any,
     runtime_secret_overrides: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    cls = _load_connector_class(plugin)
+    cls = load_connector_class(plugin)
     props = _to_string_map(extended_properties)
     schema = load_ui_schema(plugin=plugin)
     errors: list[dict[str, str]] = []
@@ -304,6 +322,6 @@ def _call(
     extended_properties: dict[str, str],
     runtime_secret_overrides: dict[str, str] | None = None,
 ) -> Any:
-    cls = _load_connector_class(plugin)
+    cls = load_connector_class(plugin)
     resolver = SecretResolver(solution_path=solution_path, overrides=runtime_secret_overrides or {})
     return fn(cls, extended_properties, resolver)
