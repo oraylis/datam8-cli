@@ -16,19 +16,19 @@ def test_decode_id_only() -> None:
     b = decode_connector_binding([{"name": "__connector.id=postgresql", "required": True}])
     assert b is not None
     assert b.connector_id == "postgresql"
-    assert b.version_req is None
+    assert b.connector_version is None
 
 
 def test_decode_id_and_version() -> None:
     b = decode_connector_binding(
         [
             {"name": "__connector.id=sqlserver", "required": True},
-            {"name": "__connector.version=^0.1.0", "required": False},
+            {"name": "__connector.version=0.1.0", "required": False},
         ]
     )
     assert b is not None
     assert b.connector_id == "sqlserver"
-    assert b.version_req == "^0.1.0"
+    assert b.connector_version == "0.1.0"
 
 
 def test_decode_rejects_multiple_ids() -> None:
@@ -60,11 +60,10 @@ def test_encode_overwrites_reserved_entries_preserving_others() -> None:
             {"name": "__connector.version=>=0.1.0", "required": False},
         ],
         connector_id="new",
-        version_req="0.2.0",
+        connector_version="0.2.0",
     )
     names = [p["name"] for p in out]
     assert "host" in names
     assert "__connector.id=new" in names
     assert "__connector.version=0.2.0" in names
     assert "__connector.id=old" not in names
-

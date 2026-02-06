@@ -10,7 +10,6 @@ from datam8.core.connectors.plugin_host import (
     SecretResolver,
     get_connector,
     load_connector_class,
-    require_version,
     validate_connection as validate_connection_via_plugin,
 )
 from datam8.core.errors import (
@@ -77,7 +76,6 @@ def resolve_and_validate(
         )
 
     plugin = get_connector(plugin_dir=_plugin_dir(), connector_id=binding.connector_id)
-    require_version(plugin=plugin, version_req=binding.version_req)
     connector_cls = load_connector_class(plugin)
 
     raw_props = data_source.get("extendedProperties") if isinstance(data_source, dict) else None
