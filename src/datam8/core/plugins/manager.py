@@ -22,6 +22,7 @@ from datam8.core.errors import (
     Datam8ValidationError,
 )
 
+
 def default_plugin_dir() -> Path:
     base = Path(user_data_dir(appname="datam8", appauthor=False))
     plugin_dir = base / "plugins"

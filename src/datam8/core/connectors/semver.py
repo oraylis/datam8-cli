@@ -15,7 +15,7 @@ class SemVer:
     patch: int
 
     @staticmethod
-    def parse(raw: str) -> "SemVer":
+    def parse(raw: str) -> SemVer:
         v = (raw or "").strip()
         m = _SEMVER_RE.match(v)
         if not m:
