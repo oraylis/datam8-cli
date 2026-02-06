@@ -74,3 +74,72 @@ class Connector:
     connector_cls = load_connector_class(plugin)
     manifest = connector_cls.get_manifest()
     assert manifest["version"] == "from-vendored"
+
+
+def test_plugin_methods_support_lazy_vendored_imports(tmp_path: Path) -> None:
+    plugin_dir = tmp_path / "plugins"
+    plugin_root = plugin_dir / "connectors" / "lazydep"
+    plugin_root.mkdir(parents=True, exist_ok=True)
+
+    _write(
+        plugin_root / "plugin.json",
+        json.dumps(
+            {
+                "pluginType": "connector",
+                "id": "lazydep",
+                "displayName": "Lazydep",
+                "version": "0.1.0",
+                "entrypoint": "datam8_plugins.lazydep.connector:Connector",
+                "capabilities": ["uiSchema", "validateConnection", "metadata"],
+            }
+        ),
+    )
+    _write(plugin_root / "src" / "datam8_plugins" / "lazydep" / "__init__.py", "")
+    _write(
+        plugin_root / "deps" / "site-packages" / "vendored_lazy.py",
+        "VALUE = 'lazy-ok'\n",
+    )
+    _write(
+        plugin_root / "src" / "datam8_plugins" / "lazydep" / "connector.py",
+        """from __future__ import annotations
+
+class Connector:
+    @staticmethod
+    def get_manifest() -> dict:
+        return {"id": "lazydep", "displayName": "Lazydep", "version": "0.1.0", "capabilities": ["uiSchema", "validateConnection", "metadata"]}
+
+    @staticmethod
+    def get_ui_schema() -> dict:
+        return {"title": "Lazydep", "authModes": [{"id": "none", "label": "None", "fields": []}]}
+
+    @staticmethod
+    def validate_connection(extended_properties: dict, secret_resolver) -> list:
+        import vendored_lazy
+        if vendored_lazy.VALUE != "lazy-ok":
+            return [{"key": "x", "message": "unexpected", "level": "error"}]
+        return []
+
+    @staticmethod
+    def test_connection(extended_properties: dict, secret_resolver) -> None:
+        import vendored_lazy
+        if vendored_lazy.VALUE != "lazy-ok":
+            raise RuntimeError("missing lazy dep")
+
+    @staticmethod
+    def list_schemas(extended_properties: dict, secret_resolver) -> list[str]:
+        return []
+
+    @staticmethod
+    def list_tables(extended_properties: dict, secret_resolver, schema: str | None = None) -> list[dict]:
+        return []
+
+    @staticmethod
+    def get_table_metadata(extended_properties: dict, secret_resolver, schema: str, table: str) -> dict:
+        return {"schema": schema, "name": table, "columns": []}
+""",
+    )
+
+    plugin = get_connector(plugin_dir=plugin_dir, connector_id="lazydep")
+    connector_cls = load_connector_class(plugin)
+    connector_cls.test_connection({}, None)
+    assert connector_cls.validate_connection({}, None) == []
