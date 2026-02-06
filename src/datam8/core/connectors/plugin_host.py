@@ -3,12 +3,17 @@ from __future__ import annotations
 import importlib
 import json
 import sys
+from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
-from datam8.core.errors import Datam8ExternalSystemError, Datam8NotFoundError, Datam8ValidationError
+from datam8.core.errors import (
+    Datam8ExternalSystemError,
+    Datam8NotFoundError,
+    Datam8ValidationError,
+)
 from datam8.core.secrets import resolve_secret_ref
 
 DISABLED_MARKER = ".disabled"

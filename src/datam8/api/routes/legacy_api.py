@@ -7,15 +7,21 @@ from typing import Any
 from fastapi import APIRouter, Query, Request, Response
 from pydantic import BaseModel, Field
 
+from datam8.core.connectors.plugin_host import (
+    get_connector,
+    load_ui_schema,
+    validate_connection,
+)
 from datam8.core.connectors.plugin_manager import (
     default_plugin_dir,
     install_git_url,
     install_zip,
-    reload as reload_plugins,
     set_enabled,
     uninstall,
 )
-from datam8.core.connectors.plugin_host import get_connector, load_ui_schema, validate_connection
+from datam8.core.connectors.plugin_manager import (
+    reload as reload_plugins,
+)
 from datam8.core.connectors.resolve import resolve_and_validate
 from datam8.core.duration import parse_duration_seconds
 from datam8.core.errors import Datam8NotImplementedError, Datam8ValidationError
@@ -35,8 +41,8 @@ from datam8.core.secrets import (
     get_runtime_secrets_map,
     is_keyring_available,
     list_runtime_secret_keys,
-    set_runtime_secret,
     runtime_secret_ref,
+    set_runtime_secret,
 )
 from datam8.core.solution_files import detect_solution_version
 from datam8.core.workspace_io import (

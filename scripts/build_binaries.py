@@ -53,7 +53,6 @@ def build(*, clean: bool = True, onefile: bool = True) -> Path:
         "-m",
         "PyInstaller",
         "--noconfirm",
-        "--clean",
         "--workpath",
         str(build_dir),
         "--specpath",
@@ -67,6 +66,8 @@ def build(*, clean: bool = True, onefile: bool = True) -> Path:
         "--collect-submodules",
         "datam8_model",
     ]
+    if clean:
+        common.append("--clean")
     if onefile:
         common.append("--onefile")
 

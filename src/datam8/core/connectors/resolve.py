@@ -1,23 +1,23 @@
 from __future__ import annotations
 
 import os
-from typing import Any
-
 from pathlib import Path
+from typing import Any
 
 from datam8.core.connectors.binding import decode_connector_binding
 from datam8.core.connectors.plugin_host import (
     SecretResolver,
     get_connector,
     load_connector_class,
+)
+from datam8.core.connectors.plugin_host import (
     validate_connection as validate_connection_via_plugin,
 )
+from datam8.core.connectors.plugin_manager import default_plugin_dir
 from datam8.core.errors import (
-    Datam8ExternalSystemError,
     Datam8NotFoundError,
     Datam8ValidationError,
 )
-from datam8.core.connectors.plugin_manager import default_plugin_dir
 from datam8.core.workspace_io import list_base_entities
 
 
