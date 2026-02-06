@@ -96,15 +96,21 @@ def parse_connector_plugin(plugin_root: Path) -> ConnectorPlugin:
 @contextmanager
 def _plugin_sys_path(plugin_root: Path):
     src_dir = plugin_root / "src"
-    add = src_dir if src_dir.exists() else plugin_root
-    sys.path.insert(0, str(add))
+    deps_dir = plugin_root / "deps" / "site-packages"
+    add_paths: list[str] = []
+    if deps_dir.exists():
+        add_paths.append(str(deps_dir))
+    add_paths.append(str(src_dir if src_dir.exists() else plugin_root))
+    for add in reversed(add_paths):
+        sys.path.insert(0, add)
     try:
         yield
     finally:
-        try:
-            sys.path.remove(str(add))
-        except ValueError:
-            pass
+        for add in add_paths:
+            try:
+                sys.path.remove(add)
+            except ValueError:
+                pass
 
 
 def _load_connector_class(plugin: ConnectorPlugin) -> type:
