@@ -17,8 +17,28 @@ from datam8.cmd import generate as generate_cmd
 from datam8.cmd import reverse as reverse_cmd
 from datam8.cmd import serve as serve_cmd
 from datam8.cmd import validate as validate_cmd
-from datam8.core.connectors.builtins import register_builtin_connectors
-from datam8.core.connectors.registry import connector_registry
+from datam8.core.connectors.plugin_host import discover_connectors, get_connector
+from datam8.core.connectors.plugin_manager import (
+    default_plugin_dir,
+)
+from datam8.core.connectors.plugin_manager import (
+    install_git_url as plugins_install_git_url,
+)
+from datam8.core.connectors.plugin_manager import (
+    install_zip as plugins_install_zip,
+)
+from datam8.core.connectors.plugin_manager import (
+    reload as plugins_reload,
+)
+from datam8.core.connectors.plugin_manager import (
+    set_enabled as plugins_set_enabled,
+)
+from datam8.core.connectors.plugin_manager import (
+    uninstall as plugins_uninstall,
+)
+from datam8.core.connectors.plugin_manager import (
+    verify_zip_bundle as plugins_verify_zip_bundle,
+)
 from datam8.core.connectors.resolve import resolve_and_validate
 from datam8.core.duration import parse_duration_seconds
 from datam8.core.entity_resolution import resolve_model_entity
@@ -31,27 +51,6 @@ from datam8.core.errors import (
 from datam8.core.indexing import read_index, validate_index
 from datam8.core.jsonops import merge_patch, set_by_pointer
 from datam8.core.lock import SolutionLock
-from datam8.core.plugins.manager import (
-    default_plugin_dir,
-)
-from datam8.core.plugins.manager import (
-    install_git_url as plugins_install_git_url,
-)
-from datam8.core.plugins.manager import (
-    install_zip as plugins_install_zip,
-)
-from datam8.core.plugins.manager import (
-    reload as plugins_reload,
-)
-from datam8.core.plugins.manager import (
-    set_enabled as plugins_set_enabled,
-)
-from datam8.core.plugins.manager import (
-    uninstall as plugins_uninstall,
-)
-from datam8.core.plugins.manager import (
-    verify_zip_bundle as plugins_verify_zip_bundle,
-)
 from datam8.core.refactor import refactor_entity_id as core_refactor_entity_id
 from datam8.core.refactor import refactor_keys as core_refactor_keys
 from datam8.core.refactor import refactor_values as core_refactor_values
@@ -221,7 +220,8 @@ def _lock_if_needed(opts: GlobalOptions, root_dir: Path):
 
 
 def _ensure_connectors_loaded() -> None:
-    register_builtin_connectors()
+    # Option 3: connectors are plugin-only and discovered from DATAM8_PLUGIN_DIR/connectors.
+    return
 
 
 @solution_app.command("info")
@@ -971,26 +971,30 @@ def search_text_cmd(ctx: typer.Context, pattern: str = typer.Argument(..., help=
 def connector_list(ctx: typer.Context) -> None:
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
-    _ensure_connectors_loaded()
-    connectors = connector_registry.list()
-    payload = {"status": "ok", "count": len(connectors), "connectors": connectors, "traceId": trace_id}
+    pd = Path(os.environ.get("DATAM8_PLUGIN_DIR") or str(default_plugin_dir()))
+    connectors, errors = discover_connectors(plugin_dir=pd)
+    payload = {
+        "status": "ok",
+        "count": len(connectors),
+        "connectors": [c.to_summary() for c in connectors],
+        "errors": errors,
+        "traceId": trace_id,
+    }
     if opts.json:
         emit_json(payload)
     else:
         for c in connectors:
-            emit_human(str((c.get("manifest") or {}).get("name")))
+            emit_human(c.id)
 
 
 @connector_app.command("info")
 def connector_info(ctx: typer.Context, id: str = typer.Argument(..., help="Connector id or alias.")) -> None:
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
-    _ensure_connectors_loaded()
-    mod = connector_registry.resolve_by_id(id) or connector_registry.resolve_by_alias(id)
-    if not mod:
-        raise Datam8Error(code="not_found", message="Connector not found.", details={"id": id}, exit_code=3)
-    payload = {"status": "ok", "manifest": mod.manifest, "traceId": trace_id}
-    emit_json(payload) if opts.json else emit_human(json.dumps(mod.manifest, indent=2, ensure_ascii=False))
+    pd = Path(os.environ.get("DATAM8_PLUGIN_DIR") or str(default_plugin_dir()))
+    plugin = get_connector(plugin_dir=pd, connector_id=id)
+    payload = {"status": "ok", "connector": plugin.to_summary(), "traceId": trace_id}
+    emit_json(payload) if opts.json else emit_human(json.dumps(payload["connector"], indent=2, ensure_ascii=False))
 
 
 @connector_app.command("test")
@@ -1001,7 +1005,6 @@ def connector_test(
 ) -> None:
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
-    _ensure_connectors_loaded()
     overrides: dict[str, str] = {}
     for kv in secret or []:
         if "=" in kv:
@@ -1009,11 +1012,10 @@ def connector_test(
             overrides[k.strip()] = v.strip()
     stored = get_runtime_secrets_map(solution_path=opts.solution, data_source_name=data_source_name, include_values=True)
     merged = {**stored, **overrides}
-    module, manifest, cfg, secrets, _req = resolve_and_validate(solution_path=opts.solution, data_source_id=data_source_name, runtime_secrets=merged)
-    connector = module.create_connector(cfg, secrets)
-    if hasattr(connector, "list_tables"):
-        _ = connector.list_tables()
-    payload = {"status": "ok", "connector": manifest.get("name"), "traceId": trace_id}
+    connector_cls, manifest, cfg, resolver = resolve_and_validate(solution_path=opts.solution, data_source_id=data_source_name, runtime_secrets=merged)
+    if hasattr(connector_cls, "test_connection"):
+        connector_cls.test_connection(cfg, resolver)  # type: ignore[attr-defined]
+    payload = {"status": "ok", "connector": manifest.get("id"), "traceId": trace_id}
     emit_json(payload) if opts.json else emit_human("ok")
 
 
@@ -1025,7 +1027,6 @@ def connector_browse(
 ) -> None:
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
-    _ensure_connectors_loaded()
     overrides: dict[str, str] = {}
     for kv in secret or []:
         if "=" in kv:
@@ -1033,11 +1034,10 @@ def connector_browse(
             overrides[k.strip()] = v.strip()
     stored = get_runtime_secrets_map(solution_path=opts.solution, data_source_name=data_source_name, include_values=True)
     merged = {**stored, **overrides}
-    module, manifest, cfg, secrets, _req = resolve_and_validate(solution_path=opts.solution, data_source_id=data_source_name, runtime_secrets=merged)
-    connector = module.create_connector(cfg, secrets)
-    if not hasattr(connector, "list_tables"):
-        raise Datam8Error(code="validation_error", message="Connector does not support browse.", details={"connector": manifest.get("name")}, exit_code=2)
-    tables = connector.list_tables()
+    connector_cls, manifest, cfg, resolver = resolve_and_validate(solution_path=opts.solution, data_source_id=data_source_name, runtime_secrets=merged)
+    if not hasattr(connector_cls, "list_tables"):
+        raise Datam8Error(code="validation_error", message="Connector does not support browse.", details={"connector": manifest.get("id")}, exit_code=2)
+    tables = connector_cls.list_tables(cfg, resolver)  # type: ignore[attr-defined]
     payload = {"status": "ok", "tables": tables, "traceId": trace_id}
     if opts.json:
         emit_json(payload)
@@ -1056,7 +1056,6 @@ def connector_fetch_metadata(
 ) -> None:
     opts: GlobalOptions = ctx.obj
     trace_id = new_trace_id()
-    _ensure_connectors_loaded()
     overrides: dict[str, str] = {}
     for kv in secret or []:
         if "=" in kv:
@@ -1064,11 +1063,10 @@ def connector_fetch_metadata(
             overrides[k.strip()] = v.strip()
     stored = get_runtime_secrets_map(solution_path=opts.solution, data_source_name=data_source_name, include_values=True)
     merged = {**stored, **overrides}
-    module, manifest, cfg, secrets, _req = resolve_and_validate(solution_path=opts.solution, data_source_id=data_source_name, runtime_secrets=merged)
-    connector = module.create_connector(cfg, secrets)
-    if not hasattr(connector, "get_table_metadata"):
-        raise Datam8Error(code="validation_error", message="Connector does not support metadata.", details={"connector": manifest.get("name")}, exit_code=2)
-    metadata = connector.get_table_metadata(schema=schema, table=table)
+    connector_cls, manifest, cfg, resolver = resolve_and_validate(solution_path=opts.solution, data_source_id=data_source_name, runtime_secrets=merged)
+    if not hasattr(connector_cls, "get_table_metadata"):
+        raise Datam8Error(code="validation_error", message="Connector does not support metadata.", details={"connector": manifest.get("id")}, exit_code=2)
+    metadata = connector_cls.get_table_metadata(cfg, resolver, schema, table)  # type: ignore[attr-defined]
     payload = {"status": "ok", "metadata": metadata, "traceId": trace_id}
     emit_json(payload) if opts.json else emit_human(json.dumps(metadata, indent=2, ensure_ascii=False))
 

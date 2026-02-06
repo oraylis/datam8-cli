@@ -224,3 +224,71 @@ def get_runtime_secrets_map(
             if isinstance(v, str) and v.strip():
                 result[k] = v
     return result
+
+
+def is_secret_ref(value: str) -> bool:
+    return isinstance(value, str) and value.strip().lower().startswith("secretref://")
+
+
+def runtime_secret_ref(*, data_source_name: str, key: str) -> str:
+    ds = (data_source_name or "").strip()
+    k = (key or "").strip()
+    if not ds or not k:
+        raise Datam8ValidationError(message="dataSourceName and key are required.", details={"dataSourceName": data_source_name, "key": key})
+    # Portable reference: does not embed solution scope / absolute paths.
+    return SecretRef(scheme="runtime", scope=ds, name=k).to_uri()
+
+
+def _parse_secret_ref_uri(uri: str) -> SecretRef:
+    raw = (uri or "").strip()
+    if not raw.lower().startswith("secretref://"):
+        raise Datam8ValidationError(message="Invalid secretRef URI.", details={"uri": uri})
+    rest = raw[len("secretRef://") :]
+    parts = [p for p in rest.split("/") if p]
+    if len(parts) < 3:
+        raise Datam8ValidationError(message="Invalid secretRef URI (expected secretRef://<scheme>/<scope>/<name>).", details={"uri": uri})
+    scheme = parts[0]
+    scope = parts[1]
+    name = "/".join(parts[2:])
+    return SecretRef(scheme=scheme, scope=scope, name=name)
+
+
+def resolve_secret_ref(*, solution_path: str | None, value: str) -> str:
+    """
+    Resolves `secretRef://...` references to plaintext values for connector execution.
+    Non-secretRef values are returned unchanged.
+    """
+    if not isinstance(value, str):
+        return ""
+    raw = value.strip()
+    if not raw:
+        return ""
+    if not is_secret_ref(raw):
+        return raw
+
+    ref = _parse_secret_ref_uri(raw)
+    if not is_keyring_available():
+        raise Datam8ExternalSystemError(
+            code="secrets_unavailable",
+            message="Secure secret storage is not available (keyring backend missing/unavailable).",
+            details={"secretRef": raw},
+            hint="Install/configure keyring for your OS.",
+        )
+
+    if ref.scheme == "runtime":
+        data_source_name = ref.scope
+        key = ref.name
+        scope = solution_scope(solution_path)
+        name = _secret_name(scope, data_source_name, key)
+        v = _keyring_get(name)
+        if v is None:
+            raise Datam8NotFoundError(message="Secret not found.", details={"secretRef": raw})
+        return v
+
+    if ref.scheme == "keyring":
+        v = _keyring_get(ref.name)
+        if v is None:
+            raise Datam8NotFoundError(message="Secret not found.", details={"secretRef": raw})
+        return v
+
+    raise Datam8ValidationError(message="Unsupported secretRef scheme.", details={"scheme": ref.scheme, "secretRef": raw})

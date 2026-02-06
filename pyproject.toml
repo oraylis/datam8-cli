@@ -80,6 +80,7 @@ dependencies = ["datamodel-code-generator>=0.33.0", "ruff"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
+addopts = "--capture=sys"
 
 [tool.pyright]
 venvPath = ".venv"

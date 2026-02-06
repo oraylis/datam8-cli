@@ -75,6 +75,7 @@ uv tool run ruff check src
 See:
 - `docs/server.md` for the `datam8 serve` readiness/auth/CORS protocol.
 - `docs/jobs.md` for the Job + SSE contract.
+- `docs/connectors.md` for Option 3 connector plugins (binding, UI schema, secrets).
 - `docs/migration-neon-to-generator.md` for the original Neon→Generator mapping notes.
 
 ## Building the `datam8` binary (PyInstaller)

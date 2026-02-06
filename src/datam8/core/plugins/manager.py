@@ -22,9 +22,6 @@ from datam8.core.errors import (
     Datam8ValidationError,
 )
 
-BUILTIN_CONNECTOR_IDS = {"sqlserver", "oracle", "http-api"}
-
-
 def default_plugin_dir() -> Path:
     base = Path(user_data_dir(appname="datam8", appauthor=False))
     plugin_dir = base / "plugins"
@@ -132,13 +129,10 @@ def _parse_plugin_json(data: dict[str, Any]) -> PluginDescriptor:
     if not isinstance(connector_ids, list) or not all(isinstance(x, str) and x.strip() for x in connector_ids):
         raise Datam8ValidationError(message="connectorIds must be a list of strings.", details=None)
 
-    connector_ids_norm = [x.strip() for x in connector_ids]
-    for cid in connector_ids_norm:
-        if cid.lower() in BUILTIN_CONNECTOR_IDS:
-            raise Datam8ValidationError(
-                message=f"Plugin connector id '{cid}' conflicts with a built-in connector.",
-                details={"connectorId": cid},
-            )
+    connector_ids_norm = []
+    for cid in [pid.strip(), *[x.strip() for x in connector_ids]]:
+        if cid and cid not in connector_ids_norm:
+            connector_ids_norm.append(cid)
 
     if min_ver is not None and not isinstance(min_ver, str):
         raise Datam8ValidationError(message="min_datam8_version must be a string.", details=None)
@@ -336,6 +330,13 @@ def _call_entrypoint(*, plugin_root: Path, entrypoint: str) -> list[ConnectorMod
     try:
         import importlib
 
+        # Different plugins may ship the same entrypoint module name.
+        # Drop cached modules so each plugin resolves against its own python/ dir.
+        for key in list(sys.modules.keys()):
+            if key == mod_name or key.startswith(f"{mod_name}."):
+                sys.modules.pop(key, None)
+        importlib.invalidate_caches()
+
         mod = importlib.import_module(mod_name)
         fn = getattr(mod, fn_name, None)
         if not callable(fn):
@@ -406,11 +407,6 @@ def reload(plugin_dir: Path) -> dict[str, Any]:
                     raise Datam8ValidationError(
                         message="Plugin returned connector not listed in plugin.json connectorIds.",
                         details={"connectorId": cid, "pluginId": pid},
-                    )
-                if cid.lower() in BUILTIN_CONNECTOR_IDS:
-                    raise Datam8ValidationError(
-                        message=f"Plugin connector id '{cid}' conflicts with a built-in connector.",
-                        details={"connectorId": cid},
                     )
                 connector_registry.register(mod, ConnectorSource(kind="plugin", pluginId=pid, entryPath=str(entry)))
 

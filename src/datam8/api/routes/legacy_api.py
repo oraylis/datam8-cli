@@ -7,22 +7,21 @@ from typing import Any
 from fastapi import APIRouter, Query, Request, Response
 from pydantic import BaseModel, Field
 
-from datam8.core.connectors.builtins import register_builtin_connectors
-from datam8.core.connectors.registry import connector_registry
+from datam8.core.connectors.plugin_manager import (
+    default_plugin_dir,
+    install_git_url,
+    install_zip,
+    reload as reload_plugins,
+    set_enabled,
+    uninstall,
+)
+from datam8.core.connectors.plugin_host import get_connector, load_ui_schema, validate_connection
 from datam8.core.connectors.resolve import resolve_and_validate
 from datam8.core.duration import parse_duration_seconds
 from datam8.core.errors import Datam8NotImplementedError, Datam8ValidationError
 from datam8.core.indexing import read_index, validate_index
 from datam8.core.lock import SolutionLock
 from datam8.core.migration_v1_to_v2 import migrate_solution_v1_to_v2
-from datam8.core.plugins.manager import (
-    default_plugin_dir,
-    install_git_url,
-    install_zip,
-    set_enabled,
-    uninstall,
-)
-from datam8.core.plugins.manager import reload as reload_plugins
 from datam8.core.refactor import refactor_entity_id, refactor_keys, refactor_values
 from datam8.core.schema_refresh import (
     UsageRef,
@@ -37,6 +36,7 @@ from datam8.core.secrets import (
     is_keyring_available,
     list_runtime_secret_keys,
     set_runtime_secret,
+    runtime_secret_ref,
 )
 from datam8.core.solution_files import detect_solution_version
 from datam8.core.workspace_io import (
@@ -61,8 +61,6 @@ from datam8.core.workspace_io import (
 )
 
 router = APIRouter()
-
-register_builtin_connectors()
 
 PLUGIN_DIR = Path(os.environ.get("DATAM8_PLUGIN_DIR") or str(default_plugin_dir()))
 _plugin_state: dict[str, Any] = {"pluginDir": str(PLUGIN_DIR), "plugins": [], "errors": {}}
@@ -462,8 +460,35 @@ async def refactor_entity_id_route(body: RefactorEntityIdBody) -> dict[str, Any]
 
 @router.get("/api/connectors")
 async def connectors() -> dict[str, Any]:
-    _ensure_plugins_loaded()
-    return {"connectors": connector_registry.list()}
+    # Plugins only (Option 3): scan DATAM8_PLUGIN_DIR/connectors/*
+    from datam8.core.connectors.plugin_host import discover_connectors
+
+    connectors, _errors = discover_connectors(plugin_dir=PLUGIN_DIR)
+    return {"connectors": [c.to_summary() for c in connectors]}
+
+
+@router.get("/api/connectors/{connectorId}/ui-schema")
+async def connector_ui_schema(connectorId: str) -> dict[str, Any]:
+    plugin = get_connector(plugin_dir=PLUGIN_DIR, connector_id=connectorId)
+    schema = load_ui_schema(plugin=plugin)
+    return {"connectorId": plugin.id, "version": plugin.version, "schema": schema}
+
+
+class ValidateConnectionBody(BaseModel):
+    solutionPath: str | None = None
+    extendedProperties: dict[str, Any] | None = None
+    runtimeSecrets: dict[str, str] | None = None
+
+
+@router.post("/api/connectors/{connectorId}/validate-connection")
+async def connector_validate_connection(connectorId: str, body: ValidateConnectionBody) -> dict[str, Any]:
+    plugin = get_connector(plugin_dir=PLUGIN_DIR, connector_id=connectorId)
+    return validate_connection(
+        plugin=plugin,
+        solution_path=body.solutionPath,
+        extended_properties=body.extendedProperties or {},
+        runtime_secret_overrides=body.runtimeSecrets or None,
+    )
 
 
 @router.get("/api/plugins")
@@ -546,11 +571,10 @@ class DataSourceAuthBody(BaseModel):
 async def datasources_list_tables(dataSourceId: str, body: DataSourceAuthBody) -> dict[str, Any]:
     stored = get_runtime_secrets_map(solution_path=body.solutionPath, data_source_name=dataSourceId, include_values=True)
     merged = {**stored, **(body.runtimeSecrets or {})}
-    module, manifest, cfg, secrets, _req = resolve_and_validate(solution_path=body.solutionPath, data_source_id=dataSourceId, runtime_secrets=merged)
-    connector = module.create_connector(cfg, secrets)
-    if not hasattr(connector, "list_tables"):
-        raise Datam8ValidationError(message=f"Connector '{manifest.get('name')}' does not support metadata operations.", details=None)
-    tables = connector.list_tables()
+    connector_cls, manifest, cfg, resolver = resolve_and_validate(solution_path=body.solutionPath, data_source_id=dataSourceId, runtime_secrets=merged)
+    if not hasattr(connector_cls, "list_tables"):
+        raise Datam8ValidationError(message=f"Connector '{manifest.get('id')}' does not support metadata operations.", details=None)
+    tables = connector_cls.list_tables(cfg, resolver)  # type: ignore[attr-defined]
     return {"tables": tables}
 
 
@@ -564,11 +588,10 @@ class ListSourceTablesBody(BaseModel):
 async def sources_tables(name: str, body: ListSourceTablesBody) -> dict[str, Any]:
     stored = get_runtime_secrets_map(solution_path=body.solutionPath, data_source_name=name, include_values=True)
     merged = {**stored, **(body.runtimeSecrets or {})}
-    module, manifest, cfg, secrets, _req = resolve_and_validate(solution_path=body.solutionPath, data_source_id=name, runtime_secrets=merged)
-    connector = module.create_connector(cfg, secrets)
-    if not hasattr(connector, "list_tables"):
-        raise Datam8ValidationError(message=f"Connector '{manifest.get('name')}' does not support table listing.", details=None)
-    tables = connector.list_tables()
+    connector_cls, manifest, cfg, resolver = resolve_and_validate(solution_path=body.solutionPath, data_source_id=name, runtime_secrets=merged)
+    if not hasattr(connector_cls, "list_tables"):
+        raise Datam8ValidationError(message=f"Connector '{manifest.get('id')}' does not support table listing.", details=None)
+    tables = connector_cls.list_tables(cfg, resolver)  # type: ignore[attr-defined]
     return {"tables": tables}
 
 
@@ -581,11 +604,10 @@ class TableMetadataBody(DataSourceAuthBody):
 async def datasources_table_metadata(dataSourceId: str, body: TableMetadataBody) -> dict[str, Any]:
     stored = get_runtime_secrets_map(solution_path=body.solutionPath, data_source_name=dataSourceId, include_values=True)
     merged = {**stored, **(body.runtimeSecrets or {})}
-    module, manifest, cfg, secrets, _req = resolve_and_validate(solution_path=body.solutionPath, data_source_id=dataSourceId, runtime_secrets=merged)
-    connector = module.create_connector(cfg, secrets)
-    if not hasattr(connector, "get_table_metadata"):
-        raise Datam8ValidationError(message=f"Connector '{manifest.get('name')}' does not support metadata operations.", details=None)
-    metadata = connector.get_table_metadata(schema=body.schema_, table=body.table)
+    connector_cls, manifest, cfg, resolver = resolve_and_validate(solution_path=body.solutionPath, data_source_id=dataSourceId, runtime_secrets=merged)
+    if not hasattr(connector_cls, "get_table_metadata"):
+        raise Datam8ValidationError(message=f"Connector '{manifest.get('id')}' does not support metadata operations.", details=None)
+    metadata = connector_cls.get_table_metadata(cfg, resolver, body.schema_, body.table)  # type: ignore[attr-defined]
     return {"metadata": metadata}
 
 
@@ -597,16 +619,16 @@ class HttpVirtualTableBody(DataSourceAuthBody):
 async def http_virtual_table_metadata(dataSourceId: str, body: HttpVirtualTableBody) -> dict[str, Any]:
     stored = get_runtime_secrets_map(solution_path=body.solutionPath, data_source_name=dataSourceId, include_values=True)
     merged = {**stored, **(body.runtimeSecrets or {})}
-    module, manifest, cfg, secrets, _req = resolve_and_validate(solution_path=body.solutionPath, data_source_id=dataSourceId, runtime_secrets=merged)
-    if manifest.get("name") != "http-api":
+    connector_cls, manifest, cfg, resolver = resolve_and_validate(solution_path=body.solutionPath, data_source_id=dataSourceId, runtime_secrets=merged)
+    if manifest.get("id") != "http-api":
         raise Datam8ValidationError(message="DataSource is not configured with an HTTP API connector.", details=None)
     src = (body.sourceLocation or "").strip()
     if not src:
         raise Datam8ValidationError(message="sourceLocation is required.", details=None)
-    connector = module.create_connector(cfg, secrets)
-    if not hasattr(connector, "get_virtual_table_metadata"):
-        raise Datam8ValidationError(message="HTTP API connector is missing get_virtual_table_metadata().", details=None)
-    return {"metadata": connector.get_virtual_table_metadata(source_location=src)}
+    if hasattr(connector_cls, "get_virtual_table_metadata"):
+        return {"metadata": connector_cls.get_virtual_table_metadata(cfg, resolver, src)}  # type: ignore[attr-defined]
+    # Fallback: treat `sourceLocation` as a logical "table" name.
+    return {"metadata": connector_cls.get_table_metadata(cfg, resolver, "api", src)}  # type: ignore[attr-defined]
 
 
 @router.get("/api/datasources/{dataSourceId}/usages")
@@ -670,8 +692,13 @@ async def secrets_runtime_get(
 ) -> dict[str, Any]:
     if not is_keyring_available():
         return {"runtimeSecrets": None}
-    secrets = get_runtime_secrets_map(solution_path=solutionPath, data_source_name=dataSourceName, include_values=True)
-    return {"runtimeSecrets": secrets or None}
+    keys = list_runtime_secret_keys(solutionPath, dataSourceName)
+    refs: dict[str, str] = {}
+    for e in keys:
+        k = e.get("key")
+        if isinstance(k, str) and k.strip():
+            refs[k.strip()] = runtime_secret_ref(data_source_name=dataSourceName, key=k.strip())
+    return {"runtimeSecrets": refs or None}
 
 
 class SecretsRuntimePutBody(BaseModel):
@@ -710,4 +737,24 @@ async def secrets_runtime_delete(body: SecretsRuntimeDeleteBody) -> Response:
                 delete_runtime_secret(solution_path=body.solutionPath, data_source_name=body.dataSourceName, key=k)
             except Exception:
                 continue
+    return Response(status_code=204)
+
+
+class SecretsRuntimeDeleteKeyBody(BaseModel):
+    solutionPath: str | None = None
+    dataSourceName: str
+    key: str
+
+
+@router.delete("/api/secrets/runtime/key")
+async def secrets_runtime_delete_key(body: SecretsRuntimeDeleteKeyBody) -> Response:
+    if not is_keyring_available():
+        return Response(status_code=204)
+    k = (body.key or "").strip()
+    if not k:
+        raise Datam8ValidationError(message="key is required.", details=None)
+    try:
+        delete_runtime_secret(solution_path=body.solutionPath, data_source_name=body.dataSourceName, key=k)
+    except Exception:
+        return Response(status_code=204)
     return Response(status_code=204)
