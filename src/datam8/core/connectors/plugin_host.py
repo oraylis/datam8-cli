@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from datam8.core.connectors.semver import semver_satisfies
 from datam8.core.errors import Datam8ExternalSystemError, Datam8NotFoundError, Datam8ValidationError
 from datam8.core.secrets import resolve_secret_ref
 
@@ -236,18 +235,6 @@ def get_connector(*, plugin_dir: Path, connector_id: str) -> ConnectorPlugin:
         if c.id.strip().lower() == needle:
             return c
     raise Datam8NotFoundError(message="Connector not found.", details={"id": connector_id})
-
-
-def require_version(*, plugin: ConnectorPlugin, version_req: str | None) -> None:
-    req = (version_req or "").strip()
-    if not req:
-        return
-    if not semver_satisfies(version=plugin.version, requirement=req):
-        raise Datam8ValidationError(
-            code="connector_version_mismatch",
-            message=f"Connector '{plugin.id}' version {plugin.version} does not satisfy requirement '{req}'.",
-            details={"id": plugin.id, "installedVersion": plugin.version, "requirement": req},
-        )
 
 
 def load_ui_schema(*, plugin: ConnectorPlugin) -> dict[str, Any]:

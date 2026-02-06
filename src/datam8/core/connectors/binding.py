@@ -12,7 +12,7 @@ CONNECTOR_VERSION_PREFIX = "__connector.version="
 @dataclass(frozen=True)
 class ConnectorBinding:
     connector_id: str
-    version_req: str | None = None
+    connector_version: str | None = None
 
 
 def is_reserved_connection_property(name: str) -> bool:
@@ -24,11 +24,11 @@ def decode_connector_binding(connection_properties: Any) -> ConnectorBinding | N
     """
     Variant A encoding stored in DataSourceType.connectionProperties:
       - "__connector.id=<connectorId>" (required exactly once when bound)
-      - "__connector.version=<semver or range>" (optional at most once)
+      - "__connector.version=<connectorVersion>" (optional at most once)
     """
     props = connection_properties if isinstance(connection_properties, list) else []
     connector_ids: list[str] = []
-    version_reqs: list[str] = []
+    connector_versions: list[str] = []
 
     for p in props:
         if not isinstance(p, dict):
@@ -40,36 +40,39 @@ def decode_connector_binding(connection_properties: Any) -> ConnectorBinding | N
         if n.startswith(CONNECTOR_ID_PREFIX):
             connector_ids.append(n[len(CONNECTOR_ID_PREFIX) :].strip())
         elif n.startswith(CONNECTOR_VERSION_PREFIX):
-            version_reqs.append(n[len(CONNECTOR_VERSION_PREFIX) :].strip())
+            connector_versions.append(n[len(CONNECTOR_VERSION_PREFIX) :].strip())
 
     connector_ids = [c for c in connector_ids if c]
-    version_reqs = [v for v in version_reqs if v]
+    connector_versions = [v for v in connector_versions if v]
 
-    if not connector_ids and not version_reqs:
+    if not connector_ids and not connector_versions:
         return None
     if len(connector_ids) != 1:
         raise Datam8ValidationError(
             message="Invalid connector binding: expected exactly one __connector.id entry.",
             details={"connectorIds": connector_ids, "count": len(connector_ids)},
         )
-    if len(version_reqs) > 1:
+    if len(connector_versions) > 1:
         raise Datam8ValidationError(
             message="Invalid connector binding: expected at most one __connector.version entry.",
-            details={"versionReqs": version_reqs, "count": len(version_reqs)},
+            details={"connectorVersions": connector_versions, "count": len(connector_versions)},
         )
-    return ConnectorBinding(connector_id=connector_ids[0], version_req=version_reqs[0] if version_reqs else None)
+    return ConnectorBinding(
+        connector_id=connector_ids[0],
+        connector_version=connector_versions[0] if connector_versions else None,
+    )
 
 
 def encode_connector_binding(
     *,
     connection_properties: Any,
     connector_id: str,
-    version_req: str | None = None,
+    connector_version: str | None = None,
 ) -> list[dict[str, Any]]:
     cid = (connector_id or "").strip()
     if not cid:
         raise Datam8ValidationError(message="connector_id is required.", details=None)
-    vr = (version_req or "").strip() or None
+    version = (connector_version or "").strip() or None
 
     base = connection_properties if isinstance(connection_properties, list) else []
     kept: list[dict[str, Any]] = []
@@ -82,7 +85,6 @@ def encode_connector_binding(
         kept.append(p)
 
     kept.append({"name": f"{CONNECTOR_ID_PREFIX}{cid}", "required": True, "description": "Reserved: connector binding (do not render)."})
-    if vr:
-        kept.append({"name": f"{CONNECTOR_VERSION_PREFIX}{vr}", "required": False, "description": "Reserved: connector version requirement (do not render)."})
+    if version:
+        kept.append({"name": f"{CONNECTOR_VERSION_PREFIX}{version}", "required": False, "description": "Reserved: connector version (do not render)."})
     return kept
-
