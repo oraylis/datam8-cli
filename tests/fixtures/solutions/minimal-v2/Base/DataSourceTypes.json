@@ -1,0 +1,21 @@
+{
+  "type": "dataSourceTypes",
+  "dataSourceTypes": [
+    {
+      "name": "SqlDataSource",
+      "displayName": "SQL Data Source",
+      "dataTypeMapping": [
+        {
+          "sourceType": "int",
+          "targetType": "int"
+        }
+      ],
+      "connectionProperties": [
+        {
+          "name": "server",
+          "required": false
+        }
+      ]
+    }
+  ]
+}

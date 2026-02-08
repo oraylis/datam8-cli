@@ -1,0 +1,10 @@
+{
+  "type": "folders",
+  "folders": [
+    {
+      "id": 200,
+      "name": "Sales",
+      "displayName": "Sales"
+    }
+  ]
+}

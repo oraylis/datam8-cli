@@ -1,0 +1,13 @@
+{
+  "type": "dataSources",
+  "dataSources": [
+    {
+      "name": "AdventureWorks",
+      "displayName": "AdventureWorks",
+      "type": "SqlDataSource",
+      "extendedProperties": {
+        "server": "localhost"
+      }
+    }
+  ]
+}

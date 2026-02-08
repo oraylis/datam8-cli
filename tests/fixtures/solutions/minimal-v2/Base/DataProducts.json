@@ -1,0 +1,15 @@
+{
+  "type": "dataProducts",
+  "dataProducts": [
+    {
+      "name": "Sales",
+      "displayName": "Sales",
+      "dataModules": [
+        {
+          "name": "Other",
+          "displayName": "Other"
+        }
+      ]
+    }
+  ]
+}

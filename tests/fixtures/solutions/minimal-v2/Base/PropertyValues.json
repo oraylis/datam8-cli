@@ -1,0 +1,29 @@
+{
+  "type": "propertyValues",
+  "propertyValues": [
+    {
+      "name": "sales_weekly",
+      "property": "jobs",
+      "properties": [
+        {
+          "property": "schedules",
+          "value": "weekly"
+        }
+      ]
+    },
+    {
+      "name": "weekly",
+      "property": "schedules",
+      "properties": [
+        {
+          "property": "cluster",
+          "value": "extra_small"
+        }
+      ]
+    },
+    {
+      "name": "extra_small",
+      "property": "cluster"
+    }
+  ]
+}

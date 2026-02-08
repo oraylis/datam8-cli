@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "2.0.0",
+  "basePath": "Base",
+  "modelPath": "Model",
+  "generatorTargets": [
+    {
+      "name": "dummy",
+      "isDefault": true,
+      "sourcePath": "Generate/dummy",
+      "outputPath": "Output/dummy/generated"
+    }
+  ]
+}
