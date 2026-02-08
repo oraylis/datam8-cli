@@ -17,7 +17,7 @@ def _repo_root() -> Path:
 
 
 def _fixture_solution_dir() -> Path:
-    p = _repo_root() / "tests" / "fixtures" / "job_solution"
+    p = _repo_root() / "tests" / "fixtures" / "solutions" / "minimal-v2"
     if not p.exists():
         raise RuntimeError(f"Missing fixture at {p}")
     return p
@@ -83,7 +83,7 @@ def test_serve_readiness_auth_and_generate_job_sse() -> None:
     with tempfile.TemporaryDirectory() as td:
         work = Path(td) / "solution"
         shutil.copytree(fixture_dir, work)
-        solution_path = work / "TestSolution.dm8s"
+        solution_path = work / "minimal.dm8s"
 
         proc, ready = _spawn_server(token=token, solution_path=solution_path)
         try:
@@ -109,7 +109,12 @@ def test_serve_readiness_auth_and_generate_job_sse() -> None:
                     headers={"Authorization": f"Bearer {token}"},
                     json={
                         "type": "generate",
-                        "params": {"solutionPath": str(solution_path), "target": "test", "logLevel": "info", "cleanOutput": True},
+                        "params": {
+                            "solutionPath": str(solution_path),
+                            "target": "dummy",
+                            "logLevel": "info",
+                            "cleanOutput": True,
+                        },
                     },
                 )
                 r.raise_for_status()
@@ -152,10 +157,14 @@ def test_serve_readiness_auth_and_generate_job_sse() -> None:
                             continue
 
                 assert seen_log is True
-                assert terminal in {"succeeded", "failed", "canceled"}
+                assert terminal == "succeeded"
 
                 meta = _wait_for_status(client, base_url=base_url, token=token, job_id=job_id)
-                assert meta["status"] == terminal
+                assert meta["status"] == "succeeded"
+
+                generated_file = work / "Output" / "dummy" / "generated" / "hello.txt"
+                assert generated_file.exists(), f"Expected generated file at {generated_file}"
+                assert generated_file.read_text(encoding="utf-8").strip() == "Hello from minimal-v2"
 
         finally:
             _terminate(proc)

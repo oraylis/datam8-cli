@@ -1,0 +1,15 @@
+{
+  "type": "zones",
+  "zones": [
+    {
+      "name": "raw",
+      "targetName": "raw",
+      "displayName": "Raw"
+    },
+    {
+      "name": "core",
+      "targetName": "core",
+      "displayName": "Core"
+    }
+  ]
+}

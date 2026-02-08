@@ -1,96 +1,78 @@
-# ORAYLIS DataM8 Generator
-This repository contains the generator used by DataM8 to generate the solution
-output. It can also be used as a standalone cli in ci/cd processes.
+# DataM8 Generator
 
-## Issues
-Issues are centrally maintained in a different repository
+`datam8-generator` contains the DataM8 v2 backend:
 
-https://github.com/oraylis/datam8
+- `datam8` CLI
+- `datam8 serve` FastAPI server
+- in-process Jobs system with SSE event streaming
 
-## Documentation
-The DataM8 documentation is also centrally stored at the following place
+Neon launches this backend binary and communicates over localhost HTTP.
 
-https://github.com/oraylis/datam8/tree/main/docs
+## Key docs
 
-The specific Generator documentation is located [here](https://github.com/oraylis/datam8/tree/main/docs/generator).
+- Backend contract (canonical): `docs/backend-contract.md`
+- Server startup/auth details: `docs/server.md`
+- Jobs details: `docs/jobs.md`
+- Connector plugin details: `docs/connectors.md`
+- Agent guidance: `AGENTS.md`
 
 ## Local development
 
 ### Requirements
-- `uv` a project manager for python
-  - https://docs.astral.sh/uv/getting-started/installation/
-  - manages dependencies including build tools
-  - manages different python versions
+- Python 3.12+
+- `uv` (https://docs.astral.sh/uv/getting-started/installation/)
 
-### Clone repo
-We are using a git submodule to pull in the JSON schemas for generating
-Pydantic models under `src/datam8_model`. In order to get a functioning
-local copy of this repo you need to also retrieve the submodule which is also
-a git repo.
+### Clone
 
-``` sh
-# clone a fresh local copy
+```sh
 git clone --recurse-submodules https://github.com/oraylis/datam8-generator.git
-
-# initialize submodule in already existing repo
+cd datam8-generator
 git submodule update --init --recursive
 ```
 
-### Execute `datam8`
-``` sh
-uv run datam8 <command> [args]
+### Run CLI
 
-# e.g.
+```sh
 uv run datam8 --help
-uv run datam8 generate --help
 uv run datam8 serve --help
+uv run datam8 validate --help
+uv run datam8 generate --help
 ```
 
-### Build
-``` sh
+### Build package
+
+```sh
 uv build
 ```
 
-### Testing
-Testing can run against the included fixtures; see `tests/test_900_server_jobs.py` for the server+jobs contract.
+### Build backend binaries
 
-``` sh
-uv run pytest
-```
-
-### Linting
-``` sh
-uvx ruff check src
-
-# shorthand for
-uv tool run ruff check src
-```
-
-## Local execution
-`datam8` is a Typer-based CLI:
-- Workspace/file operations (direct filesystem): `datam8 solution|base|model|script|index|refactor|search|connector|secret|plugin|diag ...`
-- Template generation: `datam8 generate ...`
-- Desktop backend: `datam8 serve ...` (FastAPI + Jobs)
-
-See:
-- `docs/server.md` for the `datam8 serve` readiness/auth/CORS protocol.
-- `docs/jobs.md` for the Job + SSE contract.
-- `docs/connectors.md` for Option 3 connector plugins (binding, UI schema, secrets).
-- `docs/migration-neon-to-generator.md` for the original Neon→Generator mapping notes.
-
-## Building the `datam8` binary (PyInstaller)
-The Electron app ships a frozen `datam8` binary (no Python required at runtime). Build output is written to:
+Output path:
 
 `dist/bin/<platform>/datam8(.exe)`
 
-Local build (requires Python 3.12+ and PyInstaller build deps):
+Build command:
+
 ```sh
 uv run python scripts/build_binaries.py
 ```
 
-Notes:
-- On Windows, rebuild may fail if a running `datam8.exe` is locked; terminate it and retry.
-- The build excludes `pkg_resources` to avoid the deprecated API warning at runtime.
+### Tests
 
-## Troubleshooting
-See `docs/server.md` (CORS/auth), and `docs/jobs.md` (Jobs/SSE contract). For Windows build/runtime pitfalls (locked exe), see `docs/jobs.md` and the Neon docs.
+All tests use local fixtures in this repository.
+
+```sh
+uv sync
+uv run pytest
+```
+
+Fixture used by server/jobs integration tests:
+
+- `tests/fixtures/solutions/minimal-v2/minimal.dm8s`
+
+### Linting / checks
+
+```sh
+uv tool run ruff check src
+uv tool run pyright src
+```

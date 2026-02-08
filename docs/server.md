@@ -2,6 +2,8 @@
 
 This document describes the desktop-safe FastAPI backend used by **DataM8 Neon**.
 
+Canonical endpoint contract for Neon lives in `docs/backend-contract.md`.
+
 ## Desktop-safe startup protocol
 
 Neon starts the backend as a long-lived process:

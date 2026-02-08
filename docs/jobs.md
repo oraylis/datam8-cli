@@ -2,6 +2,8 @@
 
 The backend uses a minimal, in-memory Job system for any work that can take longer than ~1 second (generation, indexing, validations, etc.). This keeps the Electron UI responsive and avoids HTTP timeouts.
 
+Canonical endpoint and event contract lives in `docs/backend-contract.md`.
+
 ## Why Jobs
 - Desktop backend is long-lived (spawn once by Electron).
 - Work is executed in bounded concurrency (default 2) to avoid overloading the machine.
@@ -69,4 +71,3 @@ data: <json>
 2) Validate `params` early and raise `Datam8ValidationError` for bad input.
 3) Emit logs/progress as appropriate.
 4) Return a JSON-serializable `result`.
-
