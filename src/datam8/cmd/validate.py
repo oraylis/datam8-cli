@@ -16,6 +16,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+import asyncio
 import os
 import sys
 from pathlib import Path
@@ -23,7 +24,9 @@ from pathlib import Path
 import rich
 import typer
 
-from .. import config, factory, opts, utils
+from datam8.core.validation import validate_solution_dm8s
+
+from .. import config, opts, utils
 
 app = typer.Typer()
 
@@ -39,7 +42,7 @@ def command(
         "--solution",
         "-s",
         "--solution-path",
-        help="Path to .dm8s solution file (or folder containing exactly one .dm8s file).",
+        help="Path to a .dm8s solution file.",
         envvar="DATAM8_SOLUTION_PATH",
     ),
     log_level: opts.LogLevel = opts.LogLevels.WARNING,
@@ -54,11 +57,28 @@ def command(
             raise typer.BadParameter("No solution specified. Use --solution/-s (or set DATAM8_SOLUTION_PATH).")
         solution_path = Path(candidate)
 
+    if solution_path.suffix.lower() != ".dm8s":
+        raise typer.BadParameter("Validation expects a .dm8s solution file path.")
+
     config.log_level = log_level
-    config.lazy = False
-    config.solution_path = solution_path
-    config.solution_folder_path = solution_path.parent.absolute()
+    report = asyncio.run(validate_solution_dm8s(solution_path))
 
-    _ = factory.create_model()
+    if report["ok"]:
+        summary = report["summary"]
+        rich.print("Validation OK")
+        rich.print(
+            f"Entities parsed: {summary['entitiesParsed']} "
+            f"(model: {summary['modelEntitiesParsed']}, base: {summary['baseEntitiesParsed']})"
+        )
+        return
 
-    rich.print("Validation successfull")
+    rich.print("Validation failed")
+    for err in report["errors"]:
+        line = f"- [{err.get('code', 'UNKNOWN_ERROR')}] {err.get('message', 'Unknown error')}"
+        if err.get("path"):
+            line += f" ({err['path']})"
+        if err.get("entityLocator"):
+            line += f" [{err['entityLocator']}]"
+        rich.print(line)
+
+    raise typer.Exit(code=1)

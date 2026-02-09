@@ -11,6 +11,7 @@ import uuid
 from collections import deque
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from datam8.core.errors import (
@@ -324,11 +325,30 @@ class JobManager:
         return {"index": idx}
 
     async def _run_validate(self, job: Job) -> dict[str, Any]:
-        from datam8.core.indexing import validate_index
-
         solution_path = job.params.get("solutionPath")
-        report = validate_index(solution_path if isinstance(solution_path, str) else None)
-        return {"report": report}
+        if not isinstance(solution_path, str) or not solution_path.strip():
+            raise Datam8ValidationError(message="params.solutionPath is required.", details=None)
+
+        from datam8.core.validation import validate_solution_dm8s
+
+        self._emit(job.id, "log", {"stream": "stdout", "message": "Starting solution validation..."})
+        self._emit(job.id, "progress", {"progress": 0.2})
+
+        report = await validate_solution_dm8s(Path(solution_path.strip()))
+        self._emit(job.id, "progress", {"progress": 0.9})
+
+        if report.get("ok", False):
+            self._emit(job.id, "log", {"stream": "stdout", "message": "Validation OK."})
+            return {"report": report}
+
+        self._emit(job.id, "log", {"stream": "stderr", "message": "Validation failed."})
+        result = {"report": report}
+        job.result = result
+        self._emit(job.id, "result", {"result": result})
+
+        first_error = report.get("errors", [{}])[0]
+        first_message = first_error.get("message") if isinstance(first_error, dict) else None
+        raise RuntimeError(first_message or "Validation failed.")
 
     async def _run_plugin_verify(self, job: Job) -> dict[str, Any]:
         from datam8.core.connectors.plugin_manager import default_plugin_dir

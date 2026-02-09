@@ -25,7 +25,7 @@ from datam8.core.connectors.plugin_manager import (
 from datam8.core.connectors.resolve import resolve_and_validate
 from datam8.core.duration import parse_duration_seconds
 from datam8.core.errors import Datam8NotImplementedError, Datam8ValidationError
-from datam8.core.indexing import read_index, validate_index
+from datam8.core.indexing import read_index
 from datam8.core.lock import SolutionLock
 from datam8.core.migration_v1_to_v2 import migrate_solution_v1_to_v2
 from datam8.core.refactor import refactor_entity_id, refactor_keys, refactor_values
@@ -291,7 +291,11 @@ async def index_show(path: str | None = Query(None)) -> dict[str, Any]:
 
 @router.get("/api/index/validate")
 async def index_validate_route(path: str | None = Query(None)) -> dict[str, Any]:
-    return {"report": validate_index(path)}
+    raise Datam8NotImplementedError(
+        message="Index-only validation is no longer supported.",
+        details={"deprecatedEndpoint": "/api/index/validate", "path": path},
+        hint="Use POST /jobs with type 'validate' and params.solutionPath.",
+    )
 
 
 @router.post("/api/generator/run")

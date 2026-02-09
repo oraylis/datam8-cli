@@ -8,6 +8,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -114,6 +115,70 @@ def _wait_for_status(client: httpx.Client, *, base_url: str, token: str, job_id:
     raise TimeoutError("Job did not finish in time.")
 
 
+def _stream_job_events(
+    client: httpx.Client,
+    *,
+    base_url: str,
+    token: str,
+    job_id: str,
+) -> tuple[str | None, list[dict[str, Any]]]:
+    events: list[dict[str, Any]] = []
+    terminal: str | None = None
+
+    with client.stream(
+        "GET",
+        f"{base_url}/jobs/{job_id}/events",
+        headers={"Authorization": f"Bearer {token}"},
+    ) as s:
+        s.raise_for_status()
+        event_name: str | None = None
+        data_lines: list[str] = []
+        for raw in s.iter_lines():
+            if raw is None:
+                continue
+            line = raw.strip("\r")
+            if line.startswith(":"):
+                continue
+            if not line:
+                if event_name and data_lines:
+                    payload = json.loads("".join(data_lines))
+                    events.append({"type": event_name, "payload": payload})
+                    if event_name == "status" and payload.get("status") in {"succeeded", "failed", "canceled"}:
+                        terminal = payload.get("status")
+                        break
+                event_name = None
+                data_lines = []
+                continue
+            if line.startswith("event:"):
+                event_name = line.split(":", 1)[1].strip()
+                continue
+            if line.startswith("data:"):
+                data_lines.append(line.split(":", 1)[1].strip())
+                continue
+
+    return terminal, events
+
+
+def _break_first_model_entity(dm8s_path: Path) -> None:
+    solution = json.loads(dm8s_path.read_text(encoding="utf-8"))
+    model_path_raw = solution.get("modelPath")
+    if not isinstance(model_path_raw, str) or not model_path_raw.strip():
+        raise RuntimeError(f"No modelPath found in {dm8s_path}")
+
+    model_root = dm8s_path.parent / model_path_raw
+    model_files = sorted(path for path in model_root.rglob("*.json") if path.name != ".properties.json")
+    if not model_files:
+        raise RuntimeError(f"No model entity files found under {model_root}")
+
+    target_file = model_files[0]
+    entity = json.loads(target_file.read_text(encoding="utf-8"))
+    if isinstance(entity, dict) and "id" in entity:
+        entity.pop("id", None)
+    else:
+        entity["name"] = 12345
+    target_file.write_text(json.dumps(entity, indent=2), encoding="utf-8")
+
+
 def test_serve_readiness_auth_and_generate_job_sse() -> None:
     token = "test-token"
     source_solution_path = _solution_path_from_env()
@@ -161,42 +226,8 @@ def test_serve_readiness_auth_and_generate_job_sse() -> None:
                 job_id = r.json()["jobId"]
                 assert job_id
 
-                # SSE: ensure we receive at least one log event and terminal status.
-                seen_log = False
-                terminal = None
-                with client.stream(
-                    "GET",
-                    f"{base_url}/jobs/{job_id}/events",
-                    headers={"Authorization": f"Bearer {token}"},
-                ) as s:
-                    s.raise_for_status()
-                    event_name = None
-                    data_lines: list[str] = []
-                    for raw in s.iter_lines():
-                        if raw is None:
-                            continue
-                        line = raw.strip("\r")
-                        if line.startswith(":"):
-                            continue
-                        if not line:
-                            if event_name and data_lines:
-                                payload = json.loads("".join(data_lines))
-                                if event_name == "log":
-                                    seen_log = True
-                                if event_name == "status" and payload.get("status") in {"succeeded", "failed", "canceled"}:
-                                    terminal = payload.get("status")
-                                    break
-                            event_name = None
-                            data_lines = []
-                            continue
-                        if line.startswith("event:"):
-                            event_name = line.split(":", 1)[1].strip()
-                            continue
-                        if line.startswith("data:"):
-                            data_lines.append(line.split(":", 1)[1].strip())
-                            continue
-
-                assert seen_log is True
+                terminal, events = _stream_job_events(client, base_url=base_url, token=token, job_id=job_id)
+                assert any(ev.get("type") == "log" for ev in events) is True
                 assert terminal == "succeeded"
 
                 meta = _wait_for_status(client, base_url=base_url, token=token, job_id=job_id)
@@ -208,5 +239,85 @@ def test_serve_readiness_auth_and_generate_job_sse() -> None:
                     f"Expected generated files in {output_dir}"
                 )
 
+                # Create a validate job.
+                r = client.post(
+                    f"{base_url}/jobs",
+                    headers={"Authorization": f"Bearer {token}"},
+                    json={
+                        "type": "validate",
+                        "params": {
+                            "solutionPath": str(solution_path),
+                        },
+                    },
+                )
+                r.raise_for_status()
+                validate_job_id = r.json()["jobId"]
+                assert validate_job_id
+
+                terminal, validate_events = _stream_job_events(client, base_url=base_url, token=token, job_id=validate_job_id)
+                assert any(ev.get("type") == "log" for ev in validate_events) is True
+                assert terminal == "succeeded"
+
+                result_events = [ev for ev in validate_events if ev.get("type") == "result"]
+                assert len(result_events) > 0
+                report = result_events[-1]["payload"].get("result", {}).get("report")
+                assert isinstance(report, dict)
+                assert report.get("ok") is True
+                assert "summary" in report
+
+                validate_meta = _wait_for_status(client, base_url=base_url, token=token, job_id=validate_job_id)
+                assert validate_meta["status"] == "succeeded"
+                assert isinstance(validate_meta.get("result"), dict)
+                assert validate_meta["result"]["report"]["ok"] is True
+
+        finally:
+            _terminate(proc)
+
+
+def test_validate_job_failure_contains_report() -> None:
+    token = "test-token"
+    source_solution_path = _solution_path_from_env()
+    source_solution_dir = source_solution_path.parent
+
+    with tempfile.TemporaryDirectory() as td:
+        work = Path(td) / "solution"
+        shutil.copytree(source_solution_dir, work)
+        solution_path = work / source_solution_path.name
+        _break_first_model_entity(solution_path)
+
+        proc, ready = _spawn_server(token=token, solution_path=solution_path)
+        try:
+            base_url = ready["baseUrl"]
+            with httpx.Client(timeout=30.0) as client:
+                r = client.post(
+                    f"{base_url}/jobs",
+                    headers={"Authorization": f"Bearer {token}"},
+                    json={
+                        "type": "validate",
+                        "params": {
+                            "solutionPath": str(solution_path),
+                        },
+                    },
+                )
+                r.raise_for_status()
+                job_id = r.json()["jobId"]
+                assert job_id
+
+                terminal, events = _stream_job_events(client, base_url=base_url, token=token, job_id=job_id)
+                assert any(ev.get("type") == "log" for ev in events) is True
+                assert terminal == "failed"
+
+                result_events = [ev for ev in events if ev.get("type") == "result"]
+                assert len(result_events) > 0
+                report = result_events[-1]["payload"].get("result", {}).get("report")
+                assert isinstance(report, dict)
+                assert report.get("ok") is False
+                assert len(report.get("errors", [])) > 0
+
+                meta = _wait_for_status(client, base_url=base_url, token=token, job_id=job_id)
+                assert meta["status"] == "failed"
+                assert isinstance(meta.get("result"), dict)
+                assert meta["result"]["report"]["ok"] is False
+                assert len(meta["result"]["report"]["errors"]) > 0
         finally:
             _terminate(proc)

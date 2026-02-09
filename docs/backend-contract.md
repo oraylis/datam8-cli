@@ -48,6 +48,13 @@ Supported job types used by Neon:
 - `validate`
 - `pluginVerify`
 
+Validation contract (`type: "validate"`):
+
+- Input params: `{ "solutionPath": "<absolute-or-relative-path-to.dm8s>" }`
+- Result payload: `{ "report": { "ok": boolean, "dm8sPath": string, "summary": { "entitiesParsed": number, "modelEntitiesParsed": number, "baseEntitiesParsed": number }, "errors": ValidationErrorItem[], "warnings": string[], "durationMs": number } }`
+- `errors[*].code` is one of `PARSING_ERROR | SCHEMA_ERROR | RESOLVE_ERROR | UNKNOWN_ERROR`
+- On validation failure, the job status is `failed` and still includes `result.report` for UI rendering.
+
 ### Workspace `/api/*` surface used by Neon
 
 - Filesystem: `GET /api/fs/list`
