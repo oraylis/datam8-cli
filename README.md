@@ -59,16 +59,13 @@ uv run python scripts/build_binaries.py
 
 ### Tests
 
-All tests use local fixtures in this repository.
+Tests require a DataM8 solution via `--solution-path` or `DATAM8_SOLUTION_PATH`.
+In CI, the sample solution (`feature/v2`) is checked out and used.
 
 ```sh
 uv sync
-uv run pytest
+uv run pytest --solution-path "<path-to-solution.dm8s>"
 ```
-
-Fixture used by server/jobs integration tests:
-
-- `tests/fixtures/solutions/minimal-v2/minimal.dm8s`
 
 ### Linting / checks
 

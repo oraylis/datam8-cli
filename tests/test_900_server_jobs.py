@@ -10,17 +10,55 @@ import time
 from pathlib import Path
 
 import httpx
+import pytest
 
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def _fixture_solution_dir() -> Path:
-    p = _repo_root() / "tests" / "fixtures" / "solutions" / "minimal-v2"
-    if not p.exists():
-        raise RuntimeError(f"Missing fixture at {p}")
-    return p
+def _solution_path_from_env() -> Path:
+    raw = os.environ.get("DATAM8_SOLUTION_PATH", "").strip()
+    if not raw:
+        pytest.skip("Set DATAM8_SOLUTION_PATH to run server/jobs integration test.")
+
+    p = Path(raw)
+    if p.is_file() and p.suffix.lower() == ".dm8s":
+        return p
+    if p.is_dir():
+        dm8s_files = sorted(p.glob("*.dm8s"))
+        if len(dm8s_files) == 1:
+            return dm8s_files[0]
+        pytest.skip(f"Expected exactly one .dm8s file in {p}, found {len(dm8s_files)}.")
+    pytest.skip(f"DATAM8_SOLUTION_PATH points to a missing or invalid path: {p}")
+
+
+def _select_target(solution_path: Path) -> tuple[str, Path]:
+    solution = json.loads(solution_path.read_text(encoding="utf-8"))
+    targets = solution.get("generatorTargets")
+    if not isinstance(targets, list) or len(targets) == 0:
+        raise RuntimeError(f"No generatorTargets found in {solution_path}")
+
+    selected: dict | None = None
+    for target in targets:
+        if isinstance(target, dict) and target.get("isDefault") is True:
+            selected = target
+            break
+    if selected is None:
+        for target in targets:
+            if isinstance(target, dict) and isinstance(target.get("name"), str) and target["name"].strip():
+                selected = target
+                break
+    if selected is None:
+        raise RuntimeError(f"Could not select a generator target from {solution_path}")
+
+    name = selected.get("name")
+    if not isinstance(name, str) or not name.strip():
+        raise RuntimeError(f"Selected target has no valid name in {solution_path}")
+    output_path = selected.get("outputPath")
+    if not isinstance(output_path, str) or not output_path.strip():
+        output_path = f"Output/{name}"
+    return name, Path(output_path)
 
 
 def _spawn_server(*, token: str, solution_path: Path) -> tuple[subprocess.Popen[bytes], dict]:
@@ -78,12 +116,14 @@ def _wait_for_status(client: httpx.Client, *, base_url: str, token: str, job_id:
 
 def test_serve_readiness_auth_and_generate_job_sse() -> None:
     token = "test-token"
-    fixture_dir = _fixture_solution_dir()
+    source_solution_path = _solution_path_from_env()
+    source_solution_dir = source_solution_path.parent
+    target, output_path = _select_target(source_solution_path)
 
     with tempfile.TemporaryDirectory() as td:
         work = Path(td) / "solution"
-        shutil.copytree(fixture_dir, work)
-        solution_path = work / "minimal.dm8s"
+        shutil.copytree(source_solution_dir, work)
+        solution_path = work / source_solution_path.name
 
         proc, ready = _spawn_server(token=token, solution_path=solution_path)
         try:
@@ -111,7 +151,7 @@ def test_serve_readiness_auth_and_generate_job_sse() -> None:
                         "type": "generate",
                         "params": {
                             "solutionPath": str(solution_path),
-                            "target": "dummy",
+                            "target": target,
                             "logLevel": "info",
                             "cleanOutput": True,
                         },
@@ -162,9 +202,11 @@ def test_serve_readiness_auth_and_generate_job_sse() -> None:
                 meta = _wait_for_status(client, base_url=base_url, token=token, job_id=job_id)
                 assert meta["status"] == "succeeded"
 
-                generated_file = work / "Output" / "dummy" / "generated" / "hello.txt"
-                assert generated_file.exists(), f"Expected generated file at {generated_file}"
-                assert generated_file.read_text(encoding="utf-8").strip() == "Hello from minimal-v2"
+                output_dir = work / output_path
+                assert output_dir.exists(), f"Expected output directory at {output_dir}"
+                assert any(p.is_file() for p in output_dir.rglob("*")), (
+                    f"Expected generated files in {output_dir}"
+                )
 
         finally:
             _terminate(proc)

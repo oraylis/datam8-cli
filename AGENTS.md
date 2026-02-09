@@ -3,7 +3,7 @@
 
 ## How the Repositories Fit Together (v2)
 - `datam8-model`: source-of-truth v2 schemas.
-- `datam8-sample-solution`: reference solution shape only; not required for tests in this repo.
+- `datam8-sample-solution`: reference solution shape used by CI tests in this repo.
 - `datam8-generator`: canonical backend (`datam8` CLI + FastAPI + Jobs + SSE).
 - `datam8-neon`: Electron + web editor that launches `datam8 serve` and calls the backend over HTTP.
 
@@ -59,18 +59,12 @@ Canonical backend contract doc:
 
 Neon links to this file and should not duplicate endpoint details.
 
-## Local Test Solutions
-All tests in this repo must be runnable without cloning an external solution repository.
+## Test Solution
+CI tests use the sample solution repository:
+- `oraylis/datam8-sample-solution` (`feature/v2`)
+- solution file: `ORAYLISDatabricksSample.dm8s`
 
-Primary local fixture:
-- `tests/fixtures/solutions/minimal-v2/minimal.dm8s`
-
-This fixture includes:
-- `.dm8s` metadata
-- `Base/` minimal entities
-- `Model/` minimal valid entity
-- `Generate/dummy/` minimal templates + payload module
-- `Output/` folder for generation assertions
+For local test runs, pass `--solution-path` or set `DATAM8_SOLUTION_PATH`.
 
 ## Scope Rules
 - UI-only requirement: change Neon only.
@@ -94,5 +88,5 @@ Always ensure both commands succeed locally before finishing changes, because th
 - Subprocess job behavior preserved (frozen vs dev path).
 - Tests added/updated for changed behavior.
 - `uv tool run pyright src` and `uv tool run ruff check src` pass.
-- Local fixtures used; no external sample-solution dependency required.
+- Test setup verified with sample-solution checkout and `DATAM8_SOLUTION_PATH`.
 - Docs kept concise and linked to canonical sources.

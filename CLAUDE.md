@@ -18,12 +18,11 @@ Quick context for AI/code agents in `datam8-generator`.
 
 ## Testing
 
-Use local fixtures only (no external sample repo required):
-- `tests/fixtures/solutions/minimal-v2/minimal.dm8s`
+Use a valid sample solution path (e.g. `datam8-sample-solution/ORAYLISDatabricksSample.dm8s`).
 
 Run:
 
 ```sh
 uv sync
-uv run pytest
+uv run pytest --solution-path "<path-to-solution.dm8s>"
 ```
