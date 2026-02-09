@@ -82,10 +82,11 @@ def _keyring_set(name: str, value: str) -> None:
 
 def _keyring_delete(name: str) -> None:
     import keyring  # type: ignore
+    from keyring.errors import PasswordDeleteError  # type: ignore
 
     try:
         keyring.delete_password(SERVICE_NAME, name)
-    except keyring.errors.PasswordDeleteError:
+    except PasswordDeleteError:
         raise Datam8NotFoundError(message="Secret not found.", details={"name": name})
 
 
