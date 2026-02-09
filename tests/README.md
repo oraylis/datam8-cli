@@ -9,21 +9,19 @@ uv sync
 uv run pytest
 ```
 
-## Local solution fixture
+## Solution path
 
-Model-centric and server/jobs tests can use the local fixture:
+Model-centric and server/jobs tests require a solution path.
 
-- `tests/fixtures/solutions/minimal-v2/minimal.dm8s`
-
-Set it explicitly when needed:
+Set it via environment variable:
 
 ```sh
-export DATAM8_SOLUTION_PATH="tests/fixtures/solutions/minimal-v2/minimal.dm8s"
+export DATAM8_SOLUTION_PATH="/absolute/path/to/ORAYLISDatabricksSample.dm8s"
 uv run pytest
 ```
 
-Or per invocation:
+Or per invocation with `--solution-path`:
 
 ```sh
-uv run pytest --solution-path="tests/fixtures/solutions/minimal-v2/minimal.dm8s"
+uv run pytest --solution-path="/absolute/path/to/ORAYLISDatabricksSample.dm8s"
 ```
