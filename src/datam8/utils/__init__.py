@@ -84,21 +84,24 @@ def print_progress_async(msg: str):
     def decorator_print_progress_async(func):
         @functools.wraps(func)
         async def wrapper(*args, **kwargs) -> Callable:
-            result = func(*args, **kwargs)
-
             if config.log_level in [
                 opts.LogLevels.WARNING,
                 opts.LogLevels.ERROR,
             ]:
-                with Progress(
-                    SpinnerColumn(),
-                    TextColumn("[progress.description]{task.description}"),
-                    transient=True,
-                ) as progress:
-                    progress.add_task(description=msg, total=None)
-                    # time.sleep(3)
+                try:
+                    with Progress(
+                        SpinnerColumn(),
+                        TextColumn("[progress.description]{task.description}"),
+                        transient=True,
+                    ) as progress:
+                        progress.add_task(description=msg, total=None)
+                except UnicodeError:
+                    # Some consoles (for example Windows charmap/cp1252) cannot
+                    # render the spinner glyphs. Validation/generation must
+                    # continue regardless of progress rendering failures.
+                    pass
 
-            return await result
+            return await func(*args, **kwargs)
 
         return wrapper
 

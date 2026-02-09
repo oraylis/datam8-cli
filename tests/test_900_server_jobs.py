@@ -62,6 +62,38 @@ def _select_target(solution_path: Path) -> tuple[str, Path]:
     return name, Path(output_path)
 
 
+def _copy_solution_fixture(source_solution_path: Path, destination_root: Path) -> Path:
+    source_root = source_solution_path.parent
+    destination_root.mkdir(parents=True, exist_ok=True)
+
+    solution = json.loads(source_solution_path.read_text(encoding="utf-8"))
+    required_dirs: set[str] = set()
+
+    base_path = solution.get("basePath")
+    if isinstance(base_path, str) and base_path.strip():
+        required_dirs.add(base_path.strip())
+    model_path = solution.get("modelPath")
+    if isinstance(model_path, str) and model_path.strip():
+        required_dirs.add(model_path.strip())
+
+    for target in solution.get("generatorTargets") or []:
+        if not isinstance(target, dict):
+            continue
+        source_path = target.get("sourcePath")
+        if isinstance(source_path, str) and source_path.strip():
+            required_dirs.add(source_path.strip())
+
+    copied_solution = destination_root / source_solution_path.name
+    shutil.copy2(source_solution_path, copied_solution)
+    for rel_dir in sorted(required_dirs):
+        src = source_root / rel_dir
+        dst = destination_root / rel_dir
+        if src.exists():
+            shutil.copytree(src, dst, dirs_exist_ok=True)
+
+    return copied_solution
+
+
 def _spawn_server(*, token: str, solution_path: Path) -> tuple[subprocess.Popen[bytes], dict]:
     repo_root = _repo_root()
     env = {**os.environ, "PYTHONPATH": str(repo_root / "src"), "DATAM8_JOB_CONCURRENCY": "1"}
@@ -182,13 +214,11 @@ def _break_first_model_entity(dm8s_path: Path) -> None:
 def test_serve_readiness_auth_and_generate_job_sse() -> None:
     token = "test-token"
     source_solution_path = _solution_path_from_env()
-    source_solution_dir = source_solution_path.parent
     target, output_path = _select_target(source_solution_path)
 
     with tempfile.TemporaryDirectory() as td:
         work = Path(td) / "solution"
-        shutil.copytree(source_solution_dir, work)
-        solution_path = work / source_solution_path.name
+        solution_path = _copy_solution_fixture(source_solution_path, work)
 
         proc, ready = _spawn_server(token=token, solution_path=solution_path)
         try:
@@ -277,12 +307,10 @@ def test_serve_readiness_auth_and_generate_job_sse() -> None:
 def test_validate_job_failure_contains_report() -> None:
     token = "test-token"
     source_solution_path = _solution_path_from_env()
-    source_solution_dir = source_solution_path.parent
 
     with tempfile.TemporaryDirectory() as td:
         work = Path(td) / "solution"
-        shutil.copytree(source_solution_dir, work)
-        solution_path = work / source_solution_path.name
+        solution_path = _copy_solution_fixture(source_solution_path, work)
         _break_first_model_entity(solution_path)
 
         proc, ready = _spawn_server(token=token, solution_path=solution_path)

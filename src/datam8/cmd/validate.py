@@ -75,10 +75,12 @@ def command(
     rich.print("Validation failed")
     for err in report["errors"]:
         line = f"- [{err.get('code', 'UNKNOWN_ERROR')}] {err.get('message', 'Unknown error')}"
-        if err.get("path"):
-            line += f" ({err['path']})"
-        if err.get("entityLocator"):
-            line += f" [{err['entityLocator']}]"
+        path_value = err.get("path")
+        if path_value:
+            line += f" ({path_value})"
+        entity_locator = err.get("entityLocator")
+        if entity_locator:
+            line += f" [{entity_locator}]"
         rich.print(line)
 
-    raise typer.Exit(code=1)
+    raise SystemExit(1)

@@ -333,6 +333,10 @@ class JobManager:
 
         self._emit(job.id, "log", {"stream": "stdout", "message": "Starting solution validation..."})
         self._emit(job.id, "progress", {"progress": 0.2})
+        self._emit(job.id, "log", {"stream": "stdout", "message": "Parsing solution files..."})
+        self._emit(job.id, "progress", {"progress": 0.4})
+        self._emit(job.id, "log", {"stream": "stdout", "message": "Resolving model references..."})
+        self._emit(job.id, "progress", {"progress": 0.7})
 
         report = await validate_solution_dm8s(Path(solution_path.strip()))
         self._emit(job.id, "progress", {"progress": 0.9})

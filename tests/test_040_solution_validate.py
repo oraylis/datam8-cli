@@ -13,8 +13,19 @@ from conftest import TestConfig
 
 def _copy_solution(solution_file: Path, destination: Path) -> Path:
     destination.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(solution_file.parent, destination, dirs_exist_ok=True)
-    return destination / solution_file.name
+    solution = Solution.from_json_file(solution_file)
+    source_root = solution_file.parent
+
+    copied_solution = destination / solution_file.name
+    shutil.copy2(solution_file, copied_solution)
+
+    for rel_dir in (solution.basePath, solution.modelPath):
+        src = source_root / rel_dir
+        dst = destination / rel_dir
+        if src.exists():
+            shutil.copytree(src, dst, dirs_exist_ok=True)
+
+    return copied_solution
 
 
 def _first_model_entity_file(dm8s_path: Path) -> Path:

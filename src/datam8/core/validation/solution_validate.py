@@ -168,6 +168,14 @@ async def validate_solution_dm8s(dm8s_path: Path) -> ValidationReport:
             message=str(err),
             details={"type": type(err).__name__},
         )
+    except UnicodeError as err:
+        _append_error(
+            report,
+            code="UNKNOWN_ERROR",
+            message=f"Console encoding error: {err}",
+            path=str(dm8s_path),
+            details={"type": type(err).__name__},
+        )
     except (FileNotFoundError, ValueError) as err:
         _append_error(
             report,
