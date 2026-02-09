@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from datam8.core.connectors.binding import decode_connector_binding, encode_connector_binding
+from datam8.core.connectors.binding import (
+    decode_connector_binding,
+    encode_connector_binding,
+)
 from datam8.core.errors import Datam8ValidationError
 
 
