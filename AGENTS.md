@@ -84,9 +84,15 @@ This fixture includes:
   - `UI -> POST /jobs -> SSE stream -> completion -> output/state assertions`.
 - Job-related backend changes should include HTTP server job tests with SSE assertions.
 
+## CI Quality Gates
+Always ensure both commands succeed locally before finishing changes, because they are part of the GitHub workflow:
+- `uv tool run pyright src`
+- `uv tool run ruff check src`
+
 ## Patch Checklist
 - Contract impact assessed; `docs/backend-contract.md` updated if needed.
 - Subprocess job behavior preserved (frozen vs dev path).
 - Tests added/updated for changed behavior.
+- `uv tool run pyright src` and `uv tool run ruff check src` pass.
 - Local fixtures used; no external sample-solution dependency required.
 - Docs kept concise and linked to canonical sources.
