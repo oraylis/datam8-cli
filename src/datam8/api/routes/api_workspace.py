@@ -233,8 +233,8 @@ async def model_folder_rename(body: RenameFolderBody) -> RenameFolderResponse:
             body.toFolderRelPath,
             body.solutionPath,
         )
-        entities = [entity.__dict__ for entity in workspace_io.list_model_entities(body.solutionPath)]
-        workspace_io.regenerate_index(body.solutionPath)
+        _, model_entities = workspace_io.regenerate_index_with_entities(body.solutionPath)
+        entities = [entity.__dict__ for entity in model_entities]
     else:
         with SolutionLock(
             resolved.root_dir / ".datam8.lock",
@@ -245,8 +245,8 @@ async def model_folder_rename(body: RenameFolderBody) -> RenameFolderResponse:
                 body.toFolderRelPath,
                 body.solutionPath,
             )
-            entities = [entity.__dict__ for entity in workspace_io.list_model_entities(body.solutionPath)]
-            workspace_io.regenerate_index(body.solutionPath)
+            _, model_entities = workspace_io.regenerate_index_with_entities(body.solutionPath)
+            entities = [entity.__dict__ for entity in model_entities]
     return RenameFolderResponse(message="renamed", entities=entities, **result)
 
 

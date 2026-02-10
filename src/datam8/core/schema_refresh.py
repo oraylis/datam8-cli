@@ -140,9 +140,24 @@ def _list_model_entities(solution_path: str | None) -> list[dict[str, Any]]:
     return [e.__dict__ for e in list_model_entities(solution_path)]
 
 
-def find_data_source_usages(solution_path: str | None, data_source_name: str) -> list[dict[str, Any]]:
+def _resolved_model_entities(
+    *,
+    solution_path: str | None,
+    model_entities: list[dict[str, Any]] | None,
+) -> list[dict[str, Any]]:
+    if isinstance(model_entities, list):
+        return model_entities
+    return _list_model_entities(solution_path)
+
+
+def find_data_source_usages(
+    solution_path: str | None,
+    data_source_name: str,
+    *,
+    model_entities: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
     usages: list[dict[str, Any]] = []
-    entities = _list_model_entities(solution_path)
+    entities = _resolved_model_entities(solution_path=solution_path, model_entities=model_entities)
 
     for ent in entities:
         rel_path = str(ent.get("relPath") or "").replace("\\", "/")
@@ -342,9 +357,10 @@ def preview_schema_changes(
     solution_path: str | None,
     usages: list[UsageRef],
     runtime_secrets: dict[str, str] | None,
+    model_entities: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     diffs: list[dict[str, Any]] = []
-    entities = _list_model_entities(solution_path)
+    entities = _resolved_model_entities(solution_path=solution_path, model_entities=model_entities)
     entity_map = {str(e.get("relPath")): e for e in entities if isinstance(e, dict) and e.get("relPath")}
 
     for usage in usages:
@@ -492,9 +508,10 @@ def apply_schema_changes(
     solution_path: str | None,
     diffs: list[dict[str, Any]],
     runtime_secrets: dict[str, str] | None,
+    model_entities: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
-    entities = _list_model_entities(solution_path)
+    entities = _resolved_model_entities(solution_path=solution_path, model_entities=model_entities)
     entity_map = {str(e.get("relPath")): e for e in entities if isinstance(e, dict) and e.get("relPath")}
     mapping_cache: dict[str, dict[str, list[dict[str, Any]]]] = {}
 

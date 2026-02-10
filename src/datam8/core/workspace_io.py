@@ -387,9 +387,29 @@ def write_base_entity(rel_path: str, content: Any, solution_path: str | None) ->
 
 
 def regenerate_index(solution_path: str | None) -> dict[str, Any]:
+    """Regenerate index.json for a solution using current model entities."""
     resolved, sol = read_solution(solution_path)
     root = resolved.root_dir
     entities = list_model_entities(solution_path)
+    index = _build_index(sol=sol, entities=entities)
+    index_path = root / "index.json"
+    atomic_write_json(index_path, index, indent=4)
+    return index
+
+
+def regenerate_index_with_entities(solution_path: str | None) -> tuple[dict[str, Any], list[ModelEntityEntry]]:
+    """Regenerate index.json and return the same scanned model entities."""
+    resolved, sol = read_solution(solution_path)
+    root = resolved.root_dir
+    entities = list_model_entities(solution_path)
+    index = _build_index(sol=sol, entities=entities)
+    index_path = root / "index.json"
+    atomic_write_json(index_path, index, indent=4)
+    return index, entities
+
+
+def _build_index(*, sol: Solution, entities: list[ModelEntityEntry]) -> dict[str, Any]:
+    """Build in-memory index payload from model entities."""
 
     def zone_to_key(segment: str) -> str:
         m = re.match(r"^\d+\-([A-Za-z]+)", segment)
@@ -409,9 +429,6 @@ def regenerate_index(solution_path: str | None) -> dict[str, Any]:
 
     for k in sorted(index.keys()):
         index[k]["entry"].sort(key=lambda e: (e["locator"], e["name"]))
-
-    index_path = root / "index.json"
-    atomic_write_json(index_path, index, indent=4)
     return index
 
 
