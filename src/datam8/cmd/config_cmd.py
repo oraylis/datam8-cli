@@ -22,7 +22,9 @@ import os
 
 import typer
 
-from .common import emit_result, get_global_options
+from datam8 import opts as cli_opts
+
+from .common import emit_result, make_global_options
 
 app = typer.Typer(
     name="config",
@@ -33,9 +35,19 @@ app = typer.Typer(
 
 
 @app.command("show")
-def show(ctx: typer.Context) -> None:
+def show(
+    solution_path: cli_opts.SolutionPathOptional = None,
+    json_output: cli_opts.JsonOutput = False,
+    quiet: cli_opts.Quiet = False,
+    log_level: str = typer.Option("info", "--log-level", envvar="DATAM8_LOG_LEVEL"),
+) -> None:
     """Show effective backend mode and selected global options."""
-    opts = get_global_options(ctx)
+    opts = make_global_options(
+        solution=solution_path,
+        json_output=json_output,
+        quiet=quiet,
+        log_level=log_level,
+    )
     payload = {
         "mode": os.environ.get("DATAM8_MODE") or "server",
         "solutionPath": opts.solution,

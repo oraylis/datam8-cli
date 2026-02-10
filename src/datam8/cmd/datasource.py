@@ -22,6 +22,7 @@ from typing import Any
 
 import typer
 
+from datam8 import opts as cli_opts
 from datam8.core.connectors.resolve import resolve_and_validate
 from datam8.core.errors import Datam8ValidationError
 from datam8.core.secrets import get_runtime_secrets_map
@@ -29,8 +30,8 @@ from datam8.core.workspace_io import read_solution
 
 from .common import (
     emit_result,
-    get_global_options,
     lock_context,
+    make_global_options,
     read_json_arg,
     resolve_solution_path,
 )
@@ -130,15 +131,16 @@ def _runtime_secrets(
 
 @app.command("list-tables")
 def list_tables(
-    ctx: typer.Context,
     data_source_id: str = typer.Argument(...),
-    solution_path: str | None = typer.Option(None, "--solution"),
+    solution_path: cli_opts.SolutionPathOptional = None,
     runtime_secrets: str = typer.Option("{}", "--runtime-secrets", help="JSON object."),
+    json_output: cli_opts.JsonOutput = False,
+    quiet: cli_opts.Quiet = False,
 ) -> None:
     """List tables for a datasource connector."""
     _ensure_schema_refresh_dependencies()
-    opts = get_global_options(ctx)
-    active_solution = resolve_solution_path(opts, solution_path)
+    opts = make_global_options(solution=solution_path, json_output=json_output, quiet=quiet)
+    active_solution = resolve_solution_path(opts)
     merged = _runtime_secrets(
         solution_path=active_solution,
         data_source_id=data_source_id,
@@ -164,17 +166,18 @@ def list_tables(
 
 @app.command("table-metadata")
 def table_metadata(
-    ctx: typer.Context,
     data_source_id: str = typer.Argument(...),
     schema: str = typer.Option("dbo", "--schema"),
     table: str = typer.Option(..., "--table"),
-    solution_path: str | None = typer.Option(None, "--solution"),
+    solution_path: cli_opts.SolutionPathOptional = None,
     runtime_secrets: str = typer.Option("{}", "--runtime-secrets", help="JSON object."),
+    json_output: cli_opts.JsonOutput = False,
+    quiet: cli_opts.Quiet = False,
 ) -> None:
     """Fetch table metadata for a datasource connector."""
     _ensure_schema_refresh_dependencies()
-    opts = get_global_options(ctx)
-    active_solution = resolve_solution_path(opts, solution_path)
+    opts = make_global_options(solution=solution_path, json_output=json_output, quiet=quiet)
+    active_solution = resolve_solution_path(opts)
     merged = _runtime_secrets(
         solution_path=active_solution,
         data_source_id=data_source_id,
@@ -196,16 +199,17 @@ def table_metadata(
 
 @app.command("virtual-table-metadata")
 def virtual_table_metadata(
-    ctx: typer.Context,
     data_source_id: str = typer.Argument(...),
     source_location: str = typer.Option(..., "--source-location"),
-    solution_path: str | None = typer.Option(None, "--solution"),
+    solution_path: cli_opts.SolutionPathOptional = None,
     runtime_secrets: str = typer.Option("{}", "--runtime-secrets", help="JSON object."),
+    json_output: cli_opts.JsonOutput = False,
+    quiet: cli_opts.Quiet = False,
 ) -> None:
     """Fetch HTTP API virtual table metadata."""
     _ensure_schema_refresh_dependencies()
-    opts = get_global_options(ctx)
-    active_solution = resolve_solution_path(opts, solution_path)
+    opts = make_global_options(solution=solution_path, json_output=json_output, quiet=quiet)
+    active_solution = resolve_solution_path(opts)
     merged = _runtime_secrets(
         solution_path=active_solution,
         data_source_id=data_source_id,
@@ -238,30 +242,32 @@ def virtual_table_metadata(
 
 @app.command("usages")
 def usages(
-    ctx: typer.Context,
     data_source_id: str = typer.Argument(...),
-    solution_path: str | None = typer.Option(None, "--solution"),
+    solution_path: cli_opts.SolutionPathOptional = None,
+    json_output: cli_opts.JsonOutput = False,
+    quiet: cli_opts.Quiet = False,
 ) -> None:
     """List model-source usages for a datasource."""
     _ensure_schema_refresh_dependencies()
-    opts = get_global_options(ctx)
-    active_solution = resolve_solution_path(opts, solution_path)
+    opts = make_global_options(solution=solution_path, json_output=json_output, quiet=quiet)
+    active_solution = resolve_solution_path(opts)
     usages_list = find_data_source_usages(active_solution, data_source_id)
     emit_result(opts, {"usages": usages_list})
 
 
 @app.command("refresh-preview")
 def refresh_preview(
-    ctx: typer.Context,
     data_source_id: str = typer.Argument(...),
     usages: str = typer.Option("[]", "--usages", help="JSON list of usage objects."),
-    solution_path: str | None = typer.Option(None, "--solution"),
+    solution_path: cli_opts.SolutionPathOptional = None,
     runtime_secrets: str = typer.Option("{}", "--runtime-secrets", help="JSON object."),
+    json_output: cli_opts.JsonOutput = False,
+    quiet: cli_opts.Quiet = False,
 ) -> None:
     """Preview external schema changes for selected usages."""
     _ensure_schema_refresh_dependencies()
-    opts = get_global_options(ctx)
-    active_solution = resolve_solution_path(opts, solution_path)
+    opts = make_global_options(solution=solution_path, json_output=json_output, quiet=quiet)
+    active_solution = resolve_solution_path(opts)
     merged = _runtime_secrets(
         solution_path=active_solution,
         data_source_id=data_source_id,
@@ -286,16 +292,25 @@ def refresh_preview(
 
 @app.command("refresh-apply")
 def refresh_apply(
-    ctx: typer.Context,
     data_source_id: str = typer.Argument(...),
     diffs: str = typer.Option("[]", "--diffs", help="JSON list."),
-    solution_path: str | None = typer.Option(None, "--solution"),
+    solution_path: cli_opts.SolutionPathOptional = None,
     runtime_secrets: str = typer.Option("{}", "--runtime-secrets", help="JSON object."),
+    json_output: cli_opts.JsonOutput = False,
+    quiet: cli_opts.Quiet = False,
+    lock_timeout: cli_opts.LockTimeout = "10s",
+    no_lock: cli_opts.NoLock = False,
 ) -> None:
     """Apply external schema changes to affected model entities."""
     _ensure_schema_refresh_dependencies()
-    opts = get_global_options(ctx)
-    active_solution = resolve_solution_path(opts, solution_path)
+    opts = make_global_options(
+        solution=solution_path,
+        json_output=json_output,
+        quiet=quiet,
+        lock_timeout=lock_timeout,
+        no_lock=no_lock,
+    )
+    active_solution = resolve_solution_path(opts)
     merged = _runtime_secrets(
         solution_path=active_solution,
         data_source_id=data_source_id,

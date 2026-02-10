@@ -20,9 +20,10 @@ from __future__ import annotations
 
 import typer
 
+from datam8 import opts as cli_opts
 from datam8.core.search import search_entities, search_text
 
-from .common import emit_result, get_global_options, resolve_solution_path
+from .common import emit_result, make_global_options, resolve_solution_path
 
 app = typer.Typer(
     name="search",
@@ -33,9 +34,14 @@ app = typer.Typer(
 
 
 @app.command("entities")
-def search_entities_cmd(ctx: typer.Context, query: str = typer.Argument(..., help="Substring query.")) -> None:
+def search_entities_cmd(
+    query: str = typer.Argument(..., help="Substring query."),
+    solution_path: cli_opts.SolutionPathOptional = None,
+    json_output: cli_opts.JsonOutput = False,
+    quiet: cli_opts.Quiet = False,
+) -> None:
     """Search entity names, locators, and paths."""
-    opts = get_global_options(ctx)
+    opts = make_global_options(solution=solution_path, json_output=json_output, quiet=quiet)
     result = search_entities(solution_path=resolve_solution_path(opts), query=query)
     payload = {"query": query, **result}
     human_lines = [e.get("relPath", "") for e in result.get("entities") or []]
@@ -43,9 +49,14 @@ def search_entities_cmd(ctx: typer.Context, query: str = typer.Argument(..., hel
 
 
 @app.command("text")
-def search_text_cmd(ctx: typer.Context, pattern: str = typer.Argument(..., help="Text pattern to find.")) -> None:
+def search_text_cmd(
+    pattern: str = typer.Argument(..., help="Text pattern to find."),
+    solution_path: cli_opts.SolutionPathOptional = None,
+    json_output: cli_opts.JsonOutput = False,
+    quiet: cli_opts.Quiet = False,
+) -> None:
     """Search raw text within solution JSON files."""
-    opts = get_global_options(ctx)
+    opts = make_global_options(solution=solution_path, json_output=json_output, quiet=quiet)
     result = search_text(solution_path=resolve_solution_path(opts), pattern=pattern)
     payload = {"pattern": pattern, **result}
     human_lines = [f"{m['file']}: {m['count']}" for m in result.get("matches") or []]

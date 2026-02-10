@@ -83,20 +83,32 @@ def build_global_options(
     )
 
 
-def get_global_options(ctx: typer.Context) -> GlobalOptions:
-    """Read global options from context, with safe defaults."""
-    obj = getattr(ctx, "obj", None)
-    if isinstance(obj, GlobalOptions):
-        return obj
-    return GlobalOptions(
-        solution=os.environ.get("DATAM8_SOLUTION_PATH"),
-        json_output=False,
-        quiet=False,
-        verbose=False,
-        log_file=None,
-        log_level="info",
-        lock_timeout="10s",
-        no_lock=False,
+def make_global_options(
+    *,
+    solution: Path | str | None = None,
+    json_output: bool = False,
+    quiet: bool = False,
+    verbose: bool = False,
+    log_file: str | None = None,
+    log_level: str = "info",
+    lock_timeout: str = "10s",
+    no_lock: bool = False,
+) -> GlobalOptions:
+    """Create global options directly from command arguments."""
+    normalized_solution: str | None
+    if isinstance(solution, Path):
+        normalized_solution = str(solution)
+    else:
+        normalized_solution = solution
+    return build_global_options(
+        solution=normalized_solution,
+        json_output=json_output,
+        quiet=quiet,
+        verbose=verbose,
+        log_file=log_file,
+        log_level=log_level,
+        lock_timeout=lock_timeout,
+        no_lock=no_lock,
     )
 
 

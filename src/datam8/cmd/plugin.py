@@ -23,6 +23,7 @@ from pathlib import Path
 
 import typer
 
+from datam8 import opts as cli_opts
 from datam8.core.connectors.plugin_manager import (
     default_plugin_dir,
     install_git_url,
@@ -34,7 +35,7 @@ from datam8.core.connectors.plugin_manager import (
 )
 from datam8.core.errors import Datam8NotFoundError, Datam8ValidationError
 
-from .common import emit_result, get_global_options
+from .common import emit_result, make_global_options
 
 app = typer.Typer(
     name="plugin",
@@ -52,9 +53,12 @@ def _plugin_dir() -> Path:
 
 
 @app.command("list")
-def list_plugins(ctx: typer.Context) -> None:
+def list_plugins(
+    json_output: cli_opts.JsonOutput = False,
+    quiet: cli_opts.Quiet = False,
+) -> None:
     """List installed plugins."""
-    opts = get_global_options(ctx)
+    opts = make_global_options(json_output=json_output, quiet=quiet)
     state = reload(_plugin_dir())
     payload = {"plugins": state.get("plugins", []), "errors": state.get("errors", {})}
     human_lines = [
@@ -66,21 +70,25 @@ def list_plugins(ctx: typer.Context) -> None:
 
 
 @app.command("reload")
-def reload_plugins(ctx: typer.Context) -> None:
+def reload_plugins(
+    json_output: cli_opts.JsonOutput = False,
+    quiet: cli_opts.Quiet = False,
+) -> None:
     """Rescan plugin directory and return plugin state."""
-    opts = get_global_options(ctx)
+    opts = make_global_options(json_output=json_output, quiet=quiet)
     state = reload(_plugin_dir())
     emit_result(opts, state, human_lines=["ok"])
 
 
 @app.command("install")
 def install(
-    ctx: typer.Context,
     git_url: str | None = typer.Option(None, "--git-url", help="Git URL to install from."),
     zip_file: str | None = typer.Option(None, "--zip-file", help="Local plugin ZIP file path."),
+    json_output: cli_opts.JsonOutput = False,
+    quiet: cli_opts.Quiet = False,
 ) -> None:
     """Install a plugin from Git URL or ZIP file."""
-    opts = get_global_options(ctx)
+    opts = make_global_options(json_output=json_output, quiet=quiet)
     plugin_dir = _plugin_dir()
     if bool(git_url) == bool(zip_file):
         raise Datam8ValidationError(message="Provide exactly one of --git-url or --zip-file.", details=None)
@@ -97,9 +105,13 @@ def install(
 
 
 @app.command("uninstall")
-def uninstall_plugin(ctx: typer.Context, plugin_id: str = typer.Argument(..., help="Plugin id.")) -> None:
+def uninstall_plugin(
+    plugin_id: str = typer.Argument(..., help="Plugin id."),
+    json_output: cli_opts.JsonOutput = False,
+    quiet: cli_opts.Quiet = False,
+) -> None:
     """Uninstall a plugin by id."""
-    opts = get_global_options(ctx)
+    opts = make_global_options(json_output=json_output, quiet=quiet)
     plugin_dir = _plugin_dir()
     uninstall(plugin_dir, plugin_id)
     state = reload(plugin_dir)
@@ -107,9 +119,13 @@ def uninstall_plugin(ctx: typer.Context, plugin_id: str = typer.Argument(..., he
 
 
 @app.command("enable")
-def enable_plugin(ctx: typer.Context, plugin_id: str = typer.Argument(..., help="Plugin id.")) -> None:
+def enable_plugin(
+    plugin_id: str = typer.Argument(..., help="Plugin id."),
+    json_output: cli_opts.JsonOutput = False,
+    quiet: cli_opts.Quiet = False,
+) -> None:
     """Enable a plugin by id."""
-    opts = get_global_options(ctx)
+    opts = make_global_options(json_output=json_output, quiet=quiet)
     plugin_dir = _plugin_dir()
     set_enabled(plugin_dir, plugin_id, True)
     state = reload(plugin_dir)
@@ -117,9 +133,13 @@ def enable_plugin(ctx: typer.Context, plugin_id: str = typer.Argument(..., help=
 
 
 @app.command("disable")
-def disable_plugin(ctx: typer.Context, plugin_id: str = typer.Argument(..., help="Plugin id.")) -> None:
+def disable_plugin(
+    plugin_id: str = typer.Argument(..., help="Plugin id."),
+    json_output: cli_opts.JsonOutput = False,
+    quiet: cli_opts.Quiet = False,
+) -> None:
     """Disable a plugin by id."""
-    opts = get_global_options(ctx)
+    opts = make_global_options(json_output=json_output, quiet=quiet)
     plugin_dir = _plugin_dir()
     set_enabled(plugin_dir, plugin_id, False)
     state = reload(plugin_dir)
@@ -127,9 +147,13 @@ def disable_plugin(ctx: typer.Context, plugin_id: str = typer.Argument(..., help
 
 
 @app.command("info")
-def plugin_info(ctx: typer.Context, plugin_id: str = typer.Argument(..., help="Plugin id.")) -> None:
+def plugin_info(
+    plugin_id: str = typer.Argument(..., help="Plugin id."),
+    json_output: cli_opts.JsonOutput = False,
+    quiet: cli_opts.Quiet = False,
+) -> None:
     """Return plugin metadata for a single plugin."""
-    opts = get_global_options(ctx)
+    opts = make_global_options(json_output=json_output, quiet=quiet)
     state = reload(_plugin_dir())
     plugin = next(
         (
@@ -146,12 +170,13 @@ def plugin_info(ctx: typer.Context, plugin_id: str = typer.Argument(..., help="P
 
 @app.command("verify")
 def verify_plugin(
-    ctx: typer.Context,
     plugin_id: str = typer.Argument("", help="Plugin id (omit when using --file)."),
     file: str | None = typer.Option(None, "--file", help="Plugin ZIP file path."),
+    json_output: cli_opts.JsonOutput = False,
+    quiet: cli_opts.Quiet = False,
 ) -> None:
     """Verify plugin metadata or validate a ZIP plugin bundle."""
-    opts = get_global_options(ctx)
+    opts = make_global_options(json_output=json_output, quiet=quiet)
     if file and file.strip():
         data = Path(file).read_bytes()
         bundle = verify_zip_bundle(zip_bytes=data)

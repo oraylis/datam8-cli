@@ -22,9 +22,10 @@ from typing import Any
 
 import typer
 
+from datam8 import opts as cli_opts
 from datam8.core.migration_v1_to_v2 import migrate_solution_v1_to_v2
 
-from .common import emit_result, get_global_options, read_json_arg
+from .common import emit_result, make_global_options, read_json_arg
 
 app = typer.Typer(
     name="migration",
@@ -36,13 +37,14 @@ app = typer.Typer(
 
 @app.command("v1-to-v2")
 def v1_to_v2(
-    ctx: typer.Context,
     source_solution_path: str = typer.Option(..., "--source-solution-path"),
     target_dir: str = typer.Option(..., "--target-dir"),
     options: str = typer.Option("{}", "--options", help="JSON object with migration options."),
+    json_output: cli_opts.JsonOutput = False,
+    quiet: cli_opts.Quiet = False,
 ) -> None:
     """Migrate a v1 solution into a v2-compatible project."""
-    opts = get_global_options(ctx)
+    opts = make_global_options(json_output=json_output, quiet=quiet)
     parsed_options = read_json_arg(options)
     args: dict[str, Any] = {
         "sourceSolutionPath": source_solution_path,

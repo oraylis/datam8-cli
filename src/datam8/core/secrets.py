@@ -1,11 +1,37 @@
+# DataM8
+# Copyright (C) 2024-2025 ORAYLIS GmbH
+#
+# This file is part of DataM8.
+#
+# DataM8 is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# DataM8 is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 from __future__ import annotations
 
 import hashlib
 import json
 import os
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+try:
+    import keyring  # type: ignore
+    from keyring.errors import PasswordDeleteError  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    keyring = None  # type: ignore[assignment]
+    PasswordDeleteError = Exception  # type: ignore[assignment]
 
 from datam8.core.atomic import atomic_write_json
 from datam8.core.errors import (
@@ -59,9 +85,9 @@ def _save_registry(data: dict[str, Any]) -> None:
 
 
 def is_keyring_available() -> bool:
+    if keyring is None:
+        return False
     try:
-        import keyring  # type: ignore
-
         _ = keyring.get_keyring()
         return True
     except Exception:
@@ -69,21 +95,30 @@ def is_keyring_available() -> bool:
 
 
 def _keyring_get(name: str) -> str | None:
-    import keyring  # type: ignore
-
+    if keyring is None:
+        return None
     return keyring.get_password(SERVICE_NAME, name)
 
 
 def _keyring_set(name: str, value: str) -> None:
-    import keyring  # type: ignore
-
+    if keyring is None:
+        raise Datam8ExternalSystemError(
+            code="secrets_unavailable",
+            message="Secure secret storage is not available (keyring backend missing/unavailable).",
+            details=None,
+            hint="Install/configure keyring for your OS.",
+        )
     keyring.set_password(SERVICE_NAME, name, value)
 
 
 def _keyring_delete(name: str) -> None:
-    import keyring  # type: ignore
-    from keyring.errors import PasswordDeleteError  # type: ignore
-
+    if keyring is None:
+        raise Datam8ExternalSystemError(
+            code="secrets_unavailable",
+            message="Secure secret storage is not available (keyring backend missing/unavailable).",
+            details=None,
+            hint="Install/configure keyring for your OS.",
+        )
     try:
         keyring.delete_password(SERVICE_NAME, name)
     except PasswordDeleteError:
@@ -141,7 +176,7 @@ def set_runtime_secret(
         "dataSourceName": data_source_name,
         "key": key,
         "secretRef": SecretRef(scheme="keyring", scope=scope, name=name).to_uri(),
-        "updatedAt": int(__import__("time").time() * 1000),
+        "updatedAt": int(time.time() * 1000),
     }
     reg["entries"] = [e for e in reg["entries"] if not (isinstance(e, dict) and e.get("kind") == "runtime" and e.get("scope") == scope and e.get("dataSourceName") == data_source_name and e.get("key") == key)]
     reg["entries"].append(entry)

@@ -17,7 +17,6 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 import asyncio
-import os
 import sys
 from collections.abc import Sequence
 from concurrent import futures
@@ -138,7 +137,6 @@ def run_generation(
 
 @app.command("generate")
 def command(
-    ctx: typer.Context,
     solution_path: Path | None = typer.Option(
         None,
         "--solution",
@@ -161,22 +159,12 @@ def command(
     lazy: opts.Lazy = False,
 ):
     """Generate a jinja2 template configured in the solution file."""
-    parent_obj = getattr(ctx, "obj", None)
     if solution_path is None:
-        candidate = getattr(parent_obj, "solution", None) if parent_obj is not None else None
-        if not isinstance(candidate, str) or not candidate.strip():
-            candidate = os.environ.get("DATAM8_SOLUTION_PATH")
-        if not isinstance(candidate, str) or not candidate.strip():
-            raise typer.BadParameter("No solution specified. Use --solution/-s (or set DATAM8_SOLUTION_PATH).")
-        solution_path = Path(candidate)
+        raise typer.BadParameter("No solution specified. Use --solution/-s (or set DATAM8_SOLUTION_PATH).")
 
     effective_log_level = log_level
     if not isinstance(effective_log_level, str) or not effective_log_level.strip():
-        parent_level = getattr(parent_obj, "log_level", None) if parent_obj is not None else None
-        if isinstance(parent_level, str) and parent_level.strip():
-            effective_log_level = parent_level.strip()
-        else:
-            effective_log_level = opts.LogLevels.WARNING.value
+        effective_log_level = opts.LogLevels.WARNING.value
 
     try:
         _ = run_generation(

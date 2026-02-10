@@ -1,3 +1,21 @@
+# DataM8
+# Copyright (C) 2024-2025 ORAYLIS GmbH
+#
+# This file is part of DataM8.
+#
+# DataM8 is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# DataM8 is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 from __future__ import annotations
 
 import json
@@ -5,10 +23,16 @@ from pathlib import Path
 
 from datam8.core.connectors.plugin_host import get_connector, load_connector_class
 
+_FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "plugin_vendored_deps"
+
 
 def _write(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
+
+
+def _read_fixture(name: str) -> str:
+    return (_FIXTURE_DIR / name).read_text(encoding="utf-8")
 
 
 def test_plugin_loader_supports_vendored_site_packages(tmp_path: Path) -> None:
@@ -36,38 +60,7 @@ def test_plugin_loader_supports_vendored_site_packages(tmp_path: Path) -> None:
     )
     _write(
         plugin_root / "src" / "datam8_plugins" / "testdep" / "connector.py",
-        """from __future__ import annotations
-import vendored_dep
-
-class Connector:
-    @staticmethod
-    def get_manifest() -> dict:
-        return {"id": "testdep", "displayName": "Testdep", "version": vendored_dep.VALUE, "capabilities": ["uiSchema", "validateConnection", "metadata"]}
-
-    @staticmethod
-    def get_ui_schema() -> dict:
-        return {"title": "Testdep", "authModes": [{"id": "none", "label": "None", "fields": []}]}
-
-    @staticmethod
-    def validate_connection(extended_properties: dict, secret_resolver) -> list:
-        return []
-
-    @staticmethod
-    def test_connection(extended_properties: dict, secret_resolver) -> None:
-        return None
-
-    @staticmethod
-    def list_schemas(extended_properties: dict, secret_resolver) -> list[str]:
-        return []
-
-    @staticmethod
-    def list_tables(extended_properties: dict, secret_resolver, schema: str | None = None) -> list[dict]:
-        return []
-
-    @staticmethod
-    def get_table_metadata(extended_properties: dict, secret_resolver, schema: str, table: str) -> dict:
-        return {"schema": schema, "name": table, "columns": []}
-""",
+        _read_fixture("testdep_connector.py"),
     )
 
     plugin = get_connector(plugin_dir=plugin_dir, connector_id="testdep")
@@ -101,42 +94,7 @@ def test_plugin_methods_support_lazy_vendored_imports(tmp_path: Path) -> None:
     )
     _write(
         plugin_root / "src" / "datam8_plugins" / "lazydep" / "connector.py",
-        """from __future__ import annotations
-
-class Connector:
-    @staticmethod
-    def get_manifest() -> dict:
-        return {"id": "lazydep", "displayName": "Lazydep", "version": "0.1.0", "capabilities": ["uiSchema", "validateConnection", "metadata"]}
-
-    @staticmethod
-    def get_ui_schema() -> dict:
-        return {"title": "Lazydep", "authModes": [{"id": "none", "label": "None", "fields": []}]}
-
-    @staticmethod
-    def validate_connection(extended_properties: dict, secret_resolver) -> list:
-        import vendored_lazy
-        if vendored_lazy.VALUE != "lazy-ok":
-            return [{"key": "x", "message": "unexpected", "level": "error"}]
-        return []
-
-    @staticmethod
-    def test_connection(extended_properties: dict, secret_resolver) -> None:
-        import vendored_lazy
-        if vendored_lazy.VALUE != "lazy-ok":
-            raise RuntimeError("missing lazy dep")
-
-    @staticmethod
-    def list_schemas(extended_properties: dict, secret_resolver) -> list[str]:
-        return []
-
-    @staticmethod
-    def list_tables(extended_properties: dict, secret_resolver, schema: str | None = None) -> list[dict]:
-        return []
-
-    @staticmethod
-    def get_table_metadata(extended_properties: dict, secret_resolver, schema: str, table: str) -> dict:
-        return {"schema": schema, "name": table, "columns": []}
-""",
+        _read_fixture("lazydep_connector.py"),
     )
 
     plugin = get_connector(plugin_dir=plugin_dir, connector_id="lazydep")

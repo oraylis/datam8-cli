@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import typer
 
+from datam8 import opts as cli_opts
 from datam8.core.secrets import (
     delete_runtime_secret,
     get_runtime_secret,
@@ -29,7 +30,7 @@ from datam8.core.secrets import (
     set_runtime_secret,
 )
 
-from .common import emit_result, get_global_options, read_text_arg, resolve_solution_path
+from .common import emit_result, make_global_options, read_text_arg, resolve_solution_path
 
 app = typer.Typer(
     name="secret",
@@ -40,9 +41,12 @@ app = typer.Typer(
 
 
 @app.command("available")
-def available(ctx: typer.Context) -> None:
+def available(
+    json_output: cli_opts.JsonOutput = False,
+    quiet: cli_opts.Quiet = False,
+) -> None:
     """Return whether runtime secret storage is available."""
-    opts = get_global_options(ctx)
+    opts = make_global_options(json_output=json_output, quiet=quiet)
     is_available = bool(is_keyring_available())
     emit_result(
         opts,
@@ -52,18 +56,28 @@ def available(ctx: typer.Context) -> None:
 
 
 @app.command("list")
-def list_keys(ctx: typer.Context, data_source_name: str = typer.Argument(...)) -> None:
+def list_keys(
+    data_source_name: str = typer.Argument(...),
+    solution_path: cli_opts.SolutionPathOptional = None,
+    json_output: cli_opts.JsonOutput = False,
+    quiet: cli_opts.Quiet = False,
+) -> None:
     """List secret keys for a data source."""
-    opts = get_global_options(ctx)
+    opts = make_global_options(solution=solution_path, json_output=json_output, quiet=quiet)
     entries = list_runtime_secret_keys(resolve_solution_path(opts), data_source_name)
     payload = {"dataSourceName": data_source_name, "count": len(entries), "secrets": entries}
     emit_result(opts, payload, human_lines=[str(e.get("key") or "") for e in entries])
 
 
 @app.command("refs")
-def refs(ctx: typer.Context, data_source_name: str = typer.Argument(...)) -> None:
+def refs(
+    data_source_name: str = typer.Argument(...),
+    solution_path: cli_opts.SolutionPathOptional = None,
+    json_output: cli_opts.JsonOutput = False,
+    quiet: cli_opts.Quiet = False,
+) -> None:
     """List secret reference URIs for a data source."""
-    opts = get_global_options(ctx)
+    opts = make_global_options(solution=solution_path, json_output=json_output, quiet=quiet)
     refs_map: dict[str, str] = {}
     for entry in list_runtime_secret_keys(resolve_solution_path(opts), data_source_name):
         key = entry.get("key")
@@ -74,12 +88,14 @@ def refs(ctx: typer.Context, data_source_name: str = typer.Argument(...)) -> Non
 
 @app.command("get")
 def get_secret(
-    ctx: typer.Context,
     data_source_name: str = typer.Argument(...),
     key: str = typer.Argument(...),
+    solution_path: cli_opts.SolutionPathOptional = None,
+    json_output: cli_opts.JsonOutput = False,
+    quiet: cli_opts.Quiet = False,
 ) -> None:
     """Read a runtime secret value."""
-    opts = get_global_options(ctx)
+    opts = make_global_options(solution=solution_path, json_output=json_output, quiet=quiet)
     entry = get_runtime_secret(
         solution_path=resolve_solution_path(opts),
         data_source_name=data_source_name,
@@ -92,13 +108,15 @@ def get_secret(
 
 @app.command("set")
 def set_secret(
-    ctx: typer.Context,
     data_source_name: str = typer.Argument(...),
     key: str = typer.Argument(...),
     value: str = typer.Argument(..., help="Secret value or '-' for stdin."),
+    solution_path: cli_opts.SolutionPathOptional = None,
+    json_output: cli_opts.JsonOutput = False,
+    quiet: cli_opts.Quiet = False,
 ) -> None:
     """Create or update a runtime secret value."""
-    opts = get_global_options(ctx)
+    opts = make_global_options(solution=solution_path, json_output=json_output, quiet=quiet)
     secret_value = read_text_arg(value).strip("\n")
     ref = set_runtime_secret(
         solution_path=resolve_solution_path(opts),
@@ -111,12 +129,14 @@ def set_secret(
 
 @app.command("delete")
 def delete_secret(
-    ctx: typer.Context,
     data_source_name: str = typer.Argument(...),
     key: str = typer.Argument(...),
+    solution_path: cli_opts.SolutionPathOptional = None,
+    json_output: cli_opts.JsonOutput = False,
+    quiet: cli_opts.Quiet = False,
 ) -> None:
     """Delete a runtime secret value."""
-    opts = get_global_options(ctx)
+    opts = make_global_options(solution=solution_path, json_output=json_output, quiet=quiet)
     delete_runtime_secret(
         solution_path=resolve_solution_path(opts),
         data_source_name=data_source_name,
@@ -126,16 +146,21 @@ def delete_secret(
 
 
 @app.command("clear")
-def clear_secrets(ctx: typer.Context, data_source_name: str = typer.Argument(...)) -> None:
+def clear_secrets(
+    data_source_name: str = typer.Argument(...),
+    solution_path: cli_opts.SolutionPathOptional = None,
+    json_output: cli_opts.JsonOutput = False,
+    quiet: cli_opts.Quiet = False,
+) -> None:
     """Delete all runtime secrets for a data source."""
-    opts = get_global_options(ctx)
-    solution_path = resolve_solution_path(opts)
-    for entry in list_runtime_secret_keys(solution_path, data_source_name):
+    opts = make_global_options(solution=solution_path, json_output=json_output, quiet=quiet)
+    active_solution_path = resolve_solution_path(opts)
+    for entry in list_runtime_secret_keys(active_solution_path, data_source_name):
         key = entry.get("key")
         if isinstance(key, str) and key.strip():
             try:
                 delete_runtime_secret(
-                    solution_path=solution_path,
+                    solution_path=active_solution_path,
                     data_source_name=data_source_name,
                     key=key,
                 )

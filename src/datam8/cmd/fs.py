@@ -20,9 +20,10 @@ from __future__ import annotations
 
 import typer
 
+from datam8 import opts as cli_opts
 from datam8.core.workspace_io import list_directory
 
-from .common import emit_result, get_global_options
+from .common import emit_result, make_global_options
 
 app = typer.Typer(
     name="fs",
@@ -34,11 +35,12 @@ app = typer.Typer(
 
 @app.command("list")
 def fs_list(
-    ctx: typer.Context,
     path: str | None = typer.Option(None, "--path", help="Directory path (defaults to current working directory)."),
+    json_output: cli_opts.JsonOutput = False,
+    quiet: cli_opts.Quiet = False,
 ) -> None:
     """List directory entries for a path."""
-    opts = get_global_options(ctx)
+    opts = make_global_options(json_output=json_output, quiet=quiet)
     entries = list_directory(path)
     payload = {"entries": entries}
     human_lines = [f"{e['type']} {e['name']}" for e in entries]

@@ -98,11 +98,11 @@ def test_solution_base_model_commands_use_root_cli_options(tmp_path: Path) -> No
     result = runner.invoke(
         app,
         [
+            "solution",
+            "info",
             "--json",
             "--solution",
             str(solution_file),
-            "solution",
-            "info",
         ],
     )
     assert result.exit_code == 0
@@ -111,7 +111,7 @@ def test_solution_base_model_commands_use_root_cli_options(tmp_path: Path) -> No
 
     result = runner.invoke(
         app,
-        ["--json", "--solution", str(solution_file), "base", "list"],
+        ["base", "list", "--json", "--solution", str(solution_file)],
     )
     assert result.exit_code == 0
     payload = json.loads(result.stdout)
@@ -119,7 +119,7 @@ def test_solution_base_model_commands_use_root_cli_options(tmp_path: Path) -> No
 
     result = runner.invoke(
         app,
-        ["--json", "--solution", str(solution_file), "model", "list"],
+        ["model", "list", "--json", "--solution", str(solution_file)],
     )
     assert result.exit_code == 0
     payload = json.loads(result.stdout)

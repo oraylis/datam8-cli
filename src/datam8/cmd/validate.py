@@ -16,7 +16,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-import os
 import sys
 from pathlib import Path
 
@@ -34,7 +33,6 @@ sys.tracebacklimit = 0
 
 @app.command("validate")
 def command(
-    ctx: typer.Context,
     solution_path: Path | None = typer.Option(
         None,
         "--solution",
@@ -52,22 +50,12 @@ def command(
     ),
 ):
     """Validate solution model."""
-    parent_obj = getattr(ctx, "obj", None)
     if solution_path is None:
-        candidate = getattr(parent_obj, "solution", None) if parent_obj is not None else None
-        if not isinstance(candidate, str) or not candidate.strip():
-            candidate = os.environ.get("DATAM8_SOLUTION_PATH")
-        if not isinstance(candidate, str) or not candidate.strip():
-            raise typer.BadParameter("No solution specified. Use --solution/-s (or set DATAM8_SOLUTION_PATH).")
-        solution_path = Path(candidate)
+        raise typer.BadParameter("No solution specified. Use --solution/-s (or set DATAM8_SOLUTION_PATH).")
 
     effective_log_level = log_level
     if not isinstance(effective_log_level, str) or not effective_log_level.strip():
-        parent_level = getattr(parent_obj, "log_level", None) if parent_obj is not None else None
-        if isinstance(parent_level, str) and parent_level.strip():
-            effective_log_level = parent_level.strip()
-        else:
-            effective_log_level = opts.LogLevels.WARNING.value
+        effective_log_level = opts.LogLevels.WARNING.value
 
     resolved = resolve_solution(str(solution_path))
     try:

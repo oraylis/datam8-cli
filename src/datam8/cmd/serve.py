@@ -50,7 +50,6 @@ def _bind(host: str, port: int) -> tuple[socket.socket, int]:
 
 @app.command("serve")
 def command(
-    ctx: typer.Context,
     host: str = typer.Option("127.0.0.1", "--host"),
     port: int = typer.Option(0, "--port", min=0, max=65535),
     token: str = typer.Option(..., "--token"),
@@ -73,11 +72,6 @@ def command(
     """Starts the DataM8 HTTP backend (desktop-safe)."""
     if not token or not token.strip():
         raise typer.BadParameter("--token is required.")
-    parent_obj = getattr(ctx, "obj", None)
-    if solution_path is None:
-        candidate = getattr(parent_obj, "solution", None) if parent_obj is not None else None
-        if isinstance(candidate, str) and candidate.strip():
-            solution_path = Path(candidate)
 
     if solution_path is not None:
         os.environ["DATAM8_SOLUTION_PATH"] = str(resolve_solution(str(solution_path)).solution_file)
@@ -97,11 +91,7 @@ def command(
 
     effective_log_level = log_level
     if not isinstance(effective_log_level, str) or not effective_log_level.strip():
-        parent_level = getattr(parent_obj, "log_level", None) if parent_obj is not None else None
-        if isinstance(parent_level, str) and parent_level.strip():
-            effective_log_level = parent_level.strip()
-        else:
-            effective_log_level = "info"
+        effective_log_level = "info"
 
     config = uvicorn.Config(
         api,

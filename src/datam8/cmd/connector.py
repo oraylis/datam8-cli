@@ -24,6 +24,7 @@ from typing import Any
 
 import typer
 
+from datam8 import opts as cli_opts
 from datam8.core.connectors.plugin_host import (
     discover_connectors,
     get_connector,
@@ -35,7 +36,7 @@ from datam8.core.connectors.resolve import resolve_and_validate
 from datam8.core.errors import Datam8ValidationError
 from datam8.core.secrets import get_runtime_secrets_map
 
-from .common import emit_result, get_global_options, read_json_arg, resolve_solution_path
+from .common import emit_result, make_global_options, read_json_arg, resolve_solution_path
 
 app = typer.Typer(
     name="connector",
@@ -62,9 +63,12 @@ def _parse_secret_overrides(secret: list[str] | None) -> dict[str, str]:
 
 
 @app.command("list")
-def list_connectors(ctx: typer.Context) -> None:
+def list_connectors(
+    json_output: cli_opts.JsonOutput = False,
+    quiet: cli_opts.Quiet = False,
+) -> None:
     """List available connector plugins."""
-    opts = get_global_options(ctx)
+    opts = make_global_options(json_output=json_output, quiet=quiet)
     connectors, errors = discover_connectors(plugin_dir=_plugin_dir())
     payload = {
         "count": len(connectors),
@@ -76,11 +80,12 @@ def list_connectors(ctx: typer.Context) -> None:
 
 @app.command("ui-schema")
 def ui_schema(
-    ctx: typer.Context,
     connector_id: str = typer.Argument(..., help="Connector id."),
+    json_output: cli_opts.JsonOutput = False,
+    quiet: cli_opts.Quiet = False,
 ) -> None:
     """Return the UI schema for a connector."""
-    opts = get_global_options(ctx)
+    opts = make_global_options(json_output=json_output, quiet=quiet)
     plugin = get_connector(plugin_dir=_plugin_dir(), connector_id=connector_id)
     schema = load_ui_schema(plugin=plugin)
     payload = {"connectorId": plugin.id, "version": plugin.version, "schema": schema}
@@ -89,20 +94,21 @@ def ui_schema(
 
 @app.command("validate-connection")
 def validate_connection_cmd(
-    ctx: typer.Context,
     connector_id: str = typer.Argument(..., help="Connector id."),
-    solution_path: str | None = typer.Option(None, "--solution"),
+    solution_path: cli_opts.SolutionPathOptional = None,
     extended_properties: str = typer.Option("{}", "--extended-properties", help="JSON object."),
     runtime_secrets: str = typer.Option("{}", "--runtime-secrets", help="JSON object."),
+    json_output: cli_opts.JsonOutput = False,
+    quiet: cli_opts.Quiet = False,
 ) -> None:
     """Validate connector settings for a data source configuration."""
-    opts = get_global_options(ctx)
+    opts = make_global_options(solution=solution_path, json_output=json_output, quiet=quiet)
     plugin = get_connector(plugin_dir=_plugin_dir(), connector_id=connector_id)
     ext_props = read_json_arg(extended_properties)
     rt_secrets = read_json_arg(runtime_secrets)
     result = validate_connection(
         plugin=plugin,
-        solution_path=resolve_solution_path(opts, solution_path),
+        solution_path=resolve_solution_path(opts),
         extended_properties=ext_props if isinstance(ext_props, dict) else {},
         runtime_secret_overrides=rt_secrets if isinstance(rt_secrets, dict) else None,
     )
@@ -111,22 +117,24 @@ def validate_connection_cmd(
 
 @app.command("test")
 def test_data_source(
-    ctx: typer.Context,
     data_source_name: str = typer.Argument(..., help="DataSource name from Base/DataSources.json."),
     secret: list[str] = typer.Option(None, "--secret", help="Override runtime secret as key=value."),
+    solution_path: cli_opts.SolutionPathOptional = None,
+    json_output: cli_opts.JsonOutput = False,
+    quiet: cli_opts.Quiet = False,
 ) -> None:
     """Resolve and test a data source connection."""
-    opts = get_global_options(ctx)
-    solution_path = resolve_solution_path(opts)
+    opts = make_global_options(solution=solution_path, json_output=json_output, quiet=quiet)
+    active_solution_path = resolve_solution_path(opts)
     overrides = _parse_secret_overrides(secret)
     stored = get_runtime_secrets_map(
-        solution_path=solution_path,
+        solution_path=active_solution_path,
         data_source_name=data_source_name,
         include_values=True,
     )
     merged = {**stored, **overrides}
     connector_cls, manifest, cfg, resolver = resolve_and_validate(
-        solution_path=solution_path,
+        solution_path=active_solution_path,
         data_source_id=data_source_name,
         runtime_secrets=merged,
     )
@@ -137,22 +145,24 @@ def test_data_source(
 
 @app.command("browse")
 def browse_data_source(
-    ctx: typer.Context,
     data_source_name: str = typer.Argument(..., help="DataSource name from Base/DataSources.json."),
     secret: list[str] = typer.Option(None, "--secret", help="Override runtime secret as key=value."),
+    solution_path: cli_opts.SolutionPathOptional = None,
+    json_output: cli_opts.JsonOutput = False,
+    quiet: cli_opts.Quiet = False,
 ) -> None:
     """List available tables/sources for a data source."""
-    opts = get_global_options(ctx)
-    solution_path = resolve_solution_path(opts)
+    opts = make_global_options(solution=solution_path, json_output=json_output, quiet=quiet)
+    active_solution_path = resolve_solution_path(opts)
     overrides = _parse_secret_overrides(secret)
     stored = get_runtime_secrets_map(
-        solution_path=solution_path,
+        solution_path=active_solution_path,
         data_source_name=data_source_name,
         include_values=True,
     )
     merged = {**stored, **overrides}
     connector_cls, manifest, cfg, resolver = resolve_and_validate(
-        solution_path=solution_path,
+        solution_path=active_solution_path,
         data_source_id=data_source_name,
         runtime_secrets=merged,
     )
@@ -171,24 +181,26 @@ def browse_data_source(
 
 @app.command("fetch-metadata")
 def fetch_metadata(
-    ctx: typer.Context,
     data_source_name: str = typer.Argument(..., help="DataSource name from Base/DataSources.json."),
     schema: str = typer.Option("dbo", "--schema"),
     table: str = typer.Option(..., "--table"),
     secret: list[str] = typer.Option(None, "--secret", help="Override runtime secret as key=value."),
+    solution_path: cli_opts.SolutionPathOptional = None,
+    json_output: cli_opts.JsonOutput = False,
+    quiet: cli_opts.Quiet = False,
 ) -> None:
     """Fetch table metadata using a data source connector."""
-    opts = get_global_options(ctx)
-    solution_path = resolve_solution_path(opts)
+    opts = make_global_options(solution=solution_path, json_output=json_output, quiet=quiet)
+    active_solution_path = resolve_solution_path(opts)
     overrides = _parse_secret_overrides(secret)
     stored = get_runtime_secrets_map(
-        solution_path=solution_path,
+        solution_path=active_solution_path,
         data_source_name=data_source_name,
         include_values=True,
     )
     merged = {**stored, **overrides}
     connector_cls, manifest, cfg, resolver = resolve_and_validate(
-        solution_path=solution_path,
+        solution_path=active_solution_path,
         data_source_id=data_source_name,
         runtime_secrets=merged,
     )
