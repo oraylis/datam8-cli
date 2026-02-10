@@ -33,14 +33,18 @@ from datam8.core.lock import SolutionLock
 
 from .common import lock_timeout_seconds
 from .response_models import (
+    BaseEntitiesResponse,
+    BaseEntityResponse,
     ContentResponse,
-    CountEntitiesResponse,
+    DirectoryEntryResponse,
     EntriesResponse,
     FunctionSourceRenameResponse,
     IndexRegenerateResponse,
     IndexShowResponse,
     IndexValidateResponse,
     MessageWithPathResponse,
+    ModelEntitiesResponse,
+    ModelEntityResponse,
     MoveEntityResponse,
     RefactorPropertiesResponse,
     RefactorResultResponse,
@@ -116,6 +120,14 @@ class GenerateBody(BaseModel):
     lazy: bool | None = None
 
 
+class IndexRegenerateBody(BaseModel):
+    """Request body for index regeneration."""
+
+    solutionPath: str | None = None
+    lockTimeout: str | None = None
+    noLock: bool | None = None
+
+
 class FunctionSourceSaveBody(BaseModel):
     """Request body for writing function sources."""
 
@@ -164,10 +176,13 @@ class RefactorEntityIdBody(BaseModel):
 
 
 @router.get("/model/entities")
-async def model_entities(path: str | None = Query(None)) -> CountEntitiesResponse:
+async def model_entities(path: str | None = Query(None)) -> ModelEntitiesResponse:
     """List model entities for the active solution."""
-    entities = [entity.__dict__ for entity in workspace_io.list_model_entities(path)]
-    return CountEntitiesResponse(count=len(entities), entities=entities)
+    entities = [
+        ModelEntityResponse.model_validate(entity.model_dump())
+        for entity in workspace_io.list_model_entities(path)
+    ]
+    return ModelEntitiesResponse(count=len(entities), entities=entities)
 
 
 @router.post("/model/entities")
@@ -234,7 +249,10 @@ async def model_folder_rename(body: RenameFolderBody) -> RenameFolderResponse:
             body.solutionPath,
         )
         _, model_entities = workspace_io.regenerate_index_with_entities(body.solutionPath)
-        entities = [entity.__dict__ for entity in model_entities]
+        entities = [
+            ModelEntityResponse.model_validate(entity.model_dump())
+            for entity in model_entities
+        ]
     else:
         with SolutionLock(
             resolved.root_dir / ".datam8.lock",
@@ -246,7 +264,10 @@ async def model_folder_rename(body: RenameFolderBody) -> RenameFolderResponse:
                 body.solutionPath,
             )
             _, model_entities = workspace_io.regenerate_index_with_entities(body.solutionPath)
-            entities = [entity.__dict__ for entity in model_entities]
+            entities = [
+                ModelEntityResponse.model_validate(entity.model_dump())
+                for entity in model_entities
+            ]
     return RenameFolderResponse(message="renamed", entities=entities, **result)
 
 
@@ -278,16 +299,16 @@ async def refactor_properties_route(body: RefactorPropertiesBody) -> RefactorPro
 
 
 @router.post("/index/regenerate")
-async def index_regenerate(body: dict[str, Any]) -> IndexRegenerateResponse:
+async def index_regenerate(body: IndexRegenerateBody) -> IndexRegenerateResponse:
     """Regenerate and return solution index."""
-    solution_path = body.get("solutionPath")
+    solution_path = body.solutionPath
     resolved, _sol = workspace_io.read_solution(solution_path)
-    if body.get("noLock"):
+    if body.noLock:
         index = workspace_io.regenerate_index(solution_path)
     else:
         with SolutionLock(
             resolved.root_dir / ".datam8.lock",
-            timeout_seconds=lock_timeout_seconds(body),
+            timeout_seconds=lock_timeout_seconds(body.model_dump()),
         ):
             index = workspace_io.regenerate_index(solution_path)
     return IndexRegenerateResponse(message="index regenerated", index=index)
@@ -321,10 +342,13 @@ async def generator_run(body: GenerateBody) -> GenerateResult:
 
 
 @router.get("/base/entities")
-async def base_entities(path: str | None = Query(None)) -> CountEntitiesResponse:
+async def base_entities(path: str | None = Query(None)) -> BaseEntitiesResponse:
     """List base entities for the active solution."""
-    entities = [entity.__dict__ for entity in workspace_io.list_base_entities(path)]
-    return CountEntitiesResponse(count=len(entities), entities=entities)
+    entities = [
+        BaseEntityResponse.model_validate(entity.model_dump())
+        for entity in workspace_io.list_base_entities(path)
+    ]
+    return BaseEntitiesResponse(count=len(entities), entities=entities)
 
 
 @router.post("/base/entities")
@@ -360,7 +384,8 @@ async def base_entities_delete(body: DeleteEntityBody) -> MessageWithPathRespons
 @router.get("/fs/list")
 async def fs_list(path: str | None = Query(None)) -> EntriesResponse:
     """List directory entries inside the active workspace."""
-    return EntriesResponse(entries=workspace_io.list_directory(path))
+    entries = [DirectoryEntryResponse.model_validate(entry) for entry in workspace_io.list_directory(path)]
+    return EntriesResponse(entries=entries)
 
 
 @router.get("/model/function/source")

@@ -25,6 +25,22 @@ from datam8.core.errors import Datam8ValidationError
 
 
 def parse_json_pointer(pointer: str) -> list[str]:
+    """Parse json pointer.
+
+    Parameters
+    ----------
+    pointer : str
+        pointer parameter value.
+
+    Returns
+    -------
+    list[str]
+        Computed return value.
+
+    Raises
+    ------
+    Datam8ValidationError
+        Raised when validation or runtime execution fails."""
     if not isinstance(pointer, str) or not pointer.startswith("/"):
         raise Datam8ValidationError(
             message="Invalid JSON pointer. Expected e.g. /a/b/0",
@@ -35,6 +51,28 @@ def parse_json_pointer(pointer: str) -> list[str]:
 
 
 def set_by_pointer(doc: Any, pointer: str, value: Any, *, create_missing: bool = True) -> Any:
+    """Set by pointer.
+
+    Parameters
+    ----------
+    doc : Any
+        doc parameter value.
+    pointer : str
+        pointer parameter value.
+    value : Any
+        value parameter value.
+    create_missing : bool
+        create_missing parameter value.
+
+    Returns
+    -------
+    Any
+        Computed return value.
+
+    Raises
+    ------
+    Datam8ValidationError
+        Raised when validation or runtime execution fails."""
     parts = parse_json_pointer(pointer)
     if not parts:
         return value
@@ -80,6 +118,19 @@ def set_by_pointer(doc: Any, pointer: str, value: Any, *, create_missing: bool =
 
 def merge_patch(target: Any, patch: Any) -> Any:
     # RFC 7396 (subset): objects are merged; non-objects replace; null deletes.
+    """Merge patch.
+
+    Parameters
+    ----------
+    target : Any
+        target parameter value.
+    patch : Any
+        patch parameter value.
+
+    Returns
+    -------
+    Any
+        Computed return value."""
     if not isinstance(patch, dict):
         return copy.deepcopy(patch)
     if not isinstance(target, dict):

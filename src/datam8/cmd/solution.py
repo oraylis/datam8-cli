@@ -62,8 +62,8 @@ def solution_info(
     resolved, sol = read_solution(resolve_solution_path(opts))
     payload = {
         "solutionPath": str(resolved.solution_file),
-        "solution": sol.model_dump(),
-        "resolvedPaths": {"base": sol.basePath, "model": sol.modelPath},
+        "solution": sol.model_dump(mode="json"),
+        "resolvedPaths": {"base": str(sol.basePath), "model": str(sol.modelPath)},
     }
     emit_result(
         opts,
@@ -87,11 +87,11 @@ def solution_full(
     opts = make_global_options(solution=solution_path, json_output=json_output, quiet=quiet)
     active_solution_path = resolve_solution_path(opts)
     resolved, sol = read_solution(active_solution_path)
-    base_entities = [e.__dict__ for e in list_base_entities(active_solution_path)]
-    model_entities = [e.__dict__ for e in list_model_entities(active_solution_path)]
+    base_entities = [e.model_dump() for e in list_base_entities(active_solution_path)]
+    model_entities = [e.model_dump() for e in list_model_entities(active_solution_path)]
     payload = {
         "solutionPath": str(resolved.solution_file),
-        "solution": sol.model_dump(),
+        "solution": sol.model_dump(mode="json"),
         "baseEntities": base_entities,
         "modelEntities": model_entities,
     }

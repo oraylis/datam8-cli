@@ -48,6 +48,26 @@ def _plugin_dir() -> Path:
 
 
 def load_data_source_context(solution_path: str | None, data_source_id: str) -> dict[str, Any]:
+    """Load data source context.
+
+    Parameters
+    ----------
+    solution_path : str | None
+        solution_path parameter value.
+    data_source_id : str
+        data_source_id parameter value.
+
+    Returns
+    -------
+    dict[str, Any]
+        Computed return value.
+
+    Raises
+    ------
+    Datam8NotFoundError
+        Raised when validation or runtime execution fails.
+    Datam8ValidationError
+        Raised when validation or runtime execution fails."""
     base_entities = list_base_entities(solution_path)
 
     data_sources_file = next((e for e in base_entities if e.name == "DataSources"), None)
@@ -82,6 +102,26 @@ def resolve_and_validate(
     data_source_id: str,
     runtime_secrets: dict[str, str] | None,
 ) -> tuple[Any, dict[str, Any], dict[str, str], SecretResolver]:
+    """Resolve and validate.
+
+    Parameters
+    ----------
+    solution_path : str | None
+        solution_path parameter value.
+    data_source_id : str
+        data_source_id parameter value.
+    runtime_secrets : dict[str, str] | None
+        runtime_secrets parameter value.
+
+    Returns
+    -------
+    tuple[Any, dict[str, Any], dict[str, str], SecretResolver]
+        Computed return value.
+
+    Raises
+    ------
+    Datam8ValidationError
+        Raised when validation or runtime execution fails."""
     ctx = load_data_source_context(solution_path, data_source_id)
     data_source = ctx["dataSource"]
     data_source_type = ctx["dataSourceType"]

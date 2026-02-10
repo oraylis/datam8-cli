@@ -76,6 +76,19 @@ def _parse_comparators(req: str) -> list[tuple[str, SemVer]]:
 
 
 def semver_satisfies(*, version: str, requirement: str | None) -> bool:
+    """Semver satisfies.
+
+    Parameters
+    ----------
+    version : str
+        version parameter value.
+    requirement : str | None
+        requirement parameter value.
+
+    Returns
+    -------
+    bool
+        Computed return value."""
     req = (requirement or "").strip()
     if not req:
         return True

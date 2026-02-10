@@ -44,6 +44,26 @@ def resolve_model_entity(
     solution_path: str | None,
     by: str = "auto",
 ) -> ResolvedEntity:
+    """Resolve a model entity from different selector forms.
+
+    Parameters
+    ----------
+    selector : str
+        Entity selector value (relPath, locator, id, or name).
+    solution_path : str | None
+        Optional explicit solution path.
+    by : str
+        Selector mode (`auto`, `relPath`, `locator`, `id`, `name`).
+
+    Returns
+    -------
+    ResolvedEntity
+        Resolved entity metadata with absolute and relative paths.
+
+    Raises
+    ------
+    Datam8ValidationError
+        If selector input is invalid or ambiguous."""
     sel = (selector or "").strip()
     if not sel:
         raise Datam8ValidationError(message="Empty entity selector.", details=None)

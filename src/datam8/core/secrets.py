@@ -55,6 +55,17 @@ class SecretRef:
 
 
 def solution_scope(solution_path: str | None) -> str:
+    """Solution scope.
+
+    Parameters
+    ----------
+    solution_path : str | None
+        solution_path parameter value.
+
+    Returns
+    -------
+    str
+        Computed return value."""
     resolved = resolve_solution(solution_path or os.environ.get("DATAM8_SOLUTION_PATH"))
     p = str(resolved.solution_file).replace("\\", "/").lower().strip()
     h = hashlib.sha256(p.encode("utf-8")).hexdigest()
@@ -85,6 +96,12 @@ def _save_registry(data: dict[str, Any]) -> None:
 
 
 def is_keyring_available() -> bool:
+    """Is keyring available.
+
+    Returns
+    -------
+    bool
+        Computed return value."""
     if keyring is None:
         return False
     try:
@@ -134,6 +151,19 @@ def _secret_name(scope: str, data_source: str, key: str) -> str:
 
 
 def list_runtime_secret_keys(solution_path: str | None, data_source_name: str) -> list[dict[str, Any]]:
+    """List runtime secret keys.
+
+    Parameters
+    ----------
+    solution_path : str | None
+        solution_path parameter value.
+    data_source_name : str
+        data_source_name parameter value.
+
+    Returns
+    -------
+    list[dict[str, Any]]
+        Computed return value."""
     scope = solution_scope(solution_path)
     reg = _load_registry()
     out = []
@@ -158,6 +188,28 @@ def set_runtime_secret(
     key: str,
     value: str,
 ) -> SecretRef:
+    """Set runtime secret.
+
+    Parameters
+    ----------
+    solution_path : str | None
+        solution_path parameter value.
+    data_source_name : str
+        data_source_name parameter value.
+    key : str
+        key parameter value.
+    value : str
+        value parameter value.
+
+    Returns
+    -------
+    SecretRef
+        Computed return value.
+
+    Raises
+    ------
+    Datam8ExternalSystemError
+        Raised when validation or runtime execution fails."""
     if not is_keyring_available():
         raise Datam8ExternalSystemError(
             code="secrets_unavailable",
@@ -185,6 +237,26 @@ def set_runtime_secret(
 
 
 def delete_runtime_secret(*, solution_path: str | None, data_source_name: str, key: str) -> None:
+    """Delete runtime secret.
+
+    Parameters
+    ----------
+    solution_path : str | None
+        solution_path parameter value.
+    data_source_name : str
+        data_source_name parameter value.
+    key : str
+        key parameter value.
+
+    Returns
+    -------
+    None
+        Computed return value.
+
+    Raises
+    ------
+    Datam8ExternalSystemError
+        Raised when validation or runtime execution fails."""
     if not is_keyring_available():
         raise Datam8ExternalSystemError(
             code="secrets_unavailable",
@@ -207,6 +279,23 @@ def get_runtime_secret(
     key: str,
     reveal: bool = False,
 ) -> dict[str, Any]:
+    """Get runtime secret.
+
+    Parameters
+    ----------
+    solution_path : str | None
+        solution_path parameter value.
+    data_source_name : str
+        data_source_name parameter value.
+    key : str
+        key parameter value.
+    reveal : bool
+        reveal parameter value.
+
+    Returns
+    -------
+    dict[str, Any]
+        Computed return value."""
     scope = solution_scope(solution_path)
     name = _secret_name(scope, data_source_name, key)
     reg_entries = list_runtime_secret_keys(solution_path, data_source_name)
@@ -241,6 +330,23 @@ def get_runtime_secrets_map(
     include_values: bool = True,
     override: dict[str, str] | None = None,
 ) -> dict[str, str]:
+    """Get runtime secrets map.
+
+    Parameters
+    ----------
+    solution_path : str | None
+        solution_path parameter value.
+    data_source_name : str
+        data_source_name parameter value.
+    include_values : bool
+        include_values parameter value.
+    override : dict[str, str] | None
+        override parameter value.
+
+    Returns
+    -------
+    dict[str, str]
+        Computed return value."""
     override = override or {}
     items = list_runtime_secret_keys(solution_path, data_source_name)
     result: dict[str, str] = {}
@@ -263,10 +369,39 @@ def get_runtime_secrets_map(
 
 
 def is_secret_ref(value: str) -> bool:
+    """Is secret ref.
+
+    Parameters
+    ----------
+    value : str
+        value parameter value.
+
+    Returns
+    -------
+    bool
+        Computed return value."""
     return isinstance(value, str) and value.strip().lower().startswith("secretref://")
 
 
 def runtime_secret_ref(*, data_source_name: str, key: str) -> str:
+    """Runtime secret ref.
+
+    Parameters
+    ----------
+    data_source_name : str
+        data_source_name parameter value.
+    key : str
+        key parameter value.
+
+    Returns
+    -------
+    str
+        Computed return value.
+
+    Raises
+    ------
+    Datam8ValidationError
+        Raised when validation or runtime execution fails."""
     ds = (data_source_name or "").strip()
     k = (key or "").strip()
     if not ds or not k:

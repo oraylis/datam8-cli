@@ -27,6 +27,17 @@ from datam8.core.workspace_io import read_solution
 
 
 def iter_solution_json_files(solution_path: str | None) -> Iterator[Path]:
+    """Iterate all JSON files that belong to the active solution.
+
+    Parameters
+    ----------
+    solution_path : str | None
+        Optional explicit solution path.
+
+    Returns
+    -------
+    Iterator[Path]
+        Absolute paths for Base/Model JSON files and optional `index.json`."""
     resolved, sol = read_solution(solution_path)
     root = resolved.root_dir
 
@@ -50,6 +61,22 @@ def iter_solution_json_files(solution_path: str | None) -> Iterator[Path]:
 
 
 def detect_solution_version(path: str) -> str:
+    """Detect whether a solution file/folder is v1 or v2.
+
+    Parameters
+    ----------
+    path : str
+        Path to a `.dm8s` file or a folder containing exactly one `.dm8s`.
+
+    Returns
+    -------
+    str
+        `"v2"` when `schemaVersion` is present, otherwise `"v1"`.
+
+    Raises
+    ------
+    Datam8ValidationError
+        If the path cannot be resolved to a valid solution JSON file."""
     p = Path(path)
     if p.is_dir():
         dm8s = sorted(p.glob("*.dm8s"))

@@ -22,6 +22,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from datam8_model.solution import Solution
+
 
 class ConfigResponse(BaseModel):
     """Current backend runtime mode."""
@@ -35,19 +37,53 @@ class VersionResponse(BaseModel):
     version: str
 
 
+class ResolvedPathsResponse(BaseModel):
+    """Resolved base/model root paths."""
+
+    base: str
+    model: str
+
+
+class ModelEntityResponse(BaseModel):
+    """Typed model entity representation."""
+
+    locator: str
+    name: str
+    absPath: str
+    relPath: str
+    content: Any
+
+
+class BaseEntityResponse(BaseModel):
+    """Typed base entity representation."""
+
+    name: str
+    absPath: str
+    relPath: str
+    content: Any
+
+
+class DirectoryEntryResponse(BaseModel):
+    """Directory entry returned by fs list operations."""
+
+    name: str
+    path: str
+    type: str
+
+
 class SolutionResponse(BaseModel):
     """Solution and resolved path metadata."""
 
-    solution: dict[str, Any]
-    resolvedPaths: dict[str, str]
+    solution: Solution
+    resolvedPaths: ResolvedPathsResponse
 
 
 class SolutionFullResponse(BaseModel):
     """Solution and full entity contents."""
 
-    solution: dict[str, Any]
-    baseEntities: list[dict[str, Any]]
-    modelEntities: list[dict[str, Any]]
+    solution: Solution
+    baseEntities: list[BaseEntityResponse]
+    modelEntities: list[ModelEntityResponse]
 
 
 class SolutionPathResponse(BaseModel):
@@ -56,11 +92,18 @@ class SolutionPathResponse(BaseModel):
     solutionPath: str
 
 
-class CountEntitiesResponse(BaseModel):
-    """Counted list response for entities."""
+class ModelEntitiesResponse(BaseModel):
+    """Counted model entities response."""
 
     count: int
-    entities: list[dict[str, Any]]
+    entities: list[ModelEntityResponse]
+
+
+class BaseEntitiesResponse(BaseModel):
+    """Counted base entities response."""
+
+    count: int
+    entities: list[BaseEntityResponse]
 
 
 class MessageWithPathResponse(BaseModel):
@@ -73,7 +116,7 @@ class MessageWithPathResponse(BaseModel):
 class EntriesResponse(BaseModel):
     """Filesystem listing response."""
 
-    entries: list[dict[str, Any]]
+    entries: list[DirectoryEntryResponse]
 
 
 class ContentResponse(BaseModel):
@@ -165,7 +208,7 @@ class RenameFolderResponse(BaseModel):
     message: str
     from_: str = Field(alias="from")
     to: str
-    entities: list[dict[str, Any]]
+    entities: list[ModelEntityResponse]
 
 
 class RefactorPropertiesResponse(BaseModel):
@@ -207,7 +250,7 @@ class SearchEntitiesResponse(BaseModel):
     """Response payload for entity search."""
 
     count: int
-    entities: list[dict[str, Any]]
+    entities: list[ModelEntityResponse]
 
 
 class TextMatchResponse(BaseModel):

@@ -34,6 +34,17 @@ class ConnectorBinding:
 
 
 def is_reserved_connection_property(name: str) -> bool:
+    """Is reserved connection property.
+
+    Parameters
+    ----------
+    name : str
+        name parameter value.
+
+    Returns
+    -------
+    bool
+        Computed return value."""
     n = (name or "").strip()
     return n.startswith(CONNECTOR_ID_PREFIX) or n.startswith(CONNECTOR_VERSION_PREFIX)
 
@@ -87,6 +98,26 @@ def encode_connector_binding(
     connector_id: str,
     connector_version: str | None = None,
 ) -> list[dict[str, Any]]:
+    """Encode connector binding.
+
+    Parameters
+    ----------
+    connection_properties : Any
+        connection_properties parameter value.
+    connector_id : str
+        connector_id parameter value.
+    connector_version : str | None
+        connector_version parameter value.
+
+    Returns
+    -------
+    list[dict[str, Any]]
+        Computed return value.
+
+    Raises
+    ------
+    Datam8ValidationError
+        Raised when validation or runtime execution fails."""
     cid = (connector_id or "").strip()
     if not cid:
         raise Datam8ValidationError(message="connector_id is required.", details=None)

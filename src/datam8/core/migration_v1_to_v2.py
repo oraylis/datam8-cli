@@ -218,6 +218,24 @@ def _dedupe_property_refs(refs: list[dict[str, str]]) -> list[dict[str, str]]:
 
 
 def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
+    """Migrate solution v1 to v2.
+
+    Parameters
+    ----------
+    args : dict[str, Any]
+        args parameter value.
+
+    Returns
+    -------
+    dict[str, Any]
+        Computed return value.
+
+    Raises
+    ------
+    Datam8ValidationError
+        Raised when validation or runtime execution fails.
+    FileNotFoundError
+        Raised when validation or runtime execution fails."""
     started_at = _to_iso_now()
     warnings: list[str] = []
     errors: list[str] = []

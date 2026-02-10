@@ -18,7 +18,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Any
 
 from datam8.core.connectors.types import ConnectorModule
@@ -68,7 +68,7 @@ class ConnectorRegistry:
     def list(self) -> list[dict[str, Any]]:
         out = []
         for module, source in self._connectors_by_id.values():
-            out.append({"manifest": module.manifest, "source": source.__dict__})
+            out.append({"manifest": module.manifest, "source": asdict(source)})
         return out
 
     def resolve_by_id(self, id: str) -> ConnectorModule | None:

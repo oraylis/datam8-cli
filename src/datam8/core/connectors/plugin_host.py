@@ -109,10 +109,32 @@ def _parse_plugin_json(*, plugin_root: Path) -> ConnectorPlugin:
 
 
 def is_connector_plugin_enabled(plugin_root: Path) -> bool:
+    """Is connector plugin enabled.
+
+    Parameters
+    ----------
+    plugin_root : Path
+        plugin_root parameter value.
+
+    Returns
+    -------
+    bool
+        Computed return value."""
     return not (plugin_root / DISABLED_MARKER).exists()
 
 
 def parse_connector_plugin(plugin_root: Path) -> ConnectorPlugin:
+    """Parse connector plugin.
+
+    Parameters
+    ----------
+    plugin_root : Path
+        plugin_root parameter value.
+
+    Returns
+    -------
+    ConnectorPlugin
+        Computed return value."""
     return _parse_plugin_json(plugin_root=plugin_root)
 
 
@@ -184,11 +206,33 @@ class _ConnectorClassProxy:
 
 
 def load_connector_class(plugin: ConnectorPlugin) -> Any:
+    """Load connector class.
+
+    Parameters
+    ----------
+    plugin : ConnectorPlugin
+        plugin parameter value.
+
+    Returns
+    -------
+    Any
+        Computed return value."""
     cls = _load_connector_class(plugin)
     return _ConnectorClassProxy(plugin=plugin, cls=cls)
 
 
 def discover_connectors(*, plugin_dir: Path) -> tuple[list[ConnectorPlugin], dict[str, str]]:
+    """Discover connectors.
+
+    Parameters
+    ----------
+    plugin_dir : Path
+        plugin_dir parameter value.
+
+    Returns
+    -------
+    tuple[list[ConnectorPlugin], dict[str, str]]
+        Computed return value."""
     root = _connectors_root(plugin_dir)
     if not root.exists():
         return ([], {})
@@ -271,11 +315,40 @@ def _validate_no_plaintext_secrets(*, schema: dict[str, Any], extended_propertie
 
 
 def get_connectors_state(*, plugin_dir: Path) -> dict[str, Any]:
+    """Get connectors state.
+
+    Parameters
+    ----------
+    plugin_dir : Path
+        plugin_dir parameter value.
+
+    Returns
+    -------
+    dict[str, Any]
+        Computed return value."""
     connectors, errors = discover_connectors(plugin_dir=plugin_dir)
     return {"pluginDir": str(plugin_dir), "connectors": [c.to_summary() for c in connectors], "errors": errors}
 
 
 def get_connector(*, plugin_dir: Path, connector_id: str) -> ConnectorPlugin:
+    """Get connector.
+
+    Parameters
+    ----------
+    plugin_dir : Path
+        plugin_dir parameter value.
+    connector_id : str
+        connector_id parameter value.
+
+    Returns
+    -------
+    ConnectorPlugin
+        Computed return value.
+
+    Raises
+    ------
+    Datam8NotFoundError
+        Raised when validation or runtime execution fails."""
     connectors, _errors = discover_connectors(plugin_dir=plugin_dir)
     needle = (connector_id or "").strip().lower()
     for c in connectors:
@@ -285,6 +358,22 @@ def get_connector(*, plugin_dir: Path, connector_id: str) -> ConnectorPlugin:
 
 
 def load_ui_schema(*, plugin: ConnectorPlugin) -> dict[str, Any]:
+    """Load ui schema.
+
+    Parameters
+    ----------
+    plugin : ConnectorPlugin
+        plugin parameter value.
+
+    Returns
+    -------
+    dict[str, Any]
+        Computed return value.
+
+    Raises
+    ------
+    Datam8ValidationError
+        Raised when validation or runtime execution fails."""
     cls = load_connector_class(plugin)
     schema = cls.get_ui_schema()  # type: ignore[attr-defined]
     if not isinstance(schema, dict):
@@ -299,6 +388,28 @@ def validate_connection(
     extended_properties: Any,
     runtime_secret_overrides: dict[str, str] | None = None,
 ) -> dict[str, Any]:
+    """Validate connection.
+
+    Parameters
+    ----------
+    plugin : ConnectorPlugin
+        plugin parameter value.
+    solution_path : str | None
+        solution_path parameter value.
+    extended_properties : Any
+        extended_properties parameter value.
+    runtime_secret_overrides : dict[str, str] | None
+        runtime_secret_overrides parameter value.
+
+    Returns
+    -------
+    dict[str, Any]
+        Computed return value.
+
+    Raises
+    ------
+    Datam8ExternalSystemError
+        Raised when validation or runtime execution fails."""
     cls = load_connector_class(plugin)
     props = _to_string_map(extended_properties)
     schema = load_ui_schema(plugin=plugin)

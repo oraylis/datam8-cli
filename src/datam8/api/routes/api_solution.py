@@ -30,8 +30,11 @@ from datam8.core import (
 from datam8.core import solution_files, workspace_io
 
 from .response_models import (
+    BaseEntityResponse,
     ConfigResponse,
     MigrationResponse,
+    ModelEntityResponse,
+    ResolvedPathsResponse,
     SolutionFullResponse,
     SolutionPathResponse,
     SolutionResponse,
@@ -90,8 +93,8 @@ async def solution(path: str | None = Query(None)) -> SolutionResponse:
     """Read and return the parsed solution with resolved paths."""
     _resolved, sol = workspace_io.read_solution(path)
     return SolutionResponse(
-        solution=sol.model_dump(),
-        resolvedPaths={"base": sol.basePath, "model": sol.modelPath},
+        solution=sol,
+        resolvedPaths=ResolvedPathsResponse(base=str(sol.basePath), model=str(sol.modelPath)),
     )
 
 
@@ -99,10 +102,16 @@ async def solution(path: str | None = Query(None)) -> SolutionResponse:
 async def solution_full(path: str | None = Query(None)) -> SolutionFullResponse:
     """Read and return the full solution with base/model entities."""
     _resolved, sol = workspace_io.read_solution(path)
-    base_entities = [entity.__dict__ for entity in workspace_io.list_base_entities(path)]
-    model_entities = [entity.__dict__ for entity in workspace_io.list_model_entities(path)]
+    base_entities = [
+        BaseEntityResponse.model_validate(entity.model_dump())
+        for entity in workspace_io.list_base_entities(path)
+    ]
+    model_entities = [
+        ModelEntityResponse.model_validate(entity.model_dump())
+        for entity in workspace_io.list_model_entities(path)
+    ]
     return SolutionFullResponse(
-        solution=sol.model_dump(),
+        solution=sol,
         baseEntities=base_entities,
         modelEntities=model_entities,
     )

@@ -333,7 +333,12 @@ async def datasources_usages(
     path: str | None = Query(None, alias="path"),
 ) -> UsagesResponse:
     """Return model usages for a datasource."""
-    usages = schema_refresh.find_data_source_usages(path, dataSourceId)
+    model_entities = [entity.model_dump() for entity in workspace_io.list_model_entities(path)]
+    usages = schema_refresh.find_data_source_usages(
+        path,
+        dataSourceId,
+        model_entities=model_entities,
+    )
     return UsagesResponse(usages=usages)
 
 
@@ -349,6 +354,7 @@ async def datasources_refresh_preview(
         include_values=True,
     )
     merged = {**stored, **(body.runtimeSecrets or {})}
+    model_entities = [entity.model_dump() for entity in workspace_io.list_model_entities(body.solutionPath)]
     usage_refs: list[schema_refresh.UsageRef] = []
     for usage in body.usages or []:
         if not isinstance(usage, dict):
@@ -366,6 +372,7 @@ async def datasources_refresh_preview(
         solution_path=body.solutionPath,
         usages=usage_refs,
         runtime_secrets=merged or None,
+        model_entities=model_entities,
     )
     return DiffsResponse(diffs=diffs)
 
@@ -382,12 +389,14 @@ async def datasources_refresh_apply(
         include_values=True,
     )
     merged = {**stored, **(body.runtimeSecrets or {})}
+    model_entities = [entity.model_dump() for entity in workspace_io.list_model_entities(body.solutionPath)]
     resolved, _sol = workspace_io.read_solution(body.solutionPath)
     if body.noLock:
         updated_entities = schema_refresh.apply_schema_changes(
             solution_path=body.solutionPath,
             diffs=body.diffs or [],
             runtime_secrets=merged or None,
+            model_entities=model_entities,
         )
     else:
         with SolutionLock(
@@ -398,6 +407,7 @@ async def datasources_refresh_apply(
                 solution_path=body.solutionPath,
                 diffs=body.diffs or [],
                 runtime_secrets=merged or None,
+                model_entities=model_entities,
             )
     return UpdatedEntitiesResponse(updatedEntities=updated_entities)
 

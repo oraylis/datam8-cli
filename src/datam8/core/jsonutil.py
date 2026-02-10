@@ -23,9 +23,31 @@ from typing import Any
 
 
 def dumps_stable(obj: Any) -> str:
+    """Dumps stable.
+
+    Parameters
+    ----------
+    obj : Any
+        obj parameter value.
+
+    Returns
+    -------
+    str
+        Computed return value."""
     return json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 def dumps_pretty(obj: Any) -> str:
+    """Dumps pretty.
+
+    Parameters
+    ----------
+    obj : Any
+        obj parameter value.
+
+    Returns
+    -------
+    str
+        Computed return value."""
     return json.dumps(obj, ensure_ascii=False, sort_keys=True, indent=2)
 

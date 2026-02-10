@@ -22,6 +22,12 @@ import importlib.metadata
 
 
 def get_version() -> str:
+    """Get version.
+
+    Returns
+    -------
+    str
+        Computed return value."""
     try:
         return importlib.metadata.version("datam8")
     except Exception:

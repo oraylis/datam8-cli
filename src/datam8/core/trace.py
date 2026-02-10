@@ -22,5 +22,11 @@ import uuid
 
 
 def new_trace_id() -> str:
+    """New trace id.
+
+    Returns
+    -------
+    str
+        Computed return value."""
     return str(uuid.uuid4())
 

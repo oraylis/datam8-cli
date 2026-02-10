@@ -30,7 +30,6 @@ from .cmd import (
     model,
     plugin,
     refactor,
-    reverse,
     script,
     search,
     secret,
@@ -64,7 +63,6 @@ app.add_typer(migration.app)
 app.add_typer(fs.app)
 app.add_typer(generate.app)
 app.add_typer(validate.app)
-app.add_typer(reverse.app)
 app.add_typer(serve.app)
 
 

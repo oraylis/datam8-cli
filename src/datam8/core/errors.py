@@ -18,12 +18,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
 
+from pydantic import BaseModel
 
-@dataclass(frozen=True)
-class ErrorEnvelope:
+
+class ErrorEnvelope(BaseModel):
+    """Stable JSON envelope for API error responses."""
+
     code: str
     message: str
     details: Any = None
@@ -83,6 +85,17 @@ class Datam8NotImplementedError(Datam8Error):
 
 
 def as_datam8_error(err: Exception) -> Datam8Error:
+    """As datam8 error.
+
+    Parameters
+    ----------
+    err : Exception
+        err parameter value.
+
+    Returns
+    -------
+    Datam8Error
+        Computed return value."""
     if isinstance(err, Datam8Error):
         return err
     return Datam8Error(code="unexpected", message=str(err) or "Unexpected error.", details=None, hint=None, exit_code=10)

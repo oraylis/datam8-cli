@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import os
+from dataclasses import asdict
 from pathlib import Path
 
 import typer
@@ -180,7 +181,7 @@ def verify_plugin(
     if file and file.strip():
         data = Path(file).read_bytes()
         bundle = verify_zip_bundle(zip_bytes=data)
-        emit_result(opts, {"verified": True, "bundle": bundle.__dict__}, human_lines=["ok"])
+        emit_result(opts, {"verified": True, "bundle": asdict(bundle)}, human_lines=["ok"])
         return
 
     if not plugin_id.strip():

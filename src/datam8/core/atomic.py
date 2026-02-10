@@ -26,6 +26,19 @@ from typing import Any
 
 
 def atomic_write_bytes(target: Path, data: bytes) -> None:
+    """Atomic write bytes.
+
+    Parameters
+    ----------
+    target : Path
+        target parameter value.
+    data : bytes
+        data parameter value.
+
+    Returns
+    -------
+    None
+        Computed return value."""
     target.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_name = tempfile.mkstemp(
         prefix=f".{target.name}.",
@@ -57,10 +70,40 @@ def atomic_write_bytes(target: Path, data: bytes) -> None:
 
 
 def atomic_write_text(target: Path, text: str, *, encoding: str = "utf-8") -> None:
+    """Atomic write text.
+
+    Parameters
+    ----------
+    target : Path
+        target parameter value.
+    text : str
+        text parameter value.
+    encoding : str
+        encoding parameter value.
+
+    Returns
+    -------
+    None
+        Computed return value."""
     atomic_write_bytes(target, text.encode(encoding))
 
 
 def atomic_write_json(target: Path, obj: Any, *, indent: int = 4) -> None:
+    """Atomic write json.
+
+    Parameters
+    ----------
+    target : Path
+        target parameter value.
+    obj : Any
+        obj parameter value.
+    indent : int
+        indent parameter value.
+
+    Returns
+    -------
+    None
+        Computed return value."""
     text = json.dumps(obj, ensure_ascii=False, indent=indent) + "\n"
     atomic_write_text(target, text, encoding="utf-8")
 

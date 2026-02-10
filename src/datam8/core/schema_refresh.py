@@ -57,6 +57,17 @@ def _opt_int_gte0(v: Any) -> int | None:
 
 
 def sanitize_data_type(input_value: Any) -> DataType:
+    """Sanitize data type.
+
+    Parameters
+    ----------
+    input_value : Any
+        input_value parameter value.
+
+    Returns
+    -------
+    DataType
+        Computed return value."""
     raw = input_value if isinstance(input_value, dict) else None
 
     if isinstance(raw, dict) and isinstance(raw.get("type"), str):
@@ -97,10 +108,34 @@ def sanitize_data_type(input_value: Any) -> DataType:
 
 
 def normalize_data_type(dt: Any) -> DataType:
+    """Normalize data type.
+
+    Parameters
+    ----------
+    dt : Any
+        dt parameter value.
+
+    Returns
+    -------
+    DataType
+        Computed return value."""
     return sanitize_data_type(dt)
 
 
 def is_same_data_type(a: Any, b: Any) -> bool:
+    """Is same data type.
+
+    Parameters
+    ----------
+    a : Any
+        a parameter value.
+    b : Any
+        b parameter value.
+
+    Returns
+    -------
+    bool
+        Computed return value."""
     left = sanitize_data_type(a)
     right = sanitize_data_type(b)
     return (
@@ -112,6 +147,19 @@ def is_same_data_type(a: Any, b: Any) -> bool:
 
 
 def safe_merge_data_type(current: Any, source: Any) -> DataType:
+    """Safe merge data type.
+
+    Parameters
+    ----------
+    current : Any
+        current parameter value.
+    source : Any
+        source parameter value.
+
+    Returns
+    -------
+    DataType
+        Computed return value."""
     current_s = sanitize_data_type(current)
     source_s = sanitize_data_type(source)
     merged: DataType = {**current_s, **source_s}
@@ -137,7 +185,7 @@ def _split_source_location(source_location: str) -> tuple[str, str]:
 
 
 def _list_model_entities(solution_path: str | None) -> list[dict[str, Any]]:
-    return [e.__dict__ for e in list_model_entities(solution_path)]
+    return [e.model_dump() for e in list_model_entities(solution_path)]
 
 
 def _resolved_model_entities(
@@ -156,6 +204,21 @@ def find_data_source_usages(
     *,
     model_entities: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
+    """Find data source usages.
+
+    Parameters
+    ----------
+    solution_path : str | None
+        solution_path parameter value.
+    data_source_name : str
+        data_source_name parameter value.
+    model_entities : list[dict[str, Any]] | None
+        model_entities parameter value.
+
+    Returns
+    -------
+    list[dict[str, Any]]
+        Computed return value."""
     usages: list[dict[str, Any]] = []
     entities = _resolved_model_entities(solution_path=solution_path, model_entities=model_entities)
 
@@ -260,6 +323,28 @@ def fetch_source_metadata(
     source_location: str,
     runtime_secrets: dict[str, str] | None,
 ) -> list[dict[str, Any]]:
+    """Fetch source metadata.
+
+    Parameters
+    ----------
+    solution_path : str | None
+        solution_path parameter value.
+    data_source_name : str
+        data_source_name parameter value.
+    source_location : str
+        source_location parameter value.
+    runtime_secrets : dict[str, str] | None
+        runtime_secrets parameter value.
+
+    Returns
+    -------
+    list[dict[str, Any]]
+        Computed return value.
+
+    Raises
+    ------
+    Datam8ExternalSystemError
+        Raised when validation or runtime execution fails."""
     connector_cls, manifest, cfg, resolver = resolve_and_validate(
         solution_path=solution_path,
         data_source_id=data_source_name,
@@ -359,6 +444,23 @@ def preview_schema_changes(
     runtime_secrets: dict[str, str] | None,
     model_entities: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
+    """Preview schema changes.
+
+    Parameters
+    ----------
+    solution_path : str | None
+        solution_path parameter value.
+    usages : list[UsageRef]
+        usages parameter value.
+    runtime_secrets : dict[str, str] | None
+        runtime_secrets parameter value.
+    model_entities : list[dict[str, Any]] | None
+        model_entities parameter value.
+
+    Returns
+    -------
+    list[dict[str, Any]]
+        Computed return value."""
     diffs: list[dict[str, Any]] = []
     entities = _resolved_model_entities(solution_path=solution_path, model_entities=model_entities)
     entity_map = {str(e.get("relPath")): e for e in entities if isinstance(e, dict) and e.get("relPath")}
@@ -510,6 +612,23 @@ def apply_schema_changes(
     runtime_secrets: dict[str, str] | None,
     model_entities: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
+    """Apply schema changes.
+
+    Parameters
+    ----------
+    solution_path : str | None
+        solution_path parameter value.
+    diffs : list[dict[str, Any]]
+        diffs parameter value.
+    runtime_secrets : dict[str, str] | None
+        runtime_secrets parameter value.
+    model_entities : list[dict[str, Any]] | None
+        model_entities parameter value.
+
+    Returns
+    -------
+    list[dict[str, Any]]
+        Computed return value."""
     result: list[dict[str, Any]] = []
     entities = _resolved_model_entities(solution_path=solution_path, model_entities=model_entities)
     entity_map = {str(e.get("relPath")): e for e in entities if isinstance(e, dict) and e.get("relPath")}

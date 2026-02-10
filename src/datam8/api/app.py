@@ -102,13 +102,13 @@ def create_app(*, token: str, enable_openapi: bool = False) -> FastAPI:
             )
             trace_id = getattr(request.state, "trace_id", None)
             env = exc.to_envelope(trace_id=trace_id)
-            return JSONResponse(status_code=401, content=env.__dict__)
+            return JSONResponse(status_code=401, content=env.model_dump())
         got = auth.split(" ", 1)[1].strip()
         if not got or got != token:
             exc = Datam8Error(code="auth", message="Invalid token.", details=None, hint=None, exit_code=7)
             trace_id = getattr(request.state, "trace_id", None)
             env = exc.to_envelope(trace_id=trace_id)
-            return JSONResponse(status_code=401, content=env.__dict__)
+            return JSONResponse(status_code=401, content=env.model_dump())
 
         return await call_next(request)
 
@@ -127,14 +127,14 @@ def create_app(*, token: str, enable_openapi: bool = False) -> FastAPI:
     async def datam8_error_handler(request: Request, exc: Datam8Error):
         trace_id = getattr(request.state, "trace_id", None)
         env = exc.to_envelope(trace_id=trace_id)
-        return JSONResponse(status_code=_status_for_error(exc), content=env.__dict__)
+        return JSONResponse(status_code=_status_for_error(exc), content=env.model_dump())
 
     @app.exception_handler(RequestValidationError)
     async def request_validation_error_handler(request: Request, exc: RequestValidationError):
         trace_id = getattr(request.state, "trace_id", None)
         err = Datam8ValidationError(message="Invalid request.", details={"errors": exc.errors()})
         env = err.to_envelope(trace_id=trace_id)
-        return JSONResponse(status_code=400, content=env.__dict__)
+        return JSONResponse(status_code=400, content=env.model_dump())
 
     @app.exception_handler(Exception)
     async def unexpected_error_handler(request: Request, exc: Exception):
@@ -142,7 +142,7 @@ def create_app(*, token: str, enable_openapi: bool = False) -> FastAPI:
         env = Datam8Error(code="unexpected", message="Unexpected error.", details=None, hint=None, exit_code=10).to_envelope(
             trace_id=trace_id
         )
-        return JSONResponse(status_code=500, content=env.__dict__)
+        return JSONResponse(status_code=500, content=env.model_dump())
 
     app.include_router(system_router)
     app.include_router(api_router)

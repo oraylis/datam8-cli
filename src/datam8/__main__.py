@@ -22,6 +22,12 @@ from datam8.app import main as datam8_main
 
 
 def main() -> None:
+    """Main.
+
+    Returns
+    -------
+    None
+        Computed return value."""
     datam8_main()
 
 

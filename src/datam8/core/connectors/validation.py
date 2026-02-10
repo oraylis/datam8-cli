@@ -33,6 +33,19 @@ def _get_by_path(obj: Any, path: str) -> Any:
 
 
 def validate_connection_config(manifest: dict[str, Any], raw_config: Any) -> ValidationResult:
+    """Validate connection config.
+
+    Parameters
+    ----------
+    manifest : dict[str, Any]
+        manifest parameter value.
+    raw_config : Any
+        raw_config parameter value.
+
+    Returns
+    -------
+    ValidationResult
+        Computed return value."""
     cfg = raw_config if isinstance(raw_config, dict) else {}
     schema = manifest.get("connectionSchema") if isinstance(manifest, dict) else None
     errors: list[dict[str, str]] = []
