@@ -33,12 +33,22 @@ from datam8.core.lock import SolutionLock
 
 from .common import lock_timeout_seconds
 from .response_models import (
-    AnyPayloadResponse,
     ContentResponse,
     CountEntitiesResponse,
     EntriesResponse,
+    FunctionSourceRenameResponse,
+    IndexRegenerateResponse,
+    IndexShowResponse,
+    IndexValidateResponse,
     MessageWithPathResponse,
+    MoveEntityResponse,
+    RefactorPropertiesResponse,
+    RefactorResultResponse,
+    RefactorRunResponse,
+    RenameFolderResponse,
     ScriptListResponse,
+    SearchEntitiesResponse,
+    SearchTextResponse,
 )
 
 router = APIRouter()
@@ -195,7 +205,7 @@ async def model_entities_delete(body: DeleteEntityBody) -> MessageWithPathRespon
 
 
 @router.post("/model/entities/move")
-async def model_entities_move(body: MoveEntityBody) -> AnyPayloadResponse:
+async def model_entities_move(body: MoveEntityBody) -> MoveEntityResponse:
     """Move a model entity file."""
     resolved, _sol = workspace_io.read_solution(body.solutionPath)
     if body.noLock:
@@ -210,11 +220,11 @@ async def model_entities_move(body: MoveEntityBody) -> AnyPayloadResponse:
                 body.toRelPath,
                 body.solutionPath,
             )
-    return AnyPayloadResponse.model_validate({"message": "moved", **result})
+    return MoveEntityResponse(message="moved", **result)
 
 
 @router.post("/model/folder/rename")
-async def model_folder_rename(body: RenameFolderBody) -> AnyPayloadResponse:
+async def model_folder_rename(body: RenameFolderBody) -> RenameFolderResponse:
     """Rename a model folder and regenerate index."""
     resolved, _sol = workspace_io.read_solution(body.solutionPath)
     if body.noLock:
@@ -237,11 +247,11 @@ async def model_folder_rename(body: RenameFolderBody) -> AnyPayloadResponse:
             )
             entities = [entity.__dict__ for entity in workspace_io.list_model_entities(body.solutionPath)]
             workspace_io.regenerate_index(body.solutionPath)
-    return AnyPayloadResponse.model_validate({"message": "renamed", **result, "entities": entities})
+    return RenameFolderResponse(message="renamed", entities=entities, **result)
 
 
 @router.post("/refactor/properties")
-async def refactor_properties_route(body: RefactorPropertiesBody) -> AnyPayloadResponse:
+async def refactor_properties_route(body: RefactorPropertiesBody) -> RefactorPropertiesResponse:
     """Refactor properties and values across model entities."""
     resolved, _sol = workspace_io.read_solution(body.solutionPath)
     if body.noLock:
@@ -264,11 +274,11 @@ async def refactor_properties_route(body: RefactorPropertiesBody) -> AnyPayloadR
                 deleted_properties=body.deletedProperties,
                 deleted_values=body.deletedValues,
             )
-    return AnyPayloadResponse.model_validate({"message": "refactored", **result})
+    return RefactorPropertiesResponse(message="refactored", updatedFiles=result["updatedFiles"])
 
 
 @router.post("/index/regenerate")
-async def index_regenerate(body: dict[str, Any]) -> AnyPayloadResponse:
+async def index_regenerate(body: dict[str, Any]) -> IndexRegenerateResponse:
     """Regenerate and return solution index."""
     solution_path = body.get("solutionPath")
     resolved, _sol = workspace_io.read_solution(solution_path)
@@ -280,19 +290,19 @@ async def index_regenerate(body: dict[str, Any]) -> AnyPayloadResponse:
             timeout_seconds=lock_timeout_seconds(body),
         ):
             index = workspace_io.regenerate_index(solution_path)
-    return AnyPayloadResponse.model_validate({"message": "index regenerated", "index": index})
+    return IndexRegenerateResponse(message="index regenerated", index=index)
 
 
 @router.get("/index/show")
-async def index_show(path: str | None = Query(None)) -> AnyPayloadResponse:
+async def index_show(path: str | None = Query(None)) -> IndexShowResponse:
     """Return current solution index."""
-    return AnyPayloadResponse.model_validate({"index": indexing.read_index(path)})
+    return IndexShowResponse(index=indexing.read_index(path))
 
 
 @router.get("/index/validate")
-async def index_validate_route(path: str | None = Query(None)) -> AnyPayloadResponse:
+async def index_validate_route(path: str | None = Query(None)) -> IndexValidateResponse:
     """Return validation report for current index."""
-    return AnyPayloadResponse.model_validate({"report": indexing.validate_index(path)})
+    return IndexValidateResponse(report=indexing.validate_index(path))
 
 
 @router.post("/generate", response_model=GenerateResult)
@@ -384,7 +394,7 @@ async def model_function_source_save(body: FunctionSourceSaveBody) -> MessageWit
 
 
 @router.post("/model/function/rename")
-async def model_function_source_rename(body: FunctionSourceRenameBody) -> AnyPayloadResponse:
+async def model_function_source_rename(body: FunctionSourceRenameBody) -> FunctionSourceRenameResponse:
     """Rename model function source key."""
     resolved, _sol = workspace_io.read_solution(body.solutionPath)
     with SolutionLock(
@@ -398,7 +408,7 @@ async def model_function_source_rename(body: FunctionSourceRenameBody) -> AnyPay
             body.solutionPath,
             body.entityName,
         )
-    return AnyPayloadResponse.model_validate({"message": "renamed", **result})
+    return FunctionSourceRenameResponse(message="renamed", **result)
 
 
 @router.get("/script/list")
@@ -430,23 +440,25 @@ async def script_delete(
 
 
 @router.get("/search/entities")
-async def search_entities_route(q: str = Query(...), path: str | None = Query(None)) -> AnyPayloadResponse:
+async def search_entities_route(q: str = Query(...), path: str | None = Query(None)) -> SearchEntitiesResponse:
     """Search entities by metadata fields."""
-    return AnyPayloadResponse.model_validate(
-        search_core.search_entities(solution_path=path, query=q)
-    )
+    result = search_core.search_entities(solution_path=path, query=q)
+    return SearchEntitiesResponse(count=result["count"], entities=result["entities"])
 
 
 @router.get("/search/text")
-async def search_text_route(q: str = Query(...), path: str | None = Query(None)) -> AnyPayloadResponse:
+async def search_text_route(q: str = Query(...), path: str | None = Query(None)) -> SearchTextResponse:
     """Search raw text across solution files."""
-    return AnyPayloadResponse.model_validate(
-        search_core.search_text(solution_path=path, pattern=q)
+    result = search_core.search_text(solution_path=path, pattern=q)
+    return SearchTextResponse(
+        count=result["count"],
+        total=result["total"],
+        matches=result["matches"],
     )
 
 
 @router.post("/refactor/keys")
-async def refactor_keys_route(body: RefactorKeysBody) -> AnyPayloadResponse:
+async def refactor_keys_route(body: RefactorKeysBody) -> RefactorRunResponse:
     """Refactor property keys across model entities."""
     resolved, _sol = workspace_io.read_solution(body.solutionPath)
     if body.apply:
@@ -465,13 +477,15 @@ async def refactor_keys_route(body: RefactorKeysBody) -> AnyPayloadResponse:
             renames=body.mapping,
             apply=False,
         )
-    return AnyPayloadResponse.model_validate(
-        {"message": "refactored", "dryRun": not body.apply, "result": result}
+    return RefactorRunResponse(
+        message="refactored",
+        dryRun=not body.apply,
+        result=RefactorResultResponse.model_validate(result),
     )
 
 
 @router.post("/refactor/values")
-async def refactor_values_route(body: RefactorValuesBody) -> AnyPayloadResponse:
+async def refactor_values_route(body: RefactorValuesBody) -> RefactorRunResponse:
     """Refactor property values across model entities."""
     resolved, _sol = workspace_io.read_solution(body.solutionPath)
     if body.apply:
@@ -494,13 +508,15 @@ async def refactor_values_route(body: RefactorValuesBody) -> AnyPayloadResponse:
             key=body.key,
             apply=False,
         )
-    return AnyPayloadResponse.model_validate(
-        {"message": "refactored", "dryRun": not body.apply, "result": result}
+    return RefactorRunResponse(
+        message="refactored",
+        dryRun=not body.apply,
+        result=RefactorResultResponse.model_validate(result),
     )
 
 
 @router.post("/refactor/entity-id")
-async def refactor_entity_id_route(body: RefactorEntityIdBody) -> AnyPayloadResponse:
+async def refactor_entity_id_route(body: RefactorEntityIdBody) -> RefactorRunResponse:
     """Refactor entity IDs across model entities."""
     resolved, _sol = workspace_io.read_solution(body.solutionPath)
     if body.apply:
@@ -521,6 +537,8 @@ async def refactor_entity_id_route(body: RefactorEntityIdBody) -> AnyPayloadResp
             new=body.new,
             apply=False,
         )
-    return AnyPayloadResponse.model_validate(
-        {"message": "refactored", "dryRun": not body.apply, "result": result}
+    return RefactorRunResponse(
+        message="refactored",
+        dryRun=not body.apply,
+        result=RefactorResultResponse.model_validate(result),
     )

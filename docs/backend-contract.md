@@ -49,6 +49,17 @@ All non-readiness logs are written to stderr.
   - Body: `{ "solutionPath": "...", "target": "...", "logLevel": "info", "cleanOutput": true, "payloads": [], "lazy": false }`
   - Response: `{ "status": "succeeded", "target": "...", "outputPath": "..." }`
 
+## Response contract
+
+- All JSON responses are object payloads with stable top-level fields per endpoint.
+- No endpoint returns a bare JSON array or untyped ad-hoc dictionary contract.
+- `204 No Content` is used for mutation endpoints that intentionally return no body (e.g. secrets upsert/delete).
+
+## Implementation notes (non-contract)
+
+- Route implementation is split by domain (`api_solution.py`, `api_workspace.py`, `api_connectors.py`) and composed in `api.py`.
+- This split does not change endpoint URLs; it is a maintainability refactor only.
+
 ## Removed surface
 
 The following endpoints are intentionally removed:

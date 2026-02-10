@@ -30,8 +30,8 @@ from datam8.core import (
 from datam8.core import solution_files, workspace_io
 
 from .response_models import (
-    AnyPayloadResponse,
     ConfigResponse,
+    MigrationResponse,
     SolutionFullResponse,
     SolutionPathResponse,
     SolutionResponse,
@@ -72,7 +72,7 @@ async def solution_inspect(path: str = Query(...)) -> VersionResponse:
 
 
 @router.post("/migration/v1-to-v2")
-async def migration_v1_to_v2_route(body: MigrateV1ToV2Body) -> AnyPayloadResponse:
+async def migration_v1_to_v2_route(body: MigrateV1ToV2Body) -> MigrationResponse:
     """Migrate a v1 solution into v2 structure."""
     args: dict[str, Any] = {
         "sourceSolutionPath": body.sourceSolutionPath,
@@ -80,7 +80,7 @@ async def migration_v1_to_v2_route(body: MigrateV1ToV2Body) -> AnyPayloadRespons
     }
     if body.options is not None:
         args["options"] = body.options
-    return AnyPayloadResponse.model_validate(
+    return MigrationResponse.model_validate(
         migration_v1_to_v2_core.migrate_solution_v1_to_v2(args)
     )
 

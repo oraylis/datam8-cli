@@ -32,12 +32,13 @@ from datam8.core.lock import SolutionLock
 
 from .common import lock_timeout_seconds, plugin_dir
 from .response_models import (
-    AnyPayloadResponse,
     AvailableResponse,
     ConnectorSchemaResponse,
     ConnectorsResponse,
+    ConnectorValidateResponse,
     DiffsResponse,
     MetadataResponse,
+    PluginStateResponse,
     RuntimeSecretsResponse,
     TablesResponse,
     UpdatedEntitiesResponse,
@@ -145,33 +146,32 @@ async def connector_ui_schema(connectorId: str) -> ConnectorSchemaResponse:
 async def connector_validate_connection(
     connectorId: str,
     body: ValidateConnectionBody,
-) -> AnyPayloadResponse:
+) -> ConnectorValidateResponse:
     """Validate datasource connection properties for a connector."""
     plugin = plugin_host.get_connector(plugin_dir=plugin_dir(), connector_id=connectorId)
-    return AnyPayloadResponse.model_validate(
-        plugin_host.validate_connection(
-            plugin=plugin,
-            solution_path=body.solutionPath,
-            extended_properties=body.extendedProperties or {},
-            runtime_secret_overrides=body.runtimeSecrets or None,
-        )
+    result = plugin_host.validate_connection(
+        plugin=plugin,
+        solution_path=body.solutionPath,
+        extended_properties=body.extendedProperties or {},
+        runtime_secret_overrides=body.runtimeSecrets or None,
     )
+    return ConnectorValidateResponse.model_validate(result)
 
 
 @router.get("/plugins")
-async def plugins_state() -> AnyPayloadResponse:
+async def plugins_state() -> PluginStateResponse:
     """Return current plugin registry state."""
-    return AnyPayloadResponse.model_validate(plugin_manager.reload(plugin_dir()))
+    return PluginStateResponse.model_validate(plugin_manager.reload(plugin_dir()))
 
 
 @router.post("/plugins/reload")
-async def plugins_reload() -> AnyPayloadResponse:
+async def plugins_reload() -> PluginStateResponse:
     """Reload plugin registry and return updated state."""
-    return AnyPayloadResponse.model_validate(plugin_manager.reload(plugin_dir()))
+    return PluginStateResponse.model_validate(plugin_manager.reload(plugin_dir()))
 
 
 @router.post("/plugins/install")
-async def plugins_install(req: Request) -> AnyPayloadResponse:
+async def plugins_install(req: Request) -> PluginStateResponse:
     """Install a plugin from zip payload or git URL."""
     configured_plugin_dir = plugin_dir()
     content_type = (req.headers.get("content-type") or "").lower()
@@ -183,7 +183,7 @@ async def plugins_install(req: Request) -> AnyPayloadResponse:
             zip_bytes=zip_bytes,
             file_name=file_name,
         )
-        return AnyPayloadResponse.model_validate(
+        return PluginStateResponse.model_validate(
             plugin_manager.reload(configured_plugin_dir)
         )
     if "application/json" in content_type:
@@ -195,7 +195,7 @@ async def plugins_install(req: Request) -> AnyPayloadResponse:
             plugin_dir=configured_plugin_dir,
             git_url=git_url,
         )
-        return AnyPayloadResponse.model_validate(
+        return PluginStateResponse.model_validate(
             plugin_manager.reload(configured_plugin_dir)
         )
     raise Datam8NotImplementedError(
@@ -204,27 +204,27 @@ async def plugins_install(req: Request) -> AnyPayloadResponse:
 
 
 @router.post("/plugins/enable")
-async def plugins_enable(body: PluginIdBody) -> AnyPayloadResponse:
+async def plugins_enable(body: PluginIdBody) -> PluginStateResponse:
     """Enable a plugin by ID."""
     configured_plugin_dir = plugin_dir()
     plugin_manager.set_enabled(configured_plugin_dir, body.id, True)
-    return AnyPayloadResponse.model_validate(plugin_manager.reload(configured_plugin_dir))
+    return PluginStateResponse.model_validate(plugin_manager.reload(configured_plugin_dir))
 
 
 @router.post("/plugins/disable")
-async def plugins_disable(body: PluginIdBody) -> AnyPayloadResponse:
+async def plugins_disable(body: PluginIdBody) -> PluginStateResponse:
     """Disable a plugin by ID."""
     configured_plugin_dir = plugin_dir()
     plugin_manager.set_enabled(configured_plugin_dir, body.id, False)
-    return AnyPayloadResponse.model_validate(plugin_manager.reload(configured_plugin_dir))
+    return PluginStateResponse.model_validate(plugin_manager.reload(configured_plugin_dir))
 
 
 @router.post("/plugins/uninstall")
-async def plugins_uninstall(body: PluginIdBody) -> AnyPayloadResponse:
+async def plugins_uninstall(body: PluginIdBody) -> PluginStateResponse:
     """Uninstall a plugin by ID."""
     configured_plugin_dir = plugin_dir()
     plugin_manager.uninstall(configured_plugin_dir, body.id)
-    return AnyPayloadResponse.model_validate(plugin_manager.reload(configured_plugin_dir))
+    return PluginStateResponse.model_validate(plugin_manager.reload(configured_plugin_dir))
 
 
 @router.post("/datasources/{dataSourceId}/list-tables")
