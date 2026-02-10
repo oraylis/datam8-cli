@@ -271,11 +271,11 @@ def move_entity(
     resolved, _ = read_solution(active_solution_path)
     with lock_context(opts=opts, lock_file_root=resolved.root_dir):
         result = move_model_entity(from_rel_path, to_rel_path, active_solution_path)
-    payload = {"status": "moved", **result}
+    payload = {"status": "moved", **result.model_dump()}
     emit_result(
         opts,
         payload,
-        human_lines=[f"moved: {result['fromAbsPath']} -> {result['toAbsPath']}"],
+        human_lines=[f"moved: {result.fromAbsPath} -> {result.toAbsPath}"],
     )
 
 
@@ -301,11 +301,11 @@ def duplicate_entity(
     resolved, _ = read_solution(active_solution_path)
     with lock_context(opts=opts, lock_file_root=resolved.root_dir):
         result = duplicate_model_entity(from_rel_path, to_rel_path, solution_path=active_solution_path)
-    payload = {"status": "duplicated", **result}
+    payload = {"status": "duplicated", **result.model_dump()}
     emit_result(
         opts,
         payload,
-        human_lines=[f"duplicated: {result['fromAbsPath']} -> {result['toAbsPath']}"],
+        human_lines=[f"duplicated: {result.fromAbsPath} -> {result.toAbsPath}"],
     )
 
 
@@ -331,8 +331,8 @@ def rename_model_folder(
     resolved, _ = read_solution(active_solution_path)
     with lock_context(opts=opts, lock_file_root=resolved.root_dir):
         result = rename_folder(from_folder_rel_path, to_folder_rel_path, active_solution_path)
-    payload = {"status": "renamed", **result}
-    emit_result(opts, payload, human_lines=["ok"])
+    payload = {"status": "renamed", **result.model_dump()}
+    emit_result(opts, payload, human_lines=[f"renamed: {result.fromAbsPath} -> {result.toAbsPath}"])
 
 
 @app.command("edit")

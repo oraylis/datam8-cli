@@ -42,6 +42,6 @@ def fs_list(
     """List directory entries for a path."""
     opts = make_global_options(json_output=json_output, quiet=quiet)
     entries = list_directory(path)
-    payload = {"entries": entries}
-    human_lines = [f"{e['type']} {e['name']}" for e in entries]
+    payload = {"entries": [entry.model_dump() for entry in entries]}
+    human_lines = [f"{entry.type} {entry.name}" for entry in entries]
     emit_result(opts, payload, human_lines=human_lines)

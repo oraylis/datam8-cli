@@ -74,7 +74,7 @@ def properties(
             deleted_properties=del_props,
             deleted_values=del_vals,
         )
-    payload = {"status": "refactored", "result": result}
+    payload = {"status": "refactored", "result": result.model_dump()}
     emit_result(opts, payload, human_lines=["ok"])
 
 

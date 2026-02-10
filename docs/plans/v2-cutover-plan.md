@@ -1,8 +1,13 @@
 ﻿# DataM8 v2 Cutover Plan (Generator + Neon)
 
-Status: agreed target plan
+Status: historical implementation plan (reference)
 Owner: cross-repo (generator + neon)
 Last updated: 2026-02-10
+
+> Note
+> This document is kept as a historical cross-repo execution plan.
+> The canonical current backend contract is `docs/backend-contract.md`.
+> Where this plan and current implementation differ, treat the backend contract + current code as source of truth.
 
 ## Referenzbranch-Kontext (verbindlich)
 

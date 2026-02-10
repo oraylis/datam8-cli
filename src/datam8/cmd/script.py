@@ -159,11 +159,11 @@ def rename_script(
             active_solution_path,
             entity_name,
         )
-    payload = {"status": "renamed", **result}
+    payload = {"status": "renamed", **result.model_dump()}
     emit_result(
         opts,
         payload,
-        human_lines=[f"renamed: {result['fromAbsPath']} -> {result['toAbsPath']}"],
+        human_lines=[f"renamed: {result.fromAbsPath} -> {result.toAbsPath}"],
     )
 
 

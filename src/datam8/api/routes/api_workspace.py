@@ -235,7 +235,10 @@ async def model_entities_move(body: MoveEntityBody) -> MoveEntityResponse:
                 body.toRelPath,
                 body.solutionPath,
             )
-    return MoveEntityResponse(message="moved", **result)
+    return MoveEntityResponse(
+        message="moved",
+        **{"from": result.fromAbsPath, "to": result.toAbsPath},
+    )
 
 
 @router.post("/model/folder/rename")
@@ -268,7 +271,11 @@ async def model_folder_rename(body: RenameFolderBody) -> RenameFolderResponse:
                 ModelEntityResponse.model_validate(entity.model_dump())
                 for entity in model_entities
             ]
-    return RenameFolderResponse(message="renamed", entities=entities, **result)
+    return RenameFolderResponse(
+        message="renamed",
+        entities=entities,
+        **{"from": result.fromAbsPath, "to": result.toAbsPath},
+    )
 
 
 @router.post("/refactor/properties")
@@ -295,7 +302,7 @@ async def refactor_properties_route(body: RefactorPropertiesBody) -> RefactorPro
                 deleted_properties=body.deletedProperties,
                 deleted_values=body.deletedValues,
             )
-    return RefactorPropertiesResponse(message="refactored", updatedFiles=result["updatedFiles"])
+    return RefactorPropertiesResponse(message="refactored", updatedFiles=result.updatedFiles)
 
 
 @router.post("/index/regenerate")
@@ -384,7 +391,7 @@ async def base_entities_delete(body: DeleteEntityBody) -> MessageWithPathRespons
 @router.get("/fs/list")
 async def fs_list(path: str | None = Query(None)) -> EntriesResponse:
     """List directory entries inside the active workspace."""
-    entries = [DirectoryEntryResponse.model_validate(entry) for entry in workspace_io.list_directory(path)]
+    entries = [DirectoryEntryResponse.model_validate(entry.model_dump()) for entry in workspace_io.list_directory(path)]
     return EntriesResponse(entries=entries)
 
 
@@ -433,7 +440,12 @@ async def model_function_source_rename(body: FunctionSourceRenameBody) -> Functi
             body.solutionPath,
             body.entityName,
         )
-    return FunctionSourceRenameResponse(message="renamed", **result)
+    return FunctionSourceRenameResponse(
+        message="renamed",
+        fromAbsPath=result.fromAbsPath,
+        toAbsPath=result.toAbsPath,
+        skipped=result.skipped,
+    )
 
 
 @router.get("/script/list")

@@ -129,13 +129,24 @@ class ScriptListResponse(BaseModel):
     """List of scripts."""
 
     count: int
-    scripts: list[Any]
+    scripts: list[str]
+
+
+class ConnectorSummaryResponse(BaseModel):
+    """Stable connector summary fields used by frontend clients."""
+
+    model_config = ConfigDict(extra="allow")
+
+    id: str
+    displayName: str | None = None
+    version: str | None = None
+    capabilities: list[str] | None = None
 
 
 class ConnectorsResponse(BaseModel):
-    """Connector summaries."""
+    """Connector summaries with stable top-level fields."""
 
-    connectors: list[dict[str, Any]]
+    connectors: list[ConnectorSummaryResponse]
 
 
 class ConnectorSchemaResponse(BaseModel):

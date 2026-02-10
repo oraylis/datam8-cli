@@ -55,6 +55,12 @@ All non-readiness logs are written to stderr.
 - No endpoint returns a bare JSON array or untyped ad-hoc dictionary contract.
 - `204 No Content` is used for mutation endpoints that intentionally return no body (e.g. secrets upsert/delete).
 
+### Typing policy
+
+- Stable and workflow-critical fields are exposed via explicit typed response models.
+- Plugin-/connector-driven payloads with intentionally dynamic shape remain open objects to avoid over-constraining connector implementations.
+- Dynamic sections are still wrapped in typed top-level response envelopes to keep endpoint contracts stable.
+
 ## Implementation notes (non-contract)
 
 - Route implementation is split by domain (`api_solution.py`, `api_workspace.py`, `api_connectors.py`) and composed in `api.py`.

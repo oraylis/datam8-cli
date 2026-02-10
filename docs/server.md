@@ -29,6 +29,12 @@ All other logs go to stderr.
 - `--openapi` (optional): enables `/docs` and `/openapi.json` (off by default for desktop).
 - `--log-level` (optional): uvicorn log level (`debug|info|warning|error|critical`).
 
+## CLI architecture
+
+- Single CLI root: `src/datam8/app.py`
+- Command groups: `src/datam8/cmd/*.py`
+- `serve` is one regular command module (`src/datam8/cmd/serve.py`) and shares the same root CLI entry as all other commands.
+
 ## Health/version
 
 No auth required:
@@ -77,6 +83,7 @@ For auth failures, the server returns HTTP 401 with a `Datam8Error` envelope and
 ## Code pointers (contributors)
 
 - CLI entrypoint: `src/datam8/cmd/serve.py`
+- CLI root and command registration: `src/datam8/app.py`
 - FastAPI app factory + middleware: `src/datam8/api/app.py`
 - Routes:
   - system: `src/datam8/api/routes/system.py`

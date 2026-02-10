@@ -35,6 +35,7 @@ from .response_models import (
     AvailableResponse,
     ConnectorSchemaResponse,
     ConnectorsResponse,
+    ConnectorSummaryResponse,
     ConnectorValidateResponse,
     DiffsResponse,
     MetadataResponse,
@@ -127,7 +128,12 @@ class SecretsRuntimeDeleteKeyBody(BaseModel):
 async def connectors() -> ConnectorsResponse:
     """List discovered connector plugins."""
     connectors, _errors = plugin_host.discover_connectors(plugin_dir=plugin_dir())
-    return ConnectorsResponse(connectors=[connector.to_summary() for connector in connectors])
+    return ConnectorsResponse(
+        connectors=[
+            ConnectorSummaryResponse.model_validate(connector.to_summary())
+            for connector in connectors
+        ]
+    )
 
 
 @router.get("/connectors/{connectorId}/ui-schema")

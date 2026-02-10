@@ -156,6 +156,35 @@ class BaseEntityEntry(BaseModel):
     content: Any
 
 
+class PathMutationResult(BaseModel):
+    """Typed path mutation result for move/rename/duplicate operations."""
+
+    fromAbsPath: str
+    toAbsPath: str
+
+
+class FunctionSourceRenameResult(BaseModel):
+    """Typed result for function source rename operations."""
+
+    fromAbsPath: str
+    toAbsPath: str
+    skipped: bool | None = None
+
+
+class DirectoryEntry(BaseModel):
+    """Typed directory listing entry."""
+
+    name: str
+    path: str
+    type: str
+
+
+class RefactorPropertiesResult(BaseModel):
+    """Typed result for property/value refactor operations."""
+
+    updatedFiles: int
+
+
 def list_base_entities(solution_path: str | None) -> list[BaseEntityEntry]:
     """List all JSON entities below the configured base path.
 
@@ -335,7 +364,7 @@ def delete_base_entity(rel_path: str, solution_path: str | None) -> str:
     return str(abs_path)
 
 
-def move_model_entity(from_rel_path: str, to_rel_path: str, solution_path: str | None) -> dict[str, str]:
+def move_model_entity(from_rel_path: str, to_rel_path: str, solution_path: str | None) -> PathMutationResult:
     """Move model entity.
 
     Parameters
@@ -349,8 +378,8 @@ def move_model_entity(from_rel_path: str, to_rel_path: str, solution_path: str |
 
     Returns
     -------
-    dict[str, str]
-        Computed return value.
+    PathMutationResult
+        Absolute source and destination paths after move.
 
     Raises
     ------
@@ -366,7 +395,7 @@ def move_model_entity(from_rel_path: str, to_rel_path: str, solution_path: str |
     to_abs.parent.mkdir(parents=True, exist_ok=True)
     from_abs.rename(to_abs)
     legacy_function_sources.move_function_source_folder(root=root, from_rel_path=from_rel_path, to_rel_path=to_rel_path, entity_name=entity_name)
-    return {"from": str(from_abs), "to": str(to_abs)}
+    return PathMutationResult(fromAbsPath=str(from_abs), toAbsPath=str(to_abs))
 
 
 def duplicate_model_entity(
@@ -376,7 +405,7 @@ def duplicate_model_entity(
     solution_path: str | None,
     new_name: str | None = None,
     new_id: int | None = None,
-) -> dict[str, str]:
+) -> PathMutationResult:
     """Duplicate model entity.
 
     Parameters
@@ -394,8 +423,8 @@ def duplicate_model_entity(
 
     Returns
     -------
-    dict[str, str]
-        Computed return value.
+    PathMutationResult
+        Absolute source and destination paths for the duplicate operation.
 
     Raises
     ------
@@ -431,7 +460,7 @@ def duplicate_model_entity(
         if from_folder_abs.exists() and from_folder_abs.is_dir():
             legacy_function_sources.copy_directory(from_folder_abs, to_folder_abs)
 
-    return {"from": str(from_abs), "to": str(to_abs)}
+    return PathMutationResult(fromAbsPath=str(from_abs), toAbsPath=str(to_abs))
 
 
 def write_base_entity(rel_path: str, content: Any, solution_path: str | None) -> str:
@@ -503,7 +532,7 @@ def _build_index(*, sol: Solution, entities: list[ModelEntityEntry]) -> dict[str
     return index
 
 
-def list_directory(dir_path: str | None) -> list[dict[str, str]]:
+def list_directory(dir_path: str | None) -> list[DirectoryEntry]:
     """List folders and `.dm8s` files in a directory.
 
     Parameters
@@ -513,7 +542,7 @@ def list_directory(dir_path: str | None) -> list[dict[str, str]]:
 
     Returns
     -------
-    list[dict[str, str]]
+    list[DirectoryEntry]
         Entry objects with `name`, `path`, and `type` (`dir`/`file`).
 
     Raises
@@ -527,13 +556,13 @@ def list_directory(dir_path: str | None) -> list[dict[str, str]]:
         raise Datam8NotFoundError(message="Directory not found.", details={"path": str(target)})
     if not target.is_dir():
         raise Datam8ValidationError(message="Path is not a directory.", details={"path": str(target)})
-    entries = []
+    entries: list[DirectoryEntry] = []
     for e in os.scandir(target):
         if e.is_dir():
-            entries.append({"name": e.name, "path": str(Path(target, e.name)), "type": "dir"})
+            entries.append(DirectoryEntry(name=e.name, path=str(Path(target, e.name)), type="dir"))
         elif e.is_file() and e.name.lower().endswith(".dm8s"):
-            entries.append({"name": e.name, "path": str(Path(target, e.name)), "type": "file"})
-    entries.sort(key=lambda x: x["name"].lower())
+            entries.append(DirectoryEntry(name=e.name, path=str(Path(target, e.name)), type="file"))
+    entries.sort(key=lambda x: x.name.lower())
     return entries
 
 
@@ -624,7 +653,7 @@ def rename_function_source(
     to_source: str,
     solution_path: str | None,
     entity_name: str | None,
-) -> dict[str, Any]:
+) -> FunctionSourceRenameResult:
     """Rename function source.
 
     Parameters
@@ -642,8 +671,8 @@ def rename_function_source(
 
     Returns
     -------
-    dict[str, Any]
-        Computed return value."""
+    FunctionSourceRenameResult
+        Absolute source and destination paths and optional skipped marker."""
     resolved, _sol = read_solution(solution_path)
     root = resolved.root_dir
     dir_rel = Path(rel_path).parent.as_posix()
@@ -665,12 +694,12 @@ def rename_function_source(
         to_abs = legacy_function_sources.resolve_safe_function_source_path(entity_dir, to_source)
 
     if not from_abs.exists():
-        return {"fromAbsPath": str(from_abs), "toAbsPath": str(to_abs), "skipped": True}
+        return FunctionSourceRenameResult(fromAbsPath=str(from_abs), toAbsPath=str(to_abs), skipped=True)
     to_abs.parent.mkdir(parents=True, exist_ok=True)
     from_abs.rename(to_abs)
     if not (isinstance(to_source, str) and "/" in to_source):
         legacy_function_sources.migrate_legacy_function_source_file(root=root, rel_path=rel_path, source_file=to_source, folder_name=folder_name)
-    return {"fromAbsPath": str(from_abs), "toAbsPath": str(to_abs)}
+    return FunctionSourceRenameResult(fromAbsPath=str(from_abs), toAbsPath=str(to_abs))
 
 
 def delete_function_source(rel_path: str, source_file: str, solution_path: str | None, entity_name: str | None) -> str:
@@ -905,7 +934,7 @@ def create_new_project(
     return str(solution_file_path)
 
 
-def rename_folder(from_folder_rel_path: str, to_folder_rel_path: str, solution_path: str | None) -> dict[str, str]:
+def rename_folder(from_folder_rel_path: str, to_folder_rel_path: str, solution_path: str | None) -> PathMutationResult:
     """Rename folder.
 
     Parameters
@@ -919,15 +948,15 @@ def rename_folder(from_folder_rel_path: str, to_folder_rel_path: str, solution_p
 
     Returns
     -------
-    dict[str, str]
-        Computed return value."""
+    PathMutationResult
+        Absolute source and destination folder paths."""
     resolved, _sol = read_solution(solution_path)
     root = resolved.root_dir
     from_abs = safe_join(root, from_folder_rel_path)
     to_abs = safe_join(root, to_folder_rel_path)
     to_abs.parent.mkdir(parents=True, exist_ok=True)
     from_abs.rename(to_abs)
-    return {"from": str(from_abs), "to": str(to_abs)}
+    return PathMutationResult(fromAbsPath=str(from_abs), toAbsPath=str(to_abs))
 
 
 def refactor_properties(
@@ -937,7 +966,7 @@ def refactor_properties(
     value_renames: list[dict[str, str]],
     deleted_properties: list[str],
     deleted_values: list[dict[str, str]],
-) -> dict[str, int]:
+) -> RefactorPropertiesResult:
     """Apply property/value rename and delete operations across workspace JSON.
 
     Parameters
@@ -955,8 +984,8 @@ def refactor_properties(
 
     Returns
     -------
-    dict[str, int]
-        Summary with `updatedFiles` count."""
+    RefactorPropertiesResult
+        Summary with the number of updated files."""
     prop_map: dict[str, str] = {r["oldName"]: r["newName"] for r in (property_renames or []) if r.get("oldName") and r.get("newName")}
     value_map: dict[str, dict[str, str]] = {}
     for v in value_renames or []:
@@ -1023,4 +1052,4 @@ def refactor_properties(
             atomic_write_json(abs_path, value, indent=4)
             updated += 1
 
-    return {"updatedFiles": updated}
+    return RefactorPropertiesResult(updatedFiles=updated)
