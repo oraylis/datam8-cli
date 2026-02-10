@@ -24,6 +24,7 @@ import rich
 import typer
 
 from .. import config, factory, opts, utils
+from ..core.paths import resolve_solution
 
 app = typer.Typer()
 
@@ -54,10 +55,11 @@ def command(
             raise typer.BadParameter("No solution specified. Use --solution/-s (or set DATAM8_SOLUTION_PATH).")
         solution_path = Path(candidate)
 
+    resolved = resolve_solution(str(solution_path))
     config.log_level = log_level
     config.lazy = False
-    config.solution_path = solution_path
-    config.solution_folder_path = solution_path.parent.absolute()
+    config.solution_path = resolved.solution_file
+    config.solution_folder_path = resolved.root_dir
 
     _ = factory.create_model()
 

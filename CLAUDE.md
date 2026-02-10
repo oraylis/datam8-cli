@@ -7,14 +7,13 @@ Quick context for AI/code agents in `datam8-generator`.
 `datam8-generator` is the canonical DataM8 v2 backend:
 - `datam8` CLI
 - `datam8 serve` FastAPI app
-- Jobs + SSE for long-running operations
+- synchronous HTTP operations (no Jobs/SSE layer)
 
 ## Canonical references
 
 - Agent rules: `AGENTS.md`
 - Backend contract: `docs/backend-contract.md`
 - Server details: `docs/server.md`
-- Jobs details: `docs/jobs.md`
 
 ## Testing
 

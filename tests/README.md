@@ -11,7 +11,7 @@ uv run pytest
 
 ## Solution path
 
-Model-centric and server/jobs tests require a solution path.
+Model-centric and server integration tests require a solution path.
 
 Set it via environment variable:
 

@@ -1,14 +1,32 @@
+# DataM8
+# Copyright (C) 2024-2025 ORAYLIS GmbH
+#
+# This file is part of DataM8.
+#
+# DataM8 is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# DataM8 is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 from __future__ import annotations
 
-import json
 import os
 import shutil
-import subprocess
-import sys
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 
-import httpx
+from fastapi.testclient import TestClient
+
+from datam8.api.app import create_app
 
 
 def _repo_root() -> Path:
@@ -22,84 +40,61 @@ def _fixture_plugins_dir() -> Path:
     return p
 
 
-def _spawn_server(*, token: str, plugin_dir: Path) -> tuple[subprocess.Popen[bytes], dict]:
-    repo_root = _repo_root()
-    env = {
-        **os.environ,
-        "PYTHONPATH": str(repo_root / "src"),
-        "DATAM8_JOB_CONCURRENCY": "1",
-        "DATAM8_PLUGIN_DIR": str(plugin_dir),
+@contextmanager
+def _client(*, token: str, plugin_dir: Path):
+    previous_tempdir = tempfile.tempdir
+    previous = {
+        "DATAM8_PLUGIN_DIR": os.environ.get("DATAM8_PLUGIN_DIR"),
+        "TMPDIR": os.environ.get("TMPDIR"),
+        "TMP": os.environ.get("TMP"),
+        "TEMP": os.environ.get("TEMP"),
     }
-    cmd = [
-        sys.executable,
-        "-m",
-        "datam8",
-        "serve",
-        "--host",
-        "127.0.0.1",
-        "--port",
-        "0",
-        "--token",
-        token,
-    ]
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
-    assert proc.stdout is not None
-    line = proc.stdout.readline().decode("utf-8", errors="replace").strip()
-    payload = json.loads(line)
-    assert payload["type"] == "ready"
-    return proc, payload
-
-
-def _terminate(proc: subprocess.Popen[bytes]) -> None:
+    os.environ["DATAM8_PLUGIN_DIR"] = str(plugin_dir)
+    temp_root = str(plugin_dir.parent)
+    os.environ["TMPDIR"] = temp_root
+    os.environ["TMP"] = temp_root
+    os.environ["TEMP"] = temp_root
+    tempfile.tempdir = temp_root
     try:
-        proc.terminate()
-    except Exception:
-        return
-    try:
-        proc.wait(timeout=10)
-    except Exception:
-        try:
-            proc.kill()
-        except Exception:
-            pass
+        app = create_app(token=token, enable_openapi=False)
+        with TestClient(app) as client:
+            yield client
+    finally:
+        tempfile.tempdir = previous_tempdir
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
 
 def test_connectors_endpoints_plugins_only() -> None:
     token = "test-token"
     fixture = _fixture_plugins_dir()
-    with tempfile.TemporaryDirectory() as td:
-        pd = Path(td) / "plugins"
-        shutil.copytree(fixture, pd)
+    with tempfile.TemporaryDirectory(dir=str(_repo_root())) as td:
+        plugin_dir = Path(td) / "plugins"
+        shutil.copytree(fixture, plugin_dir)
 
-        proc, ready = _spawn_server(token=token, plugin_dir=pd)
-        try:
-            base_url = ready["baseUrl"]
-            with httpx.Client(timeout=20.0) as client:
-                r = client.get(f"{base_url}/api/connectors", headers={"Authorization": f"Bearer {token}"})
-                r.raise_for_status()
-                data = r.json()
-                connectors = data.get("connectors") or []
-                assert any(c.get("id") == "test-conn" for c in connectors)
+        headers = {"Authorization": f"Bearer {token}"}
+        with _client(token=token, plugin_dir=plugin_dir) as client:
+            r = client.get("/connectors", headers=headers)
+            r.raise_for_status()
+            data = r.json()
+            connectors = data.get("connectors") or []
+            assert any(c.get("id") == "test-conn" for c in connectors)
 
-                r = client.get(
-                    f"{base_url}/api/connectors/test-conn/ui-schema",
-                    headers={"Authorization": f"Bearer {token}"},
-                )
-                r.raise_for_status()
-                schema = r.json()
-                assert schema.get("connectorId") == "test-conn"
-                assert schema.get("schema", {}).get("authModes")
+            r = client.get("/connectors/test-conn/ui-schema", headers=headers)
+            r.raise_for_status()
+            schema = r.json()
+            assert schema.get("connectorId") == "test-conn"
+            assert schema.get("schema", {}).get("authModes")
 
-                r = client.post(
-                    f"{base_url}/api/connectors/test-conn/validate-connection",
-                    headers={"Authorization": f"Bearer {token}"},
-                    json={"solutionPath": None, "extendedProperties": {"host": "localhost", "password": ""}},
-                )
-                r.raise_for_status()
-                out = r.json()
-                assert out.get("ok") is False
-                assert any(e.get("key") == "password" for e in out.get("errors") or [])
-
-        finally:
-            _terminate(proc)
-
+            r = client.post(
+                "/connectors/test-conn/validate-connection",
+                headers=headers,
+                json={"solutionPath": None, "extendedProperties": {"host": "localhost", "password": ""}},
+            )
+            r.raise_for_status()
+            out = r.json()
+            assert out.get("ok") is False
+            assert any(e.get("key") == "password" for e in out.get("errors") or [])

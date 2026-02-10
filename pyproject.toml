@@ -41,11 +41,6 @@ dev = [
   "hatchling == 1.27.0",
 ]
 
-[project.optional-dependencies]
-build = [
-  "pyinstaller==6.11.1",
-]
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

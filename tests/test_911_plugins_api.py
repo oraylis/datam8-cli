@@ -1,15 +1,33 @@
+# DataM8
+# Copyright (C) 2024-2025 ORAYLIS GmbH
+#
+# This file is part of DataM8.
+#
+# DataM8 is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# DataM8 is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 from __future__ import annotations
 
 import io
-import json
 import os
-import subprocess
-import sys
 import tempfile
 import zipfile
+from contextlib import contextmanager
 from pathlib import Path
 
-import httpx
+from fastapi.testclient import TestClient
+
+from datam8.api.app import create_app
 
 
 def _repo_root() -> Path:
@@ -35,46 +53,32 @@ def _build_fixture_zip() -> bytes:
     return buf.getvalue()
 
 
-def _spawn_server(*, token: str, plugin_dir: Path) -> tuple[subprocess.Popen[bytes], dict]:
-    repo_root = _repo_root()
-    env = {
-        **os.environ,
-        "PYTHONPATH": str(repo_root / "src"),
-        "DATAM8_JOB_CONCURRENCY": "1",
-        "DATAM8_PLUGIN_DIR": str(plugin_dir),
+@contextmanager
+def _client(*, token: str, plugin_dir: Path):
+    previous_tempdir = tempfile.tempdir
+    previous = {
+        "DATAM8_PLUGIN_DIR": os.environ.get("DATAM8_PLUGIN_DIR"),
+        "TMPDIR": os.environ.get("TMPDIR"),
+        "TMP": os.environ.get("TMP"),
+        "TEMP": os.environ.get("TEMP"),
     }
-    cmd = [
-        sys.executable,
-        "-m",
-        "datam8",
-        "serve",
-        "--host",
-        "127.0.0.1",
-        "--port",
-        "0",
-        "--token",
-        token,
-    ]
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
-    assert proc.stdout is not None
-    line = proc.stdout.readline().decode("utf-8", errors="replace").strip()
-    payload = json.loads(line)
-    assert payload["type"] == "ready"
-    return proc, payload
-
-
-def _terminate(proc: subprocess.Popen[bytes]) -> None:
+    os.environ["DATAM8_PLUGIN_DIR"] = str(plugin_dir)
+    temp_root = str(plugin_dir.parent)
+    os.environ["TMPDIR"] = temp_root
+    os.environ["TMP"] = temp_root
+    os.environ["TEMP"] = temp_root
+    tempfile.tempdir = temp_root
     try:
-        proc.terminate()
-    except Exception:
-        return
-    try:
-        proc.wait(timeout=10)
-    except Exception:
-        try:
-            proc.kill()
-        except Exception:
-            pass
+        app = create_app(token=token, enable_openapi=False)
+        with TestClient(app) as client:
+            yield client
+    finally:
+        tempfile.tempdir = previous_tempdir
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
 
 def _connector_ids(payload: dict) -> list[str]:
@@ -92,50 +96,44 @@ def test_plugins_api_install_enable_disable_uninstall() -> None:
     token = "test-token"
     zip_bytes = _build_fixture_zip()
 
-    with tempfile.TemporaryDirectory() as td:
+    with tempfile.TemporaryDirectory(dir=str(_repo_root())) as td:
         plugin_dir = Path(td) / "plugins"
         plugin_dir.mkdir(parents=True, exist_ok=True)
 
-        proc, ready = _spawn_server(token=token, plugin_dir=plugin_dir)
-        try:
-            base_url = ready["baseUrl"]
-            headers = {"Authorization": f"Bearer {token}"}
-            with httpx.Client(timeout=20.0) as client:
-                r = client.get(f"{base_url}/api/connectors", headers=headers)
-                r.raise_for_status()
-                assert "test-conn" not in _connector_ids(r.json())
+        headers = {"Authorization": f"Bearer {token}"}
+        with _client(token=token, plugin_dir=plugin_dir) as client:
+            r = client.get("/connectors", headers=headers)
+            r.raise_for_status()
+            assert "test-conn" not in _connector_ids(r.json())
 
-                r = client.post(
-                    f"{base_url}/api/plugins/install",
-                    headers={**headers, "Content-Type": "application/zip", "x-file-name": "test-conn.zip"},
-                    content=zip_bytes,
-                )
-                r.raise_for_status()
-                state = r.json()
-                ids = [p.get("id") for p in (state.get("plugins") or []) if isinstance(p, dict)]
-                assert "test-conn" in ids
+            r = client.post(
+                "/plugins/install",
+                headers={**headers, "Content-Type": "application/zip", "x-file-name": "test-conn.zip"},
+                content=zip_bytes,
+            )
+            r.raise_for_status()
+            state = r.json()
+            ids = [p.get("id") for p in (state.get("plugins") or []) if isinstance(p, dict)]
+            assert "test-conn" in ids
 
-                r = client.get(f"{base_url}/api/connectors", headers=headers)
-                r.raise_for_status()
-                assert "test-conn" in _connector_ids(r.json())
+            r = client.get("/connectors", headers=headers)
+            r.raise_for_status()
+            assert "test-conn" in _connector_ids(r.json())
 
-                r = client.post(f"{base_url}/api/plugins/disable", headers=headers, json={"id": "test-conn"})
-                r.raise_for_status()
-                r = client.get(f"{base_url}/api/connectors", headers=headers)
-                r.raise_for_status()
-                assert "test-conn" not in _connector_ids(r.json())
+            r = client.post("/plugins/disable", headers=headers, json={"id": "test-conn"})
+            r.raise_for_status()
+            r = client.get("/connectors", headers=headers)
+            r.raise_for_status()
+            assert "test-conn" not in _connector_ids(r.json())
 
-                r = client.post(f"{base_url}/api/plugins/enable", headers=headers, json={"id": "test-conn"})
-                r.raise_for_status()
-                r = client.get(f"{base_url}/api/connectors", headers=headers)
-                r.raise_for_status()
-                assert "test-conn" in _connector_ids(r.json())
+            r = client.post("/plugins/enable", headers=headers, json={"id": "test-conn"})
+            r.raise_for_status()
+            r = client.get("/connectors", headers=headers)
+            r.raise_for_status()
+            assert "test-conn" in _connector_ids(r.json())
 
-                r = client.post(f"{base_url}/api/plugins/uninstall", headers=headers, json={"id": "test-conn"})
-                r.raise_for_status()
-                r = client.get(f"{base_url}/api/connectors", headers=headers)
-                r.raise_for_status()
-                assert "test-conn" not in _connector_ids(r.json())
-
-        finally:
-            _terminate(proc)
+            r = client.post("/plugins/uninstall", headers=headers, json={"id": "test-conn"})
+            r.raise_for_status()
+            r = client.get("/connectors", headers=headers)
+            r.raise_for_status()
+            assert "test-conn" not in _connector_ids(r.json())

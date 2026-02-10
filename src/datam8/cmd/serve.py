@@ -30,7 +30,7 @@ import uvicorn
 
 from datam8 import utils
 from datam8.api.app import create_app
-from datam8.core.jobs.manager import JobManager
+from datam8.core.paths import resolve_solution
 from datam8.core.version import get_version
 
 app = typer.Typer()
@@ -75,26 +75,20 @@ def command(
             solution_path = Path(candidate)
 
     if solution_path is not None:
-        os.environ["DATAM8_SOLUTION_PATH"] = str(solution_path)
+        os.environ["DATAM8_SOLUTION_PATH"] = str(resolve_solution(str(solution_path)).solution_file)
 
     sock, actual_port = _bind(host, port)
     base_url = f"http://{host}:{actual_port}"
 
-    jm = JobManager(max_concurrency=int(os.environ.get("DATAM8_JOB_CONCURRENCY") or "2"))
-    api = create_app(token=token.strip(), enable_openapi=openapi, job_manager=jm)
+    api = create_app(token=token.strip(), enable_openapi=openapi)
 
     ready_payload = {"type": "ready", "baseUrl": base_url, "version": get_version()}
     ready_line = json.dumps(ready_payload, separators=(",", ":"))
 
     @api.on_event("startup")
     async def _emit_ready() -> None:
-        await jm.start()
         sys.stdout.write(ready_line + "\n")
         sys.stdout.flush()
-
-    @api.on_event("shutdown")
-    async def _stop_jobs() -> None:
-        await jm.stop()
 
     config = uvicorn.Config(
         api,

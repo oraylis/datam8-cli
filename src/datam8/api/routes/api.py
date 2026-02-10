@@ -1,3 +1,20 @@
+# DataM8
+# Copyright (C) 2024-2025 ORAYLIS GmbH
+#
+# This file is part of DataM8.
+#
+# DataM8 is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# DataM8 is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
 from __future__ import annotations
 
 import os
@@ -5,9 +22,12 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Query, Request, Response
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
+from datam8.cmd.generate import GenerateResult, run_generation
 from datam8.core.connectors.plugin_host import (
+    discover_connectors,
     get_connector,
     load_ui_schema,
     validate_connection,
@@ -68,18 +88,12 @@ from datam8.core.workspace_io import (
 
 router = APIRouter()
 
-PLUGIN_DIR = Path(os.environ.get("DATAM8_PLUGIN_DIR") or str(default_plugin_dir()))
-_plugin_state: dict[str, Any] = {"pluginDir": str(PLUGIN_DIR), "plugins": [], "errors": {}}
-_plugins_loaded: bool = False
 
-
-def _ensure_plugins_loaded() -> None:
-    global _plugin_state, _plugins_loaded
-    if _plugins_loaded:
-        return
-    _plugin_state = reload_plugins(PLUGIN_DIR)
-    _plugins_loaded = True
-
+def _plugin_dir() -> Path:
+    configured = os.environ.get("DATAM8_PLUGIN_DIR")
+    if configured and configured.strip():
+        return Path(configured)
+    return default_plugin_dir()
 def _lock_timeout_seconds(body: Any) -> float:
     try:
         v = body.get("lockTimeout")
@@ -90,18 +104,14 @@ def _lock_timeout_seconds(body: Any) -> float:
     return parse_duration_seconds("10s")
 
 
-@router.get("/api/health")
-async def health() -> dict[str, str]:
-    return {"status": "ok"}
 
-
-@router.get("/api/config")
+@router.get("/config")
 async def config() -> dict[str, Any]:
     # Minimal shape used by the web UI.
     return {"mode": os.environ.get("DATAM8_MODE") or "server"}
 
 
-@router.get("/api/solution/inspect")
+@router.get("/solution/inspect")
 async def solution_inspect(path: str = Query(...)) -> dict[str, str]:
     return {"version": detect_solution_version(path)}
 
@@ -112,7 +122,7 @@ class MigrateV1ToV2Body(BaseModel):
     options: dict[str, Any] | None = None
 
 
-@router.post("/api/migration/v1-to-v2")
+@router.post("/migration/v1-to-v2")
 async def migration_v1_to_v2(body: MigrateV1ToV2Body) -> dict[str, Any]:
     args: dict[str, Any] = {"sourceSolutionPath": body.sourceSolutionPath, "targetDir": body.targetDir}
     if body.options is not None:
@@ -120,13 +130,13 @@ async def migration_v1_to_v2(body: MigrateV1ToV2Body) -> dict[str, Any]:
     return migrate_solution_v1_to_v2(args)
 
 
-@router.get("/api/solution")
+@router.get("/solution")
 async def solution(path: str | None = Query(None)) -> dict[str, Any]:
     _resolved, sol = read_solution(path)
     return {"solution": sol.model_dump(), "resolvedPaths": {"base": sol.basePath, "model": sol.modelPath}}
 
 
-@router.get("/api/solution/full")
+@router.get("/solution/full")
 async def solution_full(path: str | None = Query(None)) -> dict[str, Any]:
     _resolved, sol = read_solution(path)
     base_entities = [e.__dict__ for e in list_base_entities(path)]
@@ -142,7 +152,7 @@ class NewProjectBody(BaseModel):
     target: str
 
 
-@router.post("/api/solution/new-project")
+@router.post("/solution/new-project")
 async def solution_new_project(body: NewProjectBody) -> dict[str, str]:
     solution_path = create_new_project(
         solution_name=body.solutionName,
@@ -154,7 +164,7 @@ async def solution_new_project(body: NewProjectBody) -> dict[str, str]:
     return {"solutionPath": solution_path}
 
 
-@router.get("/api/model/entities")
+@router.get("/model/entities")
 async def model_entities(path: str | None = Query(None)) -> dict[str, Any]:
     entities = [e.__dict__ for e in list_model_entities(path)]
     return {"count": len(entities), "entities": entities}
@@ -168,7 +178,7 @@ class SaveEntityBody(BaseModel):
     noLock: bool | None = None
 
 
-@router.post("/api/model/entities")
+@router.post("/model/entities")
 async def model_entities_save(body: SaveEntityBody) -> dict[str, Any]:
     resolved, _sol = read_solution(body.solutionPath)
     if body.noLock:
@@ -186,7 +196,7 @@ class DeleteEntityBody(BaseModel):
     noLock: bool | None = None
 
 
-@router.delete("/api/model/entities")
+@router.delete("/model/entities")
 async def model_entities_delete(body: DeleteEntityBody) -> dict[str, Any]:
     resolved, _sol = read_solution(body.solutionPath)
     if body.noLock:
@@ -205,7 +215,7 @@ class MoveEntityBody(BaseModel):
     noLock: bool | None = None
 
 
-@router.post("/api/model/entities/move")
+@router.post("/model/entities/move")
 async def model_entities_move(body: MoveEntityBody) -> dict[str, Any]:
     resolved, _sol = read_solution(body.solutionPath)
     if body.noLock:
@@ -224,7 +234,7 @@ class RenameFolderBody(BaseModel):
     noLock: bool | None = None
 
 
-@router.post("/api/model/folder/rename")
+@router.post("/model/folder/rename")
 async def model_folder_rename(body: RenameFolderBody) -> dict[str, Any]:
     resolved, _sol = read_solution(body.solutionPath)
     if body.noLock:
@@ -249,7 +259,7 @@ class RefactorPropertiesBody(BaseModel):
     noLock: bool | None = None
 
 
-@router.post("/api/refactor/properties")
+@router.post("/refactor/properties")
 async def refactor_properties_route(body: RefactorPropertiesBody) -> dict[str, Any]:
     resolved, _sol = read_solution(body.solutionPath)
     if body.noLock:
@@ -272,7 +282,7 @@ async def refactor_properties_route(body: RefactorPropertiesBody) -> dict[str, A
     return {"message": "refactored", **result}
 
 
-@router.post("/api/index/regenerate")
+@router.post("/index/regenerate")
 async def index_regenerate(body: dict[str, Any]) -> dict[str, Any]:
     solution_path = body.get("solutionPath")
     resolved, _sol = read_solution(solution_path)
@@ -284,32 +294,46 @@ async def index_regenerate(body: dict[str, Any]) -> dict[str, Any]:
     return {"message": "index regenerated", "index": index}
 
 
-@router.get("/api/index/show")
+@router.get("/index/show")
 async def index_show(path: str | None = Query(None)) -> dict[str, Any]:
     return {"index": read_index(path)}
 
 
-@router.get("/api/index/validate")
+@router.get("/index/validate")
 async def index_validate_route(path: str | None = Query(None)) -> dict[str, Any]:
     return {"report": validate_index(path)}
 
 
-@router.post("/api/generator/run")
-async def generator_run(body: dict[str, Any]) -> dict[str, Any]:
-    raise Datam8NotImplementedError(
-        message="Generator runs are Jobs-only. Use POST /jobs with type 'generate'.",
-        details={"deprecatedEndpoint": "/api/generator/run"},
-        hint="Create a job via POST /jobs and subscribe via GET /jobs/{jobId}/events.",
+class GenerateBody(BaseModel):
+    solutionPath: str
+    target: str
+    logLevel: str | None = None
+    cleanOutput: bool | None = None
+    payloads: list[str] | None = None
+    lazy: bool | None = None
+
+
+@router.post("/generate", response_model=GenerateResult)
+async def generator_run(body: GenerateBody) -> GenerateResult:
+    return await run_in_threadpool(
+        run_generation,
+        solution_path=Path(body.solutionPath),
+        target=body.target,
+        log_level=body.logLevel or "info",
+        clean_output=bool(body.cleanOutput),
+        payloads=body.payloads or [],
+        generate_all=False,
+        lazy=bool(body.lazy),
     )
 
 
-@router.get("/api/base/entities")
+@router.get("/base/entities")
 async def base_entities(path: str | None = Query(None)) -> dict[str, Any]:
     entities = [e.__dict__ for e in list_base_entities(path)]
     return {"count": len(entities), "entities": entities}
 
 
-@router.post("/api/base/entities")
+@router.post("/base/entities")
 async def base_entities_save(body: SaveEntityBody) -> dict[str, Any]:
     resolved, _sol = read_solution(body.solutionPath)
     if body.noLock:
@@ -320,7 +344,7 @@ async def base_entities_save(body: SaveEntityBody) -> dict[str, Any]:
     return {"message": "saved", "absPath": abs_path}
 
 
-@router.delete("/api/base/entities")
+@router.delete("/base/entities")
 async def base_entities_delete(body: DeleteEntityBody) -> dict[str, Any]:
     resolved, _sol = read_solution(body.solutionPath)
     if body.noLock:
@@ -331,12 +355,12 @@ async def base_entities_delete(body: DeleteEntityBody) -> dict[str, Any]:
     return {"message": "deleted", "absPath": abs_path}
 
 
-@router.get("/api/fs/list")
+@router.get("/fs/list")
 async def fs_list(path: str | None = Query(None)) -> dict[str, Any]:
     return {"entries": list_directory(path)}
 
 
-@router.get("/api/model/function/source")
+@router.get("/model/function/source")
 async def model_function_source_get(
     relPath: str = Query(""),
     source: str = Query(""),
@@ -355,7 +379,7 @@ class FunctionSourceSaveBody(BaseModel):
     solutionPath: str | None = None
 
 
-@router.post("/api/model/function/source")
+@router.post("/model/function/source")
 async def model_function_source_save(body: FunctionSourceSaveBody) -> dict[str, Any]:
     resolved, _sol = read_solution(body.solutionPath)
     with SolutionLock(resolved.root_dir / ".datam8.lock", timeout_seconds=parse_duration_seconds("10s")):
@@ -371,7 +395,7 @@ class FunctionSourceRenameBody(BaseModel):
     solutionPath: str | None = None
 
 
-@router.post("/api/model/function/rename")
+@router.post("/model/function/rename")
 async def model_function_source_rename(body: FunctionSourceRenameBody) -> dict[str, Any]:
     resolved, _sol = read_solution(body.solutionPath)
     with SolutionLock(resolved.root_dir / ".datam8.lock", timeout_seconds=parse_duration_seconds("10s")):
@@ -379,13 +403,13 @@ async def model_function_source_rename(body: FunctionSourceRenameBody) -> dict[s
     return {"message": "renamed", **result}
 
 
-@router.get("/api/script/list")
+@router.get("/script/list")
 async def script_list(path: str = Query(...), solutionPath: str | None = Query(None)) -> dict[str, Any]:
     scripts = list_function_sources(path, solutionPath, None, include_unreferenced=True)
     return {"count": len(scripts), "scripts": scripts}
 
 
-@router.delete("/api/script/delete")
+@router.delete("/script/delete")
 async def script_delete(
     path: str = Query(...),
     source: str = Query(...),
@@ -397,12 +421,12 @@ async def script_delete(
     return {"message": "deleted", "absPath": abs_path}
 
 
-@router.get("/api/search/entities")
+@router.get("/search/entities")
 async def search_entities_route(q: str = Query(...), path: str | None = Query(None)) -> dict[str, Any]:
     return search_entities(solution_path=path, query=q)
 
 
-@router.get("/api/search/text")
+@router.get("/search/text")
 async def search_text_route(q: str = Query(...), path: str | None = Query(None)) -> dict[str, Any]:
     return search_text(solution_path=path, pattern=q)
 
@@ -413,7 +437,7 @@ class RefactorKeysBody(BaseModel):
     apply: bool = False
 
 
-@router.post("/api/refactor/keys")
+@router.post("/refactor/keys")
 async def refactor_keys_route(body: RefactorKeysBody) -> dict[str, Any]:
     resolved, _sol = read_solution(body.solutionPath)
     if body.apply:
@@ -432,7 +456,7 @@ class RefactorValuesBody(BaseModel):
     apply: bool = False
 
 
-@router.post("/api/refactor/values")
+@router.post("/refactor/values")
 async def refactor_values_route(body: RefactorValuesBody) -> dict[str, Any]:
     resolved, _sol = read_solution(body.solutionPath)
     if body.apply:
@@ -450,7 +474,7 @@ class RefactorEntityIdBody(BaseModel):
     apply: bool = False
 
 
-@router.post("/api/refactor/entity-id")
+@router.post("/refactor/entity-id")
 async def refactor_entity_id_route(body: RefactorEntityIdBody) -> dict[str, Any]:
     resolved, _sol = read_solution(body.solutionPath)
     if body.apply:
@@ -464,18 +488,15 @@ async def refactor_entity_id_route(body: RefactorEntityIdBody) -> dict[str, Any]
 # ---- Connectors + Plugins (Phase 2) ----
 
 
-@router.get("/api/connectors")
+@router.get("/connectors")
 async def connectors() -> dict[str, Any]:
-    # Plugins only (Option 3): scan DATAM8_PLUGIN_DIR/connectors/*
-    from datam8.core.connectors.plugin_host import discover_connectors
-
-    connectors, _errors = discover_connectors(plugin_dir=PLUGIN_DIR)
+    connectors, _errors = discover_connectors(plugin_dir=_plugin_dir())
     return {"connectors": [c.to_summary() for c in connectors]}
 
 
-@router.get("/api/connectors/{connectorId}/ui-schema")
+@router.get("/connectors/{connectorId}/ui-schema")
 async def connector_ui_schema(connectorId: str) -> dict[str, Any]:
-    plugin = get_connector(plugin_dir=PLUGIN_DIR, connector_id=connectorId)
+    plugin = get_connector(plugin_dir=_plugin_dir(), connector_id=connectorId)
     schema = load_ui_schema(plugin=plugin)
     return {"connectorId": plugin.id, "version": plugin.version, "schema": schema}
 
@@ -486,9 +507,9 @@ class ValidateConnectionBody(BaseModel):
     runtimeSecrets: dict[str, str] | None = None
 
 
-@router.post("/api/connectors/{connectorId}/validate-connection")
+@router.post("/connectors/{connectorId}/validate-connection")
 async def connector_validate_connection(connectorId: str, body: ValidateConnectionBody) -> dict[str, Any]:
-    plugin = get_connector(plugin_dir=PLUGIN_DIR, connector_id=connectorId)
+    plugin = get_connector(plugin_dir=_plugin_dir(), connector_id=connectorId)
     return validate_connection(
         plugin=plugin,
         solution_path=body.solutionPath,
@@ -497,40 +518,32 @@ async def connector_validate_connection(connectorId: str, body: ValidateConnecti
     )
 
 
-@router.get("/api/plugins")
+@router.get("/plugins")
 async def plugins_state() -> dict[str, Any]:
-    _ensure_plugins_loaded()
-    return _plugin_state
+    return reload_plugins(_plugin_dir())
 
 
-@router.post("/api/plugins/reload")
+@router.post("/plugins/reload")
 async def plugins_reload() -> dict[str, Any]:
-    global _plugin_state, _plugins_loaded
-    _plugin_state = reload_plugins(PLUGIN_DIR)
-    _plugins_loaded = True
-    return _plugin_state
+    return reload_plugins(_plugin_dir())
 
 
-@router.post("/api/plugins/install")
+@router.post("/plugins/install")
 async def plugins_install(req: Request) -> dict[str, Any]:
-    global _plugin_state, _plugins_loaded
+    plugin_dir = _plugin_dir()
     content_type = (req.headers.get("content-type") or "").lower()
     if "application/zip" in content_type:
         zip_bytes = await req.body()
         file_name = req.headers.get("x-file-name")
-        install_zip(plugin_dir=PLUGIN_DIR, zip_bytes=zip_bytes, file_name=file_name)
-        _plugin_state = reload_plugins(PLUGIN_DIR)
-        _plugins_loaded = True
-        return _plugin_state
+        install_zip(plugin_dir=plugin_dir, zip_bytes=zip_bytes, file_name=file_name)
+        return reload_plugins(plugin_dir)
     if "application/json" in content_type:
         body = await req.json()
         git_url = body.get("gitUrl") if isinstance(body, dict) else None
         if not isinstance(git_url, str) or not git_url.strip():
             raise Datam8ValidationError(message="gitUrl is required.", details=None)
-        install_git_url(plugin_dir=PLUGIN_DIR, git_url=git_url)
-        _plugin_state = reload_plugins(PLUGIN_DIR)
-        _plugins_loaded = True
-        return _plugin_state
+        install_git_url(plugin_dir=plugin_dir, git_url=git_url)
+        return reload_plugins(plugin_dir)
     raise Datam8NotImplementedError(message="Only ZIP or GitHub gitUrl plugin installation is supported.")
 
 
@@ -538,31 +551,25 @@ class PluginIdBody(BaseModel):
     id: str
 
 
-@router.post("/api/plugins/enable")
+@router.post("/plugins/enable")
 async def plugins_enable(body: PluginIdBody) -> dict[str, Any]:
-    global _plugin_state, _plugins_loaded
-    set_enabled(PLUGIN_DIR, body.id, True)
-    _plugin_state = reload_plugins(PLUGIN_DIR)
-    _plugins_loaded = True
-    return _plugin_state
+    plugin_dir = _plugin_dir()
+    set_enabled(plugin_dir, body.id, True)
+    return reload_plugins(plugin_dir)
 
 
-@router.post("/api/plugins/disable")
+@router.post("/plugins/disable")
 async def plugins_disable(body: PluginIdBody) -> dict[str, Any]:
-    global _plugin_state, _plugins_loaded
-    set_enabled(PLUGIN_DIR, body.id, False)
-    _plugin_state = reload_plugins(PLUGIN_DIR)
-    _plugins_loaded = True
-    return _plugin_state
+    plugin_dir = _plugin_dir()
+    set_enabled(plugin_dir, body.id, False)
+    return reload_plugins(plugin_dir)
 
 
-@router.post("/api/plugins/uninstall")
+@router.post("/plugins/uninstall")
 async def plugins_uninstall(body: PluginIdBody) -> dict[str, Any]:
-    global _plugin_state, _plugins_loaded
-    uninstall(PLUGIN_DIR, body.id)
-    _plugin_state = reload_plugins(PLUGIN_DIR)
-    _plugins_loaded = True
-    return _plugin_state
+    plugin_dir = _plugin_dir()
+    uninstall(plugin_dir, body.id)
+    return reload_plugins(plugin_dir)
 
 
 # --- Datasource metadata routes (wizard + base editor) ---
@@ -573,7 +580,7 @@ class DataSourceAuthBody(BaseModel):
     runtimeSecrets: dict[str, str] | None = None
 
 
-@router.post("/api/datasources/{dataSourceId}/list-tables")
+@router.post("/datasources/{dataSourceId}/list-tables")
 async def datasources_list_tables(dataSourceId: str, body: DataSourceAuthBody) -> dict[str, Any]:
     stored = get_runtime_secrets_map(solution_path=body.solutionPath, data_source_name=dataSourceId, include_values=True)
     merged = {**stored, **(body.runtimeSecrets or {})}
@@ -583,30 +590,12 @@ async def datasources_list_tables(dataSourceId: str, body: DataSourceAuthBody) -
     tables = connector_cls.list_tables(cfg, resolver)  # type: ignore[attr-defined]
     return {"tables": tables}
 
-
-# Legacy compatibility (UI wizard): /api/sources/:name/tables
-class ListSourceTablesBody(BaseModel):
-    solutionPath: str | None = None
-    runtimeSecrets: dict[str, str] | None = None
-
-
-@router.post("/api/sources/{name}/tables")
-async def sources_tables(name: str, body: ListSourceTablesBody) -> dict[str, Any]:
-    stored = get_runtime_secrets_map(solution_path=body.solutionPath, data_source_name=name, include_values=True)
-    merged = {**stored, **(body.runtimeSecrets or {})}
-    connector_cls, manifest, cfg, resolver = resolve_and_validate(solution_path=body.solutionPath, data_source_id=name, runtime_secrets=merged)
-    if not hasattr(connector_cls, "list_tables"):
-        raise Datam8ValidationError(message=f"Connector '{manifest.get('id')}' does not support table listing.", details=None)
-    tables = connector_cls.list_tables(cfg, resolver)  # type: ignore[attr-defined]
-    return {"tables": tables}
-
-
 class TableMetadataBody(DataSourceAuthBody):
     schema_: str = Field(alias="schema")
     table: str
 
 
-@router.post("/api/datasources/{dataSourceId}/table-metadata")
+@router.post("/datasources/{dataSourceId}/table-metadata")
 async def datasources_table_metadata(dataSourceId: str, body: TableMetadataBody) -> dict[str, Any]:
     stored = get_runtime_secrets_map(solution_path=body.solutionPath, data_source_name=dataSourceId, include_values=True)
     merged = {**stored, **(body.runtimeSecrets or {})}
@@ -621,7 +610,7 @@ class HttpVirtualTableBody(DataSourceAuthBody):
     sourceLocation: str
 
 
-@router.post("/api/http/datasources/{dataSourceId}/virtual-table-metadata")
+@router.post("/http/datasources/{dataSourceId}/virtual-table-metadata")
 async def http_virtual_table_metadata(dataSourceId: str, body: HttpVirtualTableBody) -> dict[str, Any]:
     stored = get_runtime_secrets_map(solution_path=body.solutionPath, data_source_name=dataSourceId, include_values=True)
     merged = {**stored, **(body.runtimeSecrets or {})}
@@ -637,7 +626,7 @@ async def http_virtual_table_metadata(dataSourceId: str, body: HttpVirtualTableB
     return {"metadata": connector_cls.get_table_metadata(cfg, resolver, "api", src)}  # type: ignore[attr-defined]
 
 
-@router.get("/api/datasources/{dataSourceId}/usages")
+@router.get("/datasources/{dataSourceId}/usages")
 async def datasources_usages(dataSourceId: str, path: str | None = Query(None, alias="path")) -> dict[str, Any]:
     usages = find_data_source_usages(path, dataSourceId)
     return {"usages": usages}
@@ -649,7 +638,7 @@ class RefreshPreviewBody(BaseModel):
     runtimeSecrets: dict[str, str] | None = None
 
 
-@router.post("/api/datasources/{dataSourceId}/refresh-external-schemas/preview")
+@router.post("/datasources/{dataSourceId}/refresh-external-schemas/preview")
 async def datasources_refresh_preview(dataSourceId: str, body: RefreshPreviewBody) -> dict[str, Any]:
     stored = get_runtime_secrets_map(solution_path=body.solutionPath, data_source_name=dataSourceId, include_values=True)
     merged = {**stored, **(body.runtimeSecrets or {})}
@@ -673,7 +662,7 @@ class RefreshApplyBody(BaseModel):
     noLock: bool | None = None
 
 
-@router.post("/api/datasources/{dataSourceId}/refresh-external-schemas/apply")
+@router.post("/datasources/{dataSourceId}/refresh-external-schemas/apply")
 async def datasources_refresh_apply(dataSourceId: str, body: RefreshApplyBody) -> dict[str, Any]:
     stored = get_runtime_secrets_map(solution_path=body.solutionPath, data_source_name=dataSourceId, include_values=True)
     merged = {**stored, **(body.runtimeSecrets or {})}
@@ -686,12 +675,12 @@ async def datasources_refresh_apply(dataSourceId: str, body: RefreshApplyBody) -
     return {"updatedEntities": updated_entities}
 
 
-@router.get("/api/secrets/available")
+@router.get("/secrets/available")
 async def secrets_available() -> dict[str, Any]:
     return {"available": bool(is_keyring_available())}
 
 
-@router.get("/api/secrets/runtime")
+@router.get("/secrets/runtime")
 async def secrets_runtime_get(
     solutionPath: str | None = Query(None),
     dataSourceName: str = Query(...),
@@ -713,7 +702,7 @@ class SecretsRuntimePutBody(BaseModel):
     runtimeSecrets: dict[str, str]
 
 
-@router.put("/api/secrets/runtime")
+@router.put("/secrets/runtime")
 async def secrets_runtime_put(body: SecretsRuntimePutBody) -> Response:
     if not is_keyring_available():
         raise Datam8ValidationError(message="Secure secret storage is not available in this mode.", details=None)
@@ -731,7 +720,7 @@ class SecretsRuntimeDeleteBody(BaseModel):
     dataSourceName: str
 
 
-@router.delete("/api/secrets/runtime")
+@router.delete("/secrets/runtime")
 async def secrets_runtime_delete(body: SecretsRuntimeDeleteBody) -> Response:
     if not is_keyring_available():
         return Response(status_code=204)
@@ -752,7 +741,7 @@ class SecretsRuntimeDeleteKeyBody(BaseModel):
     key: str
 
 
-@router.delete("/api/secrets/runtime/key")
+@router.delete("/secrets/runtime/key")
 async def secrets_runtime_delete_key(body: SecretsRuntimeDeleteKeyBody) -> Response:
     if not is_keyring_available():
         return Response(status_code=204)
@@ -764,3 +753,5 @@ async def secrets_runtime_delete_key(body: SecretsRuntimeDeleteKeyBody) -> Respo
     except Exception:
         return Response(status_code=204)
     return Response(status_code=204)
+
+
