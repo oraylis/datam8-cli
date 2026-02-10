@@ -63,13 +63,18 @@ def command(
         envvar="DATAM8_SOLUTION_PATH",
     ),
     openapi: bool = typer.Option(False, "--openapi"),
-    log_level: str = typer.Option("info", "--log-level"),
+    log_level: str | None = typer.Option(
+        None,
+        "--log-level",
+        help="Server log level (defaults to global --log-level or DATAM8_LOG_LEVEL).",
+        envvar="DATAM8_LOG_LEVEL",
+    ),
 ):
     """Starts the DataM8 HTTP backend (desktop-safe)."""
     if not token or not token.strip():
         raise typer.BadParameter("--token is required.")
+    parent_obj = getattr(ctx, "obj", None)
     if solution_path is None:
-        parent_obj = getattr(ctx, "obj", None)
         candidate = getattr(parent_obj, "solution", None) if parent_obj is not None else None
         if isinstance(candidate, str) and candidate.strip():
             solution_path = Path(candidate)
@@ -90,11 +95,19 @@ def command(
         sys.stdout.write(ready_line + "\n")
         sys.stdout.flush()
 
+    effective_log_level = log_level
+    if not isinstance(effective_log_level, str) or not effective_log_level.strip():
+        parent_level = getattr(parent_obj, "log_level", None) if parent_obj is not None else None
+        if isinstance(parent_level, str) and parent_level.strip():
+            effective_log_level = parent_level.strip()
+        else:
+            effective_log_level = "info"
+
     config = uvicorn.Config(
         api,
         host=host,
         port=actual_port,
-        log_level=log_level,
+        log_level=effective_log_level,
         access_log=False,
     )
     server = uvicorn.Server(config)

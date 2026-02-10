@@ -148,15 +148,21 @@ def command(
         envvar="DATAM8_SOLUTION_PATH",
     ),
     target: opts.GeneratorTarget = config.target,
-    log_level: opts.LogLevel = opts.LogLevels.WARNING,
+    log_level: str | None = typer.Option(
+        None,
+        "--log-level",
+        "-l",
+        help="Set log level (defaults to global --log-level or DATAM8_LOG_LEVEL).",
+        envvar="DATAM8_LOG_LEVEL",
+    ),
     clean_output: opts.CleanOutput = False,
     payloads: opts.Payload = [],
     generate_all: opts.AllTargets = False,
     lazy: opts.Lazy = False,
 ):
     """Generate a jinja2 template configured in the solution file."""
+    parent_obj = getattr(ctx, "obj", None)
     if solution_path is None:
-        parent_obj = getattr(ctx, "obj", None)
         candidate = getattr(parent_obj, "solution", None) if parent_obj is not None else None
         if not isinstance(candidate, str) or not candidate.strip():
             candidate = os.environ.get("DATAM8_SOLUTION_PATH")
@@ -164,11 +170,19 @@ def command(
             raise typer.BadParameter("No solution specified. Use --solution/-s (or set DATAM8_SOLUTION_PATH).")
         solution_path = Path(candidate)
 
+    effective_log_level = log_level
+    if not isinstance(effective_log_level, str) or not effective_log_level.strip():
+        parent_level = getattr(parent_obj, "log_level", None) if parent_obj is not None else None
+        if isinstance(parent_level, str) and parent_level.strip():
+            effective_log_level = parent_level.strip()
+        else:
+            effective_log_level = opts.LogLevels.WARNING.value
+
     try:
         _ = run_generation(
             solution_path=solution_path,
             target=target,
-            log_level=log_level,
+            log_level=effective_log_level,
             clean_output=clean_output,
             payloads=payloads,
             generate_all=generate_all,

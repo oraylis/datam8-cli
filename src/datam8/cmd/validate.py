@@ -43,11 +43,17 @@ def command(
         help="Path to .dm8s solution file (or folder containing exactly one .dm8s file).",
         envvar="DATAM8_SOLUTION_PATH",
     ),
-    log_level: opts.LogLevel = opts.LogLevels.WARNING,
+    log_level: str | None = typer.Option(
+        None,
+        "--log-level",
+        "-l",
+        help="Set log level (defaults to global --log-level or DATAM8_LOG_LEVEL).",
+        envvar="DATAM8_LOG_LEVEL",
+    ),
 ):
     """Validate solution model."""
+    parent_obj = getattr(ctx, "obj", None)
     if solution_path is None:
-        parent_obj = getattr(ctx, "obj", None)
         candidate = getattr(parent_obj, "solution", None) if parent_obj is not None else None
         if not isinstance(candidate, str) or not candidate.strip():
             candidate = os.environ.get("DATAM8_SOLUTION_PATH")
@@ -55,8 +61,19 @@ def command(
             raise typer.BadParameter("No solution specified. Use --solution/-s (or set DATAM8_SOLUTION_PATH).")
         solution_path = Path(candidate)
 
+    effective_log_level = log_level
+    if not isinstance(effective_log_level, str) or not effective_log_level.strip():
+        parent_level = getattr(parent_obj, "log_level", None) if parent_obj is not None else None
+        if isinstance(parent_level, str) and parent_level.strip():
+            effective_log_level = parent_level.strip()
+        else:
+            effective_log_level = opts.LogLevels.WARNING.value
+
     resolved = resolve_solution(str(solution_path))
-    config.log_level = log_level
+    try:
+        config.log_level = opts.LogLevels(effective_log_level.strip().lower())
+    except Exception:
+        config.log_level = opts.LogLevels.WARNING
     config.lazy = False
     config.solution_path = resolved.solution_file
     config.solution_folder_path = resolved.root_dir
