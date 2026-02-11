@@ -21,10 +21,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from fastapi.testclient import TestClient
+from pytest_cases import parametrize_with_cases
 
-from datam8.api.app import create_app
 from datam8.core import workspace_io
+from test_080_workspace_io_cases import CasesWorkspaceIo
 
 
 def _write_json(path: Path, payload: dict) -> None:
@@ -32,12 +32,12 @@ def _write_json(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
-def _create_solution(tmp_path: Path) -> tuple[Path, str, str]:
+def _create_solution(
+    tmp_path: Path,
+    old_folder_rel: str,
+) -> Path:
     base = tmp_path / "Base"
-    old_folder = tmp_path / "Model" / "010-Stage" / "Old"
-    new_folder_rel = "Model/010-Stage/New"
-    old_folder_rel = "Model/010-Stage/Old"
-    old_entity = old_folder / "Customer.json"
+    old_entity = tmp_path / Path(old_folder_rel) / "Customer.json"
 
     _write_json(base / "DataProducts.json", {"type": "dataProducts", "dataProducts": []})
     _write_json(
@@ -60,11 +60,11 @@ def _create_solution(tmp_path: Path) -> tuple[Path, str, str]:
             ],
         },
     )
-    return tmp_path / "TestSolution.dm8s", old_folder_rel, new_folder_rel
+    return tmp_path / "TestSolution.dm8s"
 
 
 def test_regenerate_index_with_entities_matches_regenerate_index(tmp_path: Path) -> None:
-    solution_path, _, _ = _create_solution(tmp_path)
+    solution_path = _create_solution(tmp_path, "Model/010-Stage/Old")
 
     index_only = workspace_io.regenerate_index(str(solution_path))
     index_with_entities, entities = workspace_io.regenerate_index_with_entities(str(solution_path))
@@ -74,8 +74,13 @@ def test_regenerate_index_with_entities_matches_regenerate_index(tmp_path: Path)
     assert entities[0].name == "Customer"
 
 
-def test_model_folder_rename_uses_single_model_entity_scan(monkeypatch, tmp_path: Path) -> None:
-    solution_path, old_folder_rel, new_folder_rel = _create_solution(tmp_path)
+@parametrize_with_cases(
+    "case_data",
+    cases=CasesWorkspaceIo,
+)
+def test_model_folder_rename_uses_single_model_entity_scan(case_data, monkeypatch, tmp_path: Path, api_client) -> None:
+    old_folder_rel, new_folder_rel, expected_entity_count = case_data
+    solution_path = _create_solution(tmp_path, old_folder_rel)
     token = "scan-opt-token"
 
     original = workspace_io.list_model_entities
@@ -87,8 +92,7 @@ def test_model_folder_rename_uses_single_model_entity_scan(monkeypatch, tmp_path
 
     monkeypatch.setattr(workspace_io, "list_model_entities", _counted)
 
-    app = create_app(token=token, enable_openapi=False)
-    with TestClient(app) as client:
+    with api_client(token=token, solution_path=solution_path) as client:
         response = client.post(
             "/model/folder/rename",
             headers={"Authorization": f"Bearer {token}"},
@@ -105,4 +109,4 @@ def test_model_folder_rename_uses_single_model_entity_scan(monkeypatch, tmp_path
     assert calls["count"] == 1
     assert payload["message"] == "renamed"
     assert payload["to"].replace("\\", "/").endswith(new_folder_rel)
-    assert len(payload["entities"]) == 1
+    assert len(payload["entities"]) == expected_entity_count

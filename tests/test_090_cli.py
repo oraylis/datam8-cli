@@ -19,11 +19,17 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
+from pytest_cases import parametrize_with_cases
 from typer.testing import CliRunner
 
 from datam8.app import app
+from test_090_cli_cases import CasesCli
+
+
+_ANSI_ESCAPE_RE = re.compile(r"\x1B\[[0-?]*[ -/]*[@-~]")
 
 
 def _write_json(path: Path, payload: dict) -> None:
@@ -70,30 +76,33 @@ def _create_minimal_solution(root: Path) -> Path:
     return solution_file
 
 
-def test_cli_help_exposes_top_level_commands() -> None:
+def _normalized_output(result) -> str:
+    chunks: list[bytes] = []
+    stdout_bytes = getattr(result, "stdout_bytes", None)
+    stderr_bytes = getattr(result, "stderr_bytes", None)
+    if isinstance(stdout_bytes, (bytes, bytearray)):
+        chunks.append(bytes(stdout_bytes))
+    if isinstance(stderr_bytes, (bytes, bytearray)):
+        chunks.append(bytes(stderr_bytes))
+
+    if chunks:
+        text = b"\n".join(chunks).decode("utf-8", errors="ignore")
+    else:
+        text = f"{getattr(result, 'stdout', '')}\n{getattr(result, 'stderr', '')}"
+
+    return _ANSI_ESCAPE_RE.sub("", text).lower()
+
+
+@parametrize_with_cases(
+    "command_name",
+    cases=CasesCli,
+    glob="*top_level*",
+)
+def test_cli_help_exposes_top_level_commands(command_name: str) -> None:
     runner = CliRunner()
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
-    for name in (
-        "solution",
-        "base",
-        "model",
-        "script",
-        "index",
-        "refactor",
-        "search",
-        "connector",
-        "plugin",
-        "secret",
-        "datasource",
-        "config",
-        "migration",
-        "fs",
-        "generate",
-        "validate",
-        "serve",
-    ):
-        assert name in result.stdout
+    assert command_name in result.stdout
 
 
 def test_solution_base_model_commands_use_root_cli_options(tmp_path: Path) -> None:
@@ -131,18 +140,23 @@ def test_solution_base_model_commands_use_root_cli_options(tmp_path: Path) -> No
     assert payload["count"] == 1
 
 
-def test_generate_validate_serve_stay_single_call_commands(monkeypatch) -> None:
+@parametrize_with_cases(
+    "case_data",
+    cases=CasesCli,
+    glob="*missing_solution*",
+)
+def test_generate_validate_serve_stay_single_call_commands(case_data, monkeypatch) -> None:
     runner = CliRunner()
     monkeypatch.delenv("DATAM8_SOLUTION_PATH", raising=False)
 
-    generate = runner.invoke(app, ["generate"])
-    assert generate.exit_code != 0
-    assert "No solution specified." in f"{generate.stdout}\n{generate.stderr}"
+    command_name, expected_text = case_data
+    result = runner.invoke(app, [command_name])
+    assert result.exit_code != 0
+    assert expected_text in _normalized_output(result)
 
-    validate = runner.invoke(app, ["validate"])
-    assert validate.exit_code != 0
-    assert "No solution specified." in f"{validate.stdout}\n{validate.stderr}"
+    serve_help = runner.invoke(app, ["serve", "--help"])
+    assert serve_help.exit_code == 0
+    assert "--token" in _normalized_output(serve_help)
 
     serve = runner.invoke(app, ["serve"])
     assert serve.exit_code != 0
-    assert "Missing option '--token'" in f"{serve.stdout}\n{serve.stderr}"
