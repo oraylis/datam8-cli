@@ -131,8 +131,9 @@ def test_solution_base_model_commands_use_root_cli_options(tmp_path: Path) -> No
     assert payload["count"] == 1
 
 
-def test_generate_validate_serve_stay_single_call_commands() -> None:
+def test_generate_validate_serve_stay_single_call_commands(monkeypatch) -> None:
     runner = CliRunner()
+    monkeypatch.delenv("DATAM8_SOLUTION_PATH", raising=False)
 
     generate = runner.invoke(app, ["generate"])
     assert generate.exit_code != 0
