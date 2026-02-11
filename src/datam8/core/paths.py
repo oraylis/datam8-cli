@@ -1,3 +1,21 @@
+# DataM8
+# Copyright (C) 2024-2025 ORAYLIS GmbH
+#
+# This file is part of DataM8.
+#
+# DataM8 is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# DataM8 is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -13,6 +31,24 @@ class ResolvedSolution:
 
 
 def resolve_solution(candidate: str | None) -> ResolvedSolution:
+    """Resolve a solution candidate to root directory and `.dm8s` file.
+
+    Parameters
+    ----------
+    candidate : str | None
+        File or folder path, or `None` to trigger validation error.
+
+    Returns
+    -------
+    ResolvedSolution
+        Resolved solution metadata (`root_dir`, `solution_file`).
+
+    Raises
+    ------
+    Datam8NotFoundError
+        If candidate path does not exist or folder has no single `.dm8s`.
+    Datam8ValidationError
+        If no solution candidate is provided."""
     if not candidate:
         raise Datam8ValidationError(
             message="No solution specified. Use --solution/-s (or --solution-path) or set DATAM8_SOLUTION_PATH.",
@@ -50,6 +86,24 @@ def resolve_solution(candidate: str | None) -> ResolvedSolution:
 
 
 def safe_join(root_dir: Path, rel_path: str) -> Path:
+    """Join `root_dir` with a relative path and enforce root confinement.
+
+    Parameters
+    ----------
+    root_dir : Path
+        Trusted solution root directory.
+    rel_path : str
+        Relative path to resolve under `root_dir`.
+
+    Returns
+    -------
+    Path
+        Absolute normalized path.
+
+    Raises
+    ------
+    Datam8ValidationError
+        If `rel_path` escapes `root_dir`."""
     if not isinstance(rel_path, str) or not rel_path.strip():
         raise Datam8ValidationError(message="Invalid path.", details={"relPath": rel_path})
 

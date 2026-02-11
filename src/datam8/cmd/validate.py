@@ -16,7 +16,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-import os
 import sys
 from pathlib import Path
 
@@ -24,16 +23,21 @@ import rich
 import typer
 
 from .. import config, factory, opts, utils
+from ..core.paths import resolve_solution
 
-app = typer.Typer()
+app = typer.Typer(
+    name="validate",
+    add_completion=False,
+    no_args_is_help=False,
+    help="Validate solution model.",
+)
 
 logger = utils.start_logger(__name__)
 sys.tracebacklimit = 0
 
 
-@app.command("validate")
+@app.callback(invoke_without_command=True)
 def command(
-    ctx: typer.Context,
     solution_path: Path | None = typer.Option(
         None,
         "--solution",
@@ -42,22 +46,30 @@ def command(
         help="Path to .dm8s solution file (or folder containing exactly one .dm8s file).",
         envvar="DATAM8_SOLUTION_PATH",
     ),
-    log_level: opts.LogLevel = opts.LogLevels.WARNING,
+    log_level: str | None = typer.Option(
+        None,
+        "--log-level",
+        "-l",
+        help="Set log level (defaults to global --log-level or DATAM8_LOG_LEVEL).",
+        envvar="DATAM8_LOG_LEVEL",
+    ),
 ):
     """Validate solution model."""
     if solution_path is None:
-        parent_obj = getattr(ctx, "obj", None)
-        candidate = getattr(parent_obj, "solution", None) if parent_obj is not None else None
-        if not isinstance(candidate, str) or not candidate.strip():
-            candidate = os.environ.get("DATAM8_SOLUTION_PATH")
-        if not isinstance(candidate, str) or not candidate.strip():
-            raise typer.BadParameter("No solution specified. Use --solution/-s (or set DATAM8_SOLUTION_PATH).")
-        solution_path = Path(candidate)
+        raise typer.BadParameter("No solution specified. Use --solution/-s (or set DATAM8_SOLUTION_PATH).")
 
-    config.log_level = log_level
+    effective_log_level = log_level
+    if not isinstance(effective_log_level, str) or not effective_log_level.strip():
+        effective_log_level = opts.LogLevels.WARNING.value
+
+    resolved = resolve_solution(str(solution_path))
+    try:
+        config.log_level = opts.LogLevels(effective_log_level.strip().lower())
+    except Exception:
+        config.log_level = opts.LogLevels.WARNING
     config.lazy = False
-    config.solution_path = solution_path
-    config.solution_folder_path = solution_path.parent.absolute()
+    config.solution_path = resolved.solution_file
+    config.solution_folder_path = resolved.root_dir
 
     _ = factory.create_model()
 

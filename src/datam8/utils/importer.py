@@ -27,12 +27,29 @@ logger = logging.getLogger(__name__)
 
 
 def enable_target_modules() -> None:
+    """Enable target modules.
+
+    Returns
+    -------
+    None
+        Computed return value."""
     logger.info("Enable importing from target __modules")
     sys.meta_path.append(TargetModuleFinder)
 
 
 @utils.get_logger
 def load_modules(module_path: pathlib.Path) -> dict[str, ModuleType]:
+    """Load modules.
+
+    Parameters
+    ----------
+    module_path : pathlib.Path
+        module_path parameter value.
+
+    Returns
+    -------
+    dict[str, ModuleType]
+        Computed return value."""
     modules: dict[str, ModuleType] = {}
     module_files = list(module_path.glob("**/*.py"))
 
@@ -71,6 +88,24 @@ def load_modules(module_path: pathlib.Path) -> dict[str, ModuleType]:
 
 
 def load_module(path: pathlib.Path, module_name: str) -> ModuleType:
+    """Load module.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        path parameter value.
+    module_name : str
+        module_name parameter value.
+
+    Returns
+    -------
+    ModuleType
+        Computed return value.
+
+    Raises
+    ------
+    Exception
+        Raised when validation or runtime execution fails."""
     logger.debug(f"Loaded module {path.relative_to(config.solution_folder_path)}")
 
     spec = util.spec_from_file_location(module_name, path)

@@ -1,3 +1,21 @@
+# DataM8
+# Copyright (C) 2024-2025 ORAYLIS GmbH
+#
+# This file is part of DataM8.
+#
+# DataM8 is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# DataM8 is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 from __future__ import annotations
 
 import os
@@ -30,6 +48,26 @@ def _plugin_dir() -> Path:
 
 
 def load_data_source_context(solution_path: str | None, data_source_id: str) -> dict[str, Any]:
+    """Load data source context.
+
+    Parameters
+    ----------
+    solution_path : str | None
+        solution_path parameter value.
+    data_source_id : str
+        data_source_id parameter value.
+
+    Returns
+    -------
+    dict[str, Any]
+        Computed return value.
+
+    Raises
+    ------
+    Datam8NotFoundError
+        Raised when validation or runtime execution fails.
+    Datam8ValidationError
+        Raised when validation or runtime execution fails."""
     base_entities = list_base_entities(solution_path)
 
     data_sources_file = next((e for e in base_entities if e.name == "DataSources"), None)
@@ -64,6 +102,26 @@ def resolve_and_validate(
     data_source_id: str,
     runtime_secrets: dict[str, str] | None,
 ) -> tuple[Any, dict[str, Any], dict[str, str], SecretResolver]:
+    """Resolve and validate.
+
+    Parameters
+    ----------
+    solution_path : str | None
+        solution_path parameter value.
+    data_source_id : str
+        data_source_id parameter value.
+    runtime_secrets : dict[str, str] | None
+        runtime_secrets parameter value.
+
+    Returns
+    -------
+    tuple[Any, dict[str, Any], dict[str, str], SecretResolver]
+        Computed return value.
+
+    Raises
+    ------
+    Datam8ValidationError
+        Raised when validation or runtime execution fails."""
     ctx = load_data_source_context(solution_path, data_source_id)
     data_source = ctx["dataSource"]
     data_source_type = ctx["dataSourceType"]

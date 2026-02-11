@@ -1,3 +1,21 @@
+# DataM8
+# Copyright (C) 2024-2025 ORAYLIS GmbH
+#
+# This file is part of DataM8.
+#
+# DataM8 is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# DataM8 is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 from __future__ import annotations
 
 import json
@@ -200,6 +218,24 @@ def _dedupe_property_refs(refs: list[dict[str, str]]) -> list[dict[str, str]]:
 
 
 def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
+    """Migrate solution v1 to v2.
+
+    Parameters
+    ----------
+    args : dict[str, Any]
+        args parameter value.
+
+    Returns
+    -------
+    dict[str, Any]
+        Computed return value.
+
+    Raises
+    ------
+    Datam8ValidationError
+        Raised when validation or runtime execution fails.
+    FileNotFoundError
+        Raised when validation or runtime execution fails."""
     started_at = _to_iso_now()
     warnings: list[str] = []
     errors: list[str] = []

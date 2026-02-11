@@ -85,7 +85,9 @@ jobs:
           python_version_file: ".python-version"
 
       - name: Set solution environment variable
-        run: echo "DATAM8_SOLUTION_PATH=datam8-sample-solution/ORAYLISDatabricksSample.dm8s" >> $GITHUB_ENV
+        run: |
+          echo "DATAM8_SOLUTION_PATH=datam8-sample-solution/ORAYLISDatabricksSample.dm8s" >> $GITHUB_ENV
+          echo "DATAM8_REQUIRE_SOLUTION_TESTS=1" >> $GITHUB_ENV
 
       - name: Install packages
         run: uv sync

@@ -30,10 +30,15 @@ import uvicorn
 
 from datam8 import utils
 from datam8.api.app import create_app
-from datam8.core.jobs.manager import JobManager
+from datam8.core.paths import resolve_solution
 from datam8.core.version import get_version
 
-app = typer.Typer()
+app = typer.Typer(
+    name="serve",
+    add_completion=False,
+    no_args_is_help=False,
+    help="Starts the DataM8 HTTP backend (desktop-safe).",
+)
 
 logger = utils.start_logger(__name__)
 sys.tracebacklimit = 0
@@ -48,9 +53,8 @@ def _bind(host: str, port: int) -> tuple[socket.socket, int]:
     return sock, actual_port
 
 
-@app.command("serve")
+@app.callback(invoke_without_command=True)
 def command(
-    ctx: typer.Context,
     host: str = typer.Option("127.0.0.1", "--host"),
     port: int = typer.Option(0, "--port", min=0, max=65535),
     token: str = typer.Option(..., "--token"),
@@ -63,44 +67,42 @@ def command(
         envvar="DATAM8_SOLUTION_PATH",
     ),
     openapi: bool = typer.Option(False, "--openapi"),
-    log_level: str = typer.Option("info", "--log-level"),
+    log_level: str | None = typer.Option(
+        None,
+        "--log-level",
+        help="Server log level (defaults to global --log-level or DATAM8_LOG_LEVEL).",
+        envvar="DATAM8_LOG_LEVEL",
+    ),
 ):
     """Starts the DataM8 HTTP backend (desktop-safe)."""
     if not token or not token.strip():
         raise typer.BadParameter("--token is required.")
-    if solution_path is None:
-        parent_obj = getattr(ctx, "obj", None)
-        candidate = getattr(parent_obj, "solution", None) if parent_obj is not None else None
-        if isinstance(candidate, str) and candidate.strip():
-            solution_path = Path(candidate)
 
     if solution_path is not None:
-        os.environ["DATAM8_SOLUTION_PATH"] = str(solution_path)
+        os.environ["DATAM8_SOLUTION_PATH"] = str(resolve_solution(str(solution_path)).solution_file)
 
     sock, actual_port = _bind(host, port)
     base_url = f"http://{host}:{actual_port}"
 
-    jm = JobManager(max_concurrency=int(os.environ.get("DATAM8_JOB_CONCURRENCY") or "2"))
-    api = create_app(token=token.strip(), enable_openapi=openapi, job_manager=jm)
+    api = create_app(token=token.strip(), enable_openapi=openapi)
 
     ready_payload = {"type": "ready", "baseUrl": base_url, "version": get_version()}
     ready_line = json.dumps(ready_payload, separators=(",", ":"))
 
     @api.on_event("startup")
     async def _emit_ready() -> None:
-        await jm.start()
         sys.stdout.write(ready_line + "\n")
         sys.stdout.flush()
 
-    @api.on_event("shutdown")
-    async def _stop_jobs() -> None:
-        await jm.stop()
+    effective_log_level = log_level
+    if not isinstance(effective_log_level, str) or not effective_log_level.strip():
+        effective_log_level = "info"
 
     config = uvicorn.Config(
         api,
         host=host,
         port=actual_port,
-        log_level=log_level,
+        log_level=effective_log_level,
         access_log=False,
     )
     server = uvicorn.Server(config)

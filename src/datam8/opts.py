@@ -66,6 +66,65 @@ SolutionPath = Annotated[
     ),
 ]
 
+SolutionPathOptional = Annotated[
+    Path | None,
+    typer.Option(
+        "--solution",
+        "-s",
+        "--solution-path",
+        help="Path to .dm8s solution file (or folder containing exactly one .dm8s file)",
+        envvar="DATAM8_SOLUTION_PATH",
+    ),
+]
+
+JsonOutput = Annotated[
+    bool,
+    typer.Option(
+        "--json",
+        help="Emit machine-readable JSON output.",
+    ),
+]
+
+Quiet = Annotated[
+    bool,
+    typer.Option(
+        "--quiet",
+        help="Reduce human-readable output.",
+    ),
+]
+
+Verbose = Annotated[
+    bool,
+    typer.Option(
+        "--verbose",
+        help="Increase human-readable output.",
+    ),
+]
+
+LogFile = Annotated[
+    str | None,
+    typer.Option(
+        "--log-file",
+        help="Optional log output file.",
+    ),
+]
+
+LockTimeout = Annotated[
+    str,
+    typer.Option(
+        "--lock-timeout",
+        help="Solution lock timeout (e.g. 10s, 2m).",
+    ),
+]
+
+NoLock = Annotated[
+    bool,
+    typer.Option(
+        "--no-lock",
+        help="Disable solution lock (dangerous).",
+    ),
+]
+
 GeneratorTarget = Annotated[
     str,
     typer.Argument(

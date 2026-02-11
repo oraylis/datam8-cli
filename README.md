@@ -1,24 +1,24 @@
 # DataM8 Generator
 
-`datam8-generator` contains the DataM8 v2 backend:
+`datam8-generator` is the canonical DataM8 v2 backend:
 
 - `datam8` CLI
 - `datam8 serve` FastAPI server
-- in-process Jobs system with SSE event streaming
+- synchronous HTTP execution (no Jobs/SSE layer)
 
-Neon launches this backend binary and communicates over localhost HTTP.
+Neon launches the backend over embedded Python (`python -m datam8 serve`) and communicates via localhost HTTP.
 
 ## Key docs
 
 - Backend contract (canonical): `docs/backend-contract.md`
 - Server startup/auth details: `docs/server.md`
-- Jobs details: `docs/jobs.md`
 - Connector plugin details: `docs/connectors.md`
 - Agent guidance: `AGENTS.md`
 
 ## Local development
 
 ### Requirements
+
 - Python 3.12+
 - `uv` (https://docs.astral.sh/uv/getting-started/installation/)
 
@@ -39,22 +39,10 @@ uv run datam8 validate --help
 uv run datam8 generate --help
 ```
 
-### Build package
+### Build wheel
 
 ```sh
 uv build
-```
-
-### Build backend binaries
-
-Output path:
-
-`dist/bin/<platform>/datam8(.exe)`
-
-Build command:
-
-```sh
-uv run python scripts/build_binaries.py
 ```
 
 ### Tests
@@ -72,4 +60,11 @@ uv run pytest --solution-path "<path-to-solution.dm8s>"
 ```sh
 uv tool run ruff check src
 uv tool run pyright src
+```
+
+### License headers
+
+```sh
+uv run python scripts/add_license_headers.py --dry-run
+uv run python scripts/add_license_headers.py
 ```

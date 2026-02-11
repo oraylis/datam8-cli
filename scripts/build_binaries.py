@@ -76,6 +76,7 @@ def build(*, clean: bool = True, onefile: bool = True) -> Path:
         + [
             "--name",
             "datam8",
+            str(repo_root / "pyinstaller" / "datam8_entrypoint.py"),
             str(repo_root / "pyinstaller" / "datam8.py"),
         ],
         cwd=repo_root,

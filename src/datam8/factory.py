@@ -34,6 +34,17 @@ _model: model.Model
 
 @utils.get_logger
 def create_model(solution_path: pathlib.Path | None = None) -> model.Model:
+    """Create model.
+
+    Parameters
+    ----------
+    solution_path : pathlib.Path | None
+        solution_path parameter value.
+
+    Returns
+    -------
+    model.Model
+        Computed return value."""
     global _model
 
     path = solution_path or config.solution_path

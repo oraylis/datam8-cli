@@ -1,15 +1,33 @@
+# DataM8
+# Copyright (C) 2024-2025 ORAYLIS GmbH
+#
+# This file is part of DataM8.
+#
+# DataM8 is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# DataM8 is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 from __future__ import annotations
 
 import json
 import os
 import re
 from collections.abc import Iterable
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
+from datam8.core import legacy_function_sources
 from datam8.core.atomic import atomic_write_json, atomic_write_text
 from datam8.core.errors import (
     Datam8ConflictError,
@@ -17,23 +35,29 @@ from datam8.core.errors import (
     Datam8ValidationError,
 )
 from datam8.core.paths import ResolvedSolution, resolve_solution, safe_join
-
-
-class GeneratorTarget(BaseModel):
-    name: str
-    isDefault: bool | None = None
-    sourcePath: str
-    outputPath: str
-
-
-class Solution(BaseModel):
-    schemaVersion: str
-    basePath: str
-    modelPath: str
-    generatorTargets: list[GeneratorTarget]
+from datam8_model.solution import Solution
 
 
 def read_solution(solution_path: str | None) -> tuple[ResolvedSolution, Solution]:
+    """Load and validate a v2 solution file.
+
+    Parameters
+    ----------
+    solution_path : str | None
+        Optional path to a `.dm8s` file or containing folder. If omitted,
+        `DATAM8_SOLUTION_PATH` is used.
+
+    Returns
+    -------
+    tuple[ResolvedSolution, Solution]
+        Tuple of resolved filesystem paths and the validated solution model.
+
+    Raises
+    ------
+    Datam8NotFoundError
+        If the resolved solution file does not exist.
+    Datam8ValidationError
+        If the solution JSON is invalid or does not match the schema."""
     resolved = resolve_solution(solution_path or os.environ.get("DATAM8_SOLUTION_PATH"))
     try:
         raw = resolved.solution_file.read_text(encoding="utf-8")
@@ -95,13 +119,27 @@ def _read_json_file(abs_path: Path) -> Any:
 
 
 def read_workspace_json(rel_path: str, solution_path: str | None) -> Any:
+    """Read a JSON file from the active workspace.
+
+    Parameters
+    ----------
+    rel_path : str
+        Path relative to the solution root.
+    solution_path : str | None
+        Optional explicit solution path.
+
+    Returns
+    -------
+    Any
+        Parsed JSON content."""
     resolved, _sol = read_solution(solution_path)
     abs_path = safe_join(resolved.root_dir, rel_path)
     return _read_json_file(abs_path)
 
 
-@dataclass(frozen=True)
-class ModelEntityEntry:
+class ModelEntityEntry(BaseModel):
+    """Typed model entity payload for workspace listings."""
+
     locator: str
     name: str
     absPath: str
@@ -109,18 +147,59 @@ class ModelEntityEntry:
     content: Any
 
 
-@dataclass(frozen=True)
-class BaseEntityEntry:
+class BaseEntityEntry(BaseModel):
+    """Typed base entity payload for workspace listings."""
+
     name: str
     absPath: str
     relPath: str
     content: Any
 
 
+class PathMutationResult(BaseModel):
+    """Typed path mutation result for move/rename/duplicate operations."""
+
+    fromAbsPath: str
+    toAbsPath: str
+
+
+class FunctionSourceRenameResult(BaseModel):
+    """Typed result for function source rename operations."""
+
+    fromAbsPath: str
+    toAbsPath: str
+    skipped: bool | None = None
+
+
+class DirectoryEntry(BaseModel):
+    """Typed directory listing entry."""
+
+    name: str
+    path: str
+    type: str
+
+
+class RefactorPropertiesResult(BaseModel):
+    """Typed result for property/value refactor operations."""
+
+    updatedFiles: int
+
+
 def list_base_entities(solution_path: str | None) -> list[BaseEntityEntry]:
+    """List all JSON entities below the configured base path.
+
+    Parameters
+    ----------
+    solution_path : str | None
+        Optional explicit solution path.
+
+    Returns
+    -------
+    list[BaseEntityEntry]
+        Typed base-entity entries including metadata and parsed content."""
     resolved, sol = read_solution(solution_path)
     root = resolved.root_dir
-    files = _iter_json_files(root, sol.basePath)
+    files = _iter_json_files(root, str(sol.basePath))
     entries: list[BaseEntityEntry] = []
     for abs_path in files:
         rel = abs_path.relative_to(root).as_posix()
@@ -136,9 +215,20 @@ def list_base_entities(solution_path: str | None) -> list[BaseEntityEntry]:
 
 
 def list_model_entities(solution_path: str | None) -> list[ModelEntityEntry]:
+    """List all model entities in the configured model path.
+
+    Parameters
+    ----------
+    solution_path : str | None
+        Optional explicit solution path.
+
+    Returns
+    -------
+    list[ModelEntityEntry]
+        Typed model-entity entries, including locator and parsed content."""
     resolved, sol = read_solution(solution_path)
     root = resolved.root_dir
-    files = _iter_json_files(root, sol.modelPath, ignore=[".properties.json"])
+    files = _iter_json_files(root, str(sol.modelPath), ignore=[".properties.json"])
     entities: list[ModelEntityEntry] = []
     for abs_path in files:
         rel = abs_path.relative_to(root).as_posix()
@@ -154,128 +244,59 @@ def list_model_entities(solution_path: str | None) -> list[ModelEntityEntry]:
     return entities
 
 
-def _sanitize_path_segment(value: str) -> str:
-    trimmed = str(value or "").strip()
-    return trimmed.replace("\\", "_").replace("/", "_").replace("\0", "")
-
-
-def _parse_entity_name_from_model_entity(content: Any) -> str:
-    if not isinstance(content, dict):
-        return ""
-    name = content.get("name")
-    return name.strip() if isinstance(name, str) else ""
-
-
-def _derive_function_source_folder_name(rel_path: str, entity_name: str) -> str:
-    safe = _sanitize_path_segment(entity_name)
-    if safe:
-        return safe
-    return _sanitize_path_segment(Path(rel_path).stem)
-
-
-def _read_model_entity_name(abs_path: Path) -> str:
-    try:
-        data = _read_json_file(abs_path)
-    except Exception:
-        return ""
-    if isinstance(data, dict) and isinstance(data.get("name"), str):
-        return data["name"].strip()
-    return ""
-
-
-def _merge_directories(from_abs: Path, to_abs: Path) -> None:
-    to_abs.mkdir(parents=True, exist_ok=True)
-    for entry in from_abs.iterdir():
-        src = entry
-        dst = to_abs / entry.name
-        if entry.is_dir():
-            _merge_directories(src, dst)
-            continue
-        if entry.is_file():
-            if dst.exists():
-                continue
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            src.rename(dst)
-    try:
-        if not any(from_abs.iterdir()):
-            from_abs.rmdir()
-    except Exception:
-        pass
-
-
-def _copy_directory(src: Path, dst: Path) -> None:
-    dst.mkdir(parents=True, exist_ok=True)
-    for entry in src.iterdir():
-        s = entry
-        d = dst / entry.name
-        if entry.is_dir():
-            _copy_directory(s, d)
-            continue
-        if entry.is_file():
-            if d.exists():
-                continue
-            d.parent.mkdir(parents=True, exist_ok=True)
-            d.write_bytes(s.read_bytes())
-
-
-def _ensure_function_source_folder_name(
-    *,
-    root: Path,
-    rel_path: str,
-    prev_entity_name: str,
-    next_entity_name: str,
-) -> None:
-    dir_rel = Path(rel_path).parent.as_posix()
-    from_name = _derive_function_source_folder_name(rel_path, prev_entity_name)
-    to_name = _derive_function_source_folder_name(rel_path, next_entity_name)
-    if not from_name or not to_name or from_name == to_name:
-        return
-    from_abs = safe_join(root, f"{dir_rel}/{from_name}" if dir_rel != "." else from_name)
-    to_abs = safe_join(root, f"{dir_rel}/{to_name}" if dir_rel != "." else to_name)
-    if not from_abs.exists():
-        return
-    if not to_abs.exists():
-        to_abs.parent.mkdir(parents=True, exist_ok=True)
-        from_abs.rename(to_abs)
-        return
-    _merge_directories(from_abs, to_abs)
-
-
-def _move_function_source_folder(*, root: Path, from_rel_path: str, to_rel_path: str, entity_name: str) -> None:
-    from_dir = Path(from_rel_path).parent.as_posix()
-    to_dir = Path(to_rel_path).parent.as_posix()
-    folder_name = _derive_function_source_folder_name(from_rel_path, entity_name)
-    if not folder_name:
-        return
-    from_abs = safe_join(root, f"{from_dir}/{folder_name}" if from_dir != "." else folder_name)
-    if not from_abs.exists():
-        return
-    to_abs = safe_join(root, f"{to_dir}/{folder_name}" if to_dir != "." else folder_name)
-    to_abs.parent.mkdir(parents=True, exist_ok=True)
-    if to_abs.exists():
-        _merge_directories(from_abs, to_abs)
-        return
-    from_abs.rename(to_abs)
-
-
 def write_model_entity(rel_path: str, content: Any, solution_path: str | None) -> str:
+    """Write a model entity JSON file and run legacy source migration hooks.
+
+    Parameters
+    ----------
+    rel_path : str
+        Entity path relative to solution root.
+    content : Any
+        JSON-serializable entity payload.
+    solution_path : str | None
+        Optional explicit solution path.
+
+    Returns
+    -------
+    str
+        Absolute path of the written entity file."""
     resolved, _sol = read_solution(solution_path)
     root = resolved.root_dir
     abs_path = safe_join(root, rel_path)
-    prev_entity_name = _read_model_entity_name(abs_path) if abs_path.exists() else ""
-    next_entity_name = _parse_entity_name_from_model_entity(content)
-    _ensure_function_source_folder_name(
+    prev_entity_name = legacy_function_sources.read_model_entity_name(abs_path) if abs_path.exists() else ""
+    next_entity_name = legacy_function_sources.parse_entity_name_from_model_entity(content)
+    legacy_function_sources.ensure_function_source_folder_name(
         root=root,
         rel_path=rel_path,
         prev_entity_name=prev_entity_name,
         next_entity_name=next_entity_name,
     )
     atomic_write_json(abs_path, content, indent=4)
-    _migrate_legacy_function_sources(root=root, rel_path=rel_path, content=content)
+    legacy_function_sources.migrate_legacy_function_sources(root=root, rel_path=rel_path, content=content)
     return str(abs_path)
 
 
 def create_model_entity(rel_path: str, *, name: str | None, solution_path: str | None) -> str:
+    """Create model entity.
+
+    Parameters
+    ----------
+    rel_path : str
+        rel_path parameter value.
+    name : str | None
+        name parameter value.
+    solution_path : str | None
+        solution_path parameter value.
+
+    Returns
+    -------
+    str
+        Computed return value.
+
+    Raises
+    ------
+    Datam8ConflictError
+        Raised when validation or runtime execution fails."""
     resolved, _sol = read_solution(solution_path)
     root = resolved.root_dir
     abs_path = safe_join(root, rel_path)
@@ -288,6 +309,24 @@ def create_model_entity(rel_path: str, *, name: str | None, solution_path: str |
 
 
 def delete_model_entity(rel_path: str, solution_path: str | None) -> str:
+    """Delete model entity.
+
+    Parameters
+    ----------
+    rel_path : str
+        rel_path parameter value.
+    solution_path : str | None
+        solution_path parameter value.
+
+    Returns
+    -------
+    str
+        Computed return value.
+
+    Raises
+    ------
+    Datam8NotFoundError
+        Raised when validation or runtime execution fails."""
     resolved, _sol = read_solution(solution_path)
     root = resolved.root_dir
     abs_path = safe_join(root, rel_path)
@@ -298,6 +337,24 @@ def delete_model_entity(rel_path: str, solution_path: str | None) -> str:
 
 
 def delete_base_entity(rel_path: str, solution_path: str | None) -> str:
+    """Delete base entity.
+
+    Parameters
+    ----------
+    rel_path : str
+        rel_path parameter value.
+    solution_path : str | None
+        solution_path parameter value.
+
+    Returns
+    -------
+    str
+        Computed return value.
+
+    Raises
+    ------
+    Datam8NotFoundError
+        Raised when validation or runtime execution fails."""
     resolved, _sol = read_solution(solution_path)
     root = resolved.root_dir
     abs_path = safe_join(root, rel_path)
@@ -307,18 +364,38 @@ def delete_base_entity(rel_path: str, solution_path: str | None) -> str:
     return str(abs_path)
 
 
-def move_model_entity(from_rel_path: str, to_rel_path: str, solution_path: str | None) -> dict[str, str]:
+def move_model_entity(from_rel_path: str, to_rel_path: str, solution_path: str | None) -> PathMutationResult:
+    """Move model entity.
+
+    Parameters
+    ----------
+    from_rel_path : str
+        from_rel_path parameter value.
+    to_rel_path : str
+        to_rel_path parameter value.
+    solution_path : str | None
+        solution_path parameter value.
+
+    Returns
+    -------
+    PathMutationResult
+        Absolute source and destination paths after move.
+
+    Raises
+    ------
+    Datam8NotFoundError
+        Raised when validation or runtime execution fails."""
     resolved, _sol = read_solution(solution_path)
     root = resolved.root_dir
     from_abs = safe_join(root, from_rel_path)
     to_abs = safe_join(root, to_rel_path)
     if not from_abs.exists():
         raise Datam8NotFoundError(message="Model entity not found.", details={"relPath": from_rel_path})
-    entity_name = _read_model_entity_name(from_abs)
+    entity_name = legacy_function_sources.read_model_entity_name(from_abs)
     to_abs.parent.mkdir(parents=True, exist_ok=True)
     from_abs.rename(to_abs)
-    _move_function_source_folder(root=root, from_rel_path=from_rel_path, to_rel_path=to_rel_path, entity_name=entity_name)
-    return {"from": str(from_abs), "to": str(to_abs)}
+    legacy_function_sources.move_function_source_folder(root=root, from_rel_path=from_rel_path, to_rel_path=to_rel_path, entity_name=entity_name)
+    return PathMutationResult(fromAbsPath=str(from_abs), toAbsPath=str(to_abs))
 
 
 def duplicate_model_entity(
@@ -328,7 +405,33 @@ def duplicate_model_entity(
     solution_path: str | None,
     new_name: str | None = None,
     new_id: int | None = None,
-) -> dict[str, str]:
+) -> PathMutationResult:
+    """Duplicate model entity.
+
+    Parameters
+    ----------
+    from_rel_path : str
+        from_rel_path parameter value.
+    to_rel_path : str
+        to_rel_path parameter value.
+    solution_path : str | None
+        solution_path parameter value.
+    new_name : str | None
+        new_name parameter value.
+    new_id : int | None
+        new_id parameter value.
+
+    Returns
+    -------
+    PathMutationResult
+        Absolute source and destination paths for the duplicate operation.
+
+    Raises
+    ------
+    Datam8ConflictError
+        Raised when validation or runtime execution fails.
+    Datam8NotFoundError
+        Raised when validation or runtime execution fails."""
     resolved, _sol = read_solution(solution_path)
     root = resolved.root_dir
     from_abs = safe_join(root, from_rel_path)
@@ -346,21 +449,36 @@ def duplicate_model_entity(
     to_abs.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_json(to_abs, content, indent=4)
 
-    entity_name = _read_model_entity_name(from_abs)
-    from_folder = _derive_function_source_folder_name(from_rel_path, entity_name)
-    to_folder = _derive_function_source_folder_name(to_rel_path, _parse_entity_name_from_model_entity(content))
+    entity_name = legacy_function_sources.read_model_entity_name(from_abs)
+    from_folder = legacy_function_sources.derive_function_source_folder_name(from_rel_path, entity_name)
+    to_folder = legacy_function_sources.derive_function_source_folder_name(to_rel_path, legacy_function_sources.parse_entity_name_from_model_entity(content))
     if from_folder and to_folder:
         from_dir_rel = Path(from_rel_path).parent.as_posix()
         to_dir_rel = Path(to_rel_path).parent.as_posix()
         from_folder_abs = safe_join(root, f"{from_dir_rel}/{from_folder}" if from_dir_rel != "." else from_folder)
         to_folder_abs = safe_join(root, f"{to_dir_rel}/{to_folder}" if to_dir_rel != "." else to_folder)
         if from_folder_abs.exists() and from_folder_abs.is_dir():
-            _copy_directory(from_folder_abs, to_folder_abs)
+            legacy_function_sources.copy_directory(from_folder_abs, to_folder_abs)
 
-    return {"from": str(from_abs), "to": str(to_abs)}
+    return PathMutationResult(fromAbsPath=str(from_abs), toAbsPath=str(to_abs))
 
 
 def write_base_entity(rel_path: str, content: Any, solution_path: str | None) -> str:
+    """Write base entity.
+
+    Parameters
+    ----------
+    rel_path : str
+        rel_path parameter value.
+    content : Any
+        content parameter value.
+    solution_path : str | None
+        solution_path parameter value.
+
+    Returns
+    -------
+    str
+        Computed return value."""
     resolved, _sol = read_solution(solution_path)
     root = resolved.root_dir
     abs_path = safe_join(root, rel_path)
@@ -369,9 +487,29 @@ def write_base_entity(rel_path: str, content: Any, solution_path: str | None) ->
 
 
 def regenerate_index(solution_path: str | None) -> dict[str, Any]:
+    """Regenerate index.json for a solution using current model entities."""
     resolved, sol = read_solution(solution_path)
     root = resolved.root_dir
     entities = list_model_entities(solution_path)
+    index = _build_index(sol=sol, entities=entities)
+    index_path = root / "index.json"
+    atomic_write_json(index_path, index, indent=4)
+    return index
+
+
+def regenerate_index_with_entities(solution_path: str | None) -> tuple[dict[str, Any], list[ModelEntityEntry]]:
+    """Regenerate index.json and return the same scanned model entities."""
+    resolved, sol = read_solution(solution_path)
+    root = resolved.root_dir
+    entities = list_model_entities(solution_path)
+    index = _build_index(sol=sol, entities=entities)
+    index_path = root / "index.json"
+    atomic_write_json(index_path, index, indent=4)
+    return index, entities
+
+
+def _build_index(*, sol: Solution, entities: list[ModelEntityEntry]) -> dict[str, Any]:
+    """Build in-memory index payload from model entities."""
 
     def zone_to_key(segment: str) -> str:
         m = re.match(r"^\d+\-([A-Za-z]+)", segment)
@@ -381,7 +519,7 @@ def regenerate_index(solution_path: str | None) -> dict[str, Any]:
     index: dict[str, dict[str, list[dict[str, str]]]] = {}
     for entity in entities:
         try:
-            rel_from_model = Path(entity.relPath).relative_to(Path(sol.modelPath)).as_posix()
+            rel_from_model = Path(entity.relPath).relative_to(Path(str(sol.modelPath))).as_posix()
         except Exception:
             rel_from_model = Path(entity.relPath).as_posix()
         zone_segment = rel_from_model.split("/")[0] if rel_from_model else "model"
@@ -391,155 +529,72 @@ def regenerate_index(solution_path: str | None) -> dict[str, Any]:
 
     for k in sorted(index.keys()):
         index[k]["entry"].sort(key=lambda e: (e["locator"], e["name"]))
-
-    index_path = root / "index.json"
-    atomic_write_json(index_path, index, indent=4)
     return index
 
 
-def list_directory(dir_path: str | None) -> list[dict[str, str]]:
+def list_directory(dir_path: str | None) -> list[DirectoryEntry]:
+    """List folders and `.dm8s` files in a directory.
+
+    Parameters
+    ----------
+    dir_path : str | None
+        Directory to inspect. Uses current working directory when omitted.
+
+    Returns
+    -------
+    list[DirectoryEntry]
+        Entry objects with `name`, `path`, and `type` (`dir`/`file`).
+
+    Raises
+    ------
+    Datam8NotFoundError
+        If the target directory does not exist.
+    Datam8ValidationError
+        If the target path exists but is not a directory."""
     target = Path(dir_path).expanduser() if dir_path else Path.cwd()
     if not target.exists():
         raise Datam8NotFoundError(message="Directory not found.", details={"path": str(target)})
     if not target.is_dir():
         raise Datam8ValidationError(message="Path is not a directory.", details={"path": str(target)})
-    entries = []
+    entries: list[DirectoryEntry] = []
     for e in os.scandir(target):
         if e.is_dir():
-            entries.append({"name": e.name, "path": str(Path(target, e.name)), "type": "dir"})
+            entries.append(DirectoryEntry(name=e.name, path=str(Path(target, e.name)), type="dir"))
         elif e.is_file() and e.name.lower().endswith(".dm8s"):
-            entries.append({"name": e.name, "path": str(Path(target, e.name)), "type": "file"})
-    entries.sort(key=lambda x: x["name"].lower())
+            entries.append(DirectoryEntry(name=e.name, path=str(Path(target, e.name)), type="file"))
+    entries.sort(key=lambda x: x.name.lower())
     return entries
 
 
-def _ensure_basename(value: str) -> None:
-    if not value or Path(value).name != value or ".." in value:
-        raise Datam8ValidationError(message="Invalid function source filename.", details={"value": value})
-
-
-def _resolve_safe_function_source_path(entity_dir: Path, source_file: str) -> Path:
-    if not source_file or not isinstance(source_file, str):
-        raise Datam8ValidationError(message="Invalid function source path.", details={"source": source_file})
-    if "\0" in source_file:
-        raise Datam8ValidationError(message="Invalid function source path.", details={"source": source_file})
-    if "\\" in source_file:
-        raise Datam8ValidationError(
-            message="Function source path must use forward slashes ('/').", details={"source": source_file}
-        )
-    if source_file.startswith("/") or re.match(r"^[A-Za-z]:", source_file):
-        raise Datam8ValidationError(message="Function source path must be relative.", details={"source": source_file})
-
-    parts = [p for p in source_file.split("/") if p]
-    if not parts or any(p in (".", "..") for p in parts):
-        raise Datam8ValidationError(
-            message="Function source path must not contain '.' or '..'.", details={"source": source_file}
-        )
-
-    abs_path = (entity_dir / Path(*parts)).resolve()
-    if not abs_path.is_relative_to(entity_dir.resolve()):
-        raise Datam8ValidationError(message="Function source path escapes the entity directory.", details={"source": source_file})
-    return abs_path
-
-
-def _resolve_function_source_folder_name(
-    *,
-    root: Path,
-    rel_path: str,
-    preferred_entity_name: str | None = None,
-) -> tuple[str, str]:
-    entity_abs = safe_join(root, rel_path)
-    entity_name = (preferred_entity_name or "").strip() or (_read_model_entity_name(entity_abs) if entity_abs.exists() else "")
-    folder_name = _derive_function_source_folder_name(rel_path, entity_name)
-    fallback_folder_name = _sanitize_path_segment(Path(rel_path).stem)
-    return folder_name, fallback_folder_name
-
-
-def _resolve_function_source_abs_path(
-    *,
-    root: Path,
-    rel_path: str,
-    source_file: str,
-    preferred_folder_name: str | None = None,
-) -> Path:
-    _ensure_basename(source_file)
-    dir_rel = Path(rel_path).parent.as_posix()
-    if preferred_folder_name:
-        folder_name = preferred_folder_name
-        fallback_folder_name = _sanitize_path_segment(Path(rel_path).stem)
-    else:
-        folder_name, fallback_folder_name = _resolve_function_source_folder_name(root=root, rel_path=rel_path)
-
-    primary = safe_join(root, f"{dir_rel}/{folder_name}/{source_file}" if dir_rel != "." else f"{folder_name}/{source_file}")
-    if primary.exists():
-        return primary
-    fallback = safe_join(
-        root,
-        f"{dir_rel}/{fallback_folder_name}/{source_file}" if dir_rel != "." else f"{fallback_folder_name}/{source_file}",
-    )
-    if fallback != primary and fallback.exists():
-        return fallback
-    legacy_adjacent = safe_join(root, f"{dir_rel}/{source_file}" if dir_rel != "." else source_file)
-    if legacy_adjacent.exists():
-        return legacy_adjacent
-    return primary
-
-
-def _migrate_legacy_function_source_file(*, root: Path, rel_path: str, source_file: str, folder_name: str) -> None:
-    dir_rel = Path(rel_path).parent.as_posix()
-    legacy_abs = safe_join(root, f"{dir_rel}/{source_file}" if dir_rel != "." else source_file)
-    primary_abs = safe_join(
-        root,
-        f"{dir_rel}/{folder_name}/{source_file}" if dir_rel != "." else f"{folder_name}/{source_file}",
-    )
-    if legacy_abs == primary_abs or not legacy_abs.exists():
-        return
-    if primary_abs.exists():
-        try:
-            legacy_abs.unlink()
-        except Exception:
-            pass
-        return
-    primary_abs.parent.mkdir(parents=True, exist_ok=True)
-    legacy_abs.rename(primary_abs)
-
-
-def _migrate_legacy_function_sources(*, root: Path, rel_path: str, content: Any) -> None:
-    entity_name = _parse_entity_name_from_model_entity(content)
-    folder_name, _fallback = _resolve_function_source_folder_name(root=root, rel_path=rel_path, preferred_entity_name=entity_name)
-    transforms = content.get("transformations") if isinstance(content, dict) else None
-    if not isinstance(transforms, list):
-        return
-    sources: list[str] = []
-    for t in transforms:
-        if not isinstance(t, dict) or t.get("kind") != "function":
-            continue
-        fn = t.get("function")
-        if not isinstance(fn, dict):
-            continue
-        src = fn.get("source")
-        if isinstance(src, str) and src.strip():
-            sources.append(src.strip())
-    for src in sources:
-        try:
-            _ensure_basename(src)
-            _migrate_legacy_function_source_file(root=root, rel_path=rel_path, source_file=src, folder_name=folder_name)
-        except Exception:
-            continue
-
-
 def read_function_source(rel_path: str, source_file: str, solution_path: str | None, entity_name: str | None) -> str:
+    """Read function source.
+
+    Parameters
+    ----------
+    rel_path : str
+        rel_path parameter value.
+    source_file : str
+        source_file parameter value.
+    solution_path : str | None
+        solution_path parameter value.
+    entity_name : str | None
+        entity_name parameter value.
+
+    Returns
+    -------
+    str
+        Computed return value."""
     resolved, _sol = read_solution(solution_path)
     root = resolved.root_dir
     dir_rel = Path(rel_path).parent.as_posix()
     entity_dir = root if dir_rel == "." else safe_join(root, dir_rel)
 
     if isinstance(source_file, str) and "/" in source_file:
-        abs_path = _resolve_safe_function_source_path(entity_dir, source_file)
+        abs_path = legacy_function_sources.resolve_safe_function_source_path(entity_dir, source_file)
         return abs_path.read_text(encoding="utf-8")
 
-    folder_name, _fallback = _resolve_function_source_folder_name(root=root, rel_path=rel_path, preferred_entity_name=entity_name)
-    abs_path = _resolve_function_source_abs_path(root=root, rel_path=rel_path, source_file=source_file, preferred_folder_name=folder_name)
+    folder_name, _fallback = legacy_function_sources.resolve_function_source_folder_name(root=root, rel_path=rel_path, preferred_entity_name=entity_name)
+    abs_path = legacy_function_sources.resolve_function_source_abs_path(root=root, rel_path=rel_path, source_file=source_file, preferred_folder_name=folder_name)
     return abs_path.read_text(encoding="utf-8")
 
 
@@ -550,26 +605,45 @@ def write_function_source(
     solution_path: str | None,
     entity_name: str | None,
 ) -> str:
+    """Write function source.
+
+    Parameters
+    ----------
+    rel_path : str
+        rel_path parameter value.
+    source_file : str
+        source_file parameter value.
+    content : str
+        content parameter value.
+    solution_path : str | None
+        solution_path parameter value.
+    entity_name : str | None
+        entity_name parameter value.
+
+    Returns
+    -------
+    str
+        Computed return value."""
     resolved, _sol = read_solution(solution_path)
     root = resolved.root_dir
     dir_rel = Path(rel_path).parent.as_posix()
     entity_dir = root if dir_rel == "." else safe_join(root, dir_rel)
 
     if isinstance(source_file, str) and "/" in source_file:
-        abs_path = _resolve_safe_function_source_path(entity_dir, source_file)
+        abs_path = legacy_function_sources.resolve_safe_function_source_path(entity_dir, source_file)
         abs_path.parent.mkdir(parents=True, exist_ok=True)
         atomic_write_text(abs_path, content)
         return str(abs_path)
 
-    _ensure_basename(source_file)
-    folder_name, _fallback = _resolve_function_source_folder_name(root=root, rel_path=rel_path, preferred_entity_name=entity_name)
+    legacy_function_sources.ensure_basename(source_file)
+    folder_name, _fallback = legacy_function_sources.resolve_function_source_folder_name(root=root, rel_path=rel_path, preferred_entity_name=entity_name)
     abs_path = safe_join(
         root,
         f"{dir_rel}/{folder_name}/{source_file}" if dir_rel != "." else f"{folder_name}/{source_file}",
     )
     abs_path.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_text(abs_path, content)
-    _migrate_legacy_function_source_file(root=root, rel_path=rel_path, source_file=source_file, folder_name=folder_name)
+    legacy_function_sources.migrate_legacy_function_source_file(root=root, rel_path=rel_path, source_file=source_file, folder_name=folder_name)
     return str(abs_path)
 
 
@@ -579,47 +653,88 @@ def rename_function_source(
     to_source: str,
     solution_path: str | None,
     entity_name: str | None,
-) -> dict[str, Any]:
+) -> FunctionSourceRenameResult:
+    """Rename function source.
+
+    Parameters
+    ----------
+    rel_path : str
+        rel_path parameter value.
+    from_source : str
+        from_source parameter value.
+    to_source : str
+        to_source parameter value.
+    solution_path : str | None
+        solution_path parameter value.
+    entity_name : str | None
+        entity_name parameter value.
+
+    Returns
+    -------
+    FunctionSourceRenameResult
+        Absolute source and destination paths and optional skipped marker."""
     resolved, _sol = read_solution(solution_path)
     root = resolved.root_dir
     dir_rel = Path(rel_path).parent.as_posix()
     entity_dir = root if dir_rel == "." else safe_join(root, dir_rel)
-    folder_name, _fallback = _resolve_function_source_folder_name(root=root, rel_path=rel_path, preferred_entity_name=entity_name)
+    folder_name, _fallback = legacy_function_sources.resolve_function_source_folder_name(root=root, rel_path=rel_path, preferred_entity_name=entity_name)
 
     if isinstance(from_source, str) and "/" in from_source:
-        from_abs = _resolve_safe_function_source_path(entity_dir, from_source)
+        from_abs = legacy_function_sources.resolve_safe_function_source_path(entity_dir, from_source)
     else:
-        from_abs = _resolve_function_source_abs_path(root=root, rel_path=rel_path, source_file=from_source, preferred_folder_name=folder_name)
+        from_abs = legacy_function_sources.resolve_function_source_abs_path(root=root, rel_path=rel_path, source_file=from_source, preferred_folder_name=folder_name)
 
     if not (isinstance(to_source, str) and "/" in to_source):
-        _ensure_basename(to_source)
+        legacy_function_sources.ensure_basename(to_source)
         to_abs = safe_join(
             root,
             f"{dir_rel}/{folder_name}/{to_source}" if dir_rel != "." else f"{folder_name}/{to_source}",
         )
     else:
-        to_abs = _resolve_safe_function_source_path(entity_dir, to_source)
+        to_abs = legacy_function_sources.resolve_safe_function_source_path(entity_dir, to_source)
 
     if not from_abs.exists():
-        return {"fromAbsPath": str(from_abs), "toAbsPath": str(to_abs), "skipped": True}
+        return FunctionSourceRenameResult(fromAbsPath=str(from_abs), toAbsPath=str(to_abs), skipped=True)
     to_abs.parent.mkdir(parents=True, exist_ok=True)
     from_abs.rename(to_abs)
     if not (isinstance(to_source, str) and "/" in to_source):
-        _migrate_legacy_function_source_file(root=root, rel_path=rel_path, source_file=to_source, folder_name=folder_name)
-    return {"fromAbsPath": str(from_abs), "toAbsPath": str(to_abs)}
+        legacy_function_sources.migrate_legacy_function_source_file(root=root, rel_path=rel_path, source_file=to_source, folder_name=folder_name)
+    return FunctionSourceRenameResult(fromAbsPath=str(from_abs), toAbsPath=str(to_abs))
 
 
 def delete_function_source(rel_path: str, source_file: str, solution_path: str | None, entity_name: str | None) -> str:
+    """Delete function source.
+
+    Parameters
+    ----------
+    rel_path : str
+        rel_path parameter value.
+    source_file : str
+        source_file parameter value.
+    solution_path : str | None
+        solution_path parameter value.
+    entity_name : str | None
+        entity_name parameter value.
+
+    Returns
+    -------
+    str
+        Computed return value.
+
+    Raises
+    ------
+    Datam8NotFoundError
+        Raised when validation or runtime execution fails."""
     resolved, _sol = read_solution(solution_path)
     root = resolved.root_dir
     dir_rel = Path(rel_path).parent.as_posix()
     entity_dir = root if dir_rel == "." else safe_join(root, dir_rel)
 
     if isinstance(source_file, str) and "/" in source_file:
-        abs_path = _resolve_safe_function_source_path(entity_dir, source_file)
+        abs_path = legacy_function_sources.resolve_safe_function_source_path(entity_dir, source_file)
     else:
-        folder_name, _fallback = _resolve_function_source_folder_name(root=root, rel_path=rel_path, preferred_entity_name=entity_name)
-        abs_path = _resolve_function_source_abs_path(root=root, rel_path=rel_path, source_file=source_file, preferred_folder_name=folder_name)
+        folder_name, _fallback = legacy_function_sources.resolve_function_source_folder_name(root=root, rel_path=rel_path, preferred_entity_name=entity_name)
+        abs_path = legacy_function_sources.resolve_function_source_abs_path(root=root, rel_path=rel_path, source_file=source_file, preferred_folder_name=folder_name)
 
     if not abs_path.exists():
         raise Datam8NotFoundError(message="Script not found.", details={"source": source_file})
@@ -630,6 +745,28 @@ def delete_function_source(rel_path: str, source_file: str, solution_path: str |
 def list_function_sources(
     rel_path: str, solution_path: str | None, entity_name: str | None, *, include_unreferenced: bool = True
 ) -> list[str]:
+    """List function sources.
+
+    Parameters
+    ----------
+    rel_path : str
+        rel_path parameter value.
+    solution_path : str | None
+        solution_path parameter value.
+    entity_name : str | None
+        entity_name parameter value.
+    include_unreferenced : bool
+        include_unreferenced parameter value.
+
+    Returns
+    -------
+    list[str]
+        Computed return value.
+
+    Raises
+    ------
+    Datam8NotFoundError
+        Raised when validation or runtime execution fails."""
     resolved, _sol = read_solution(solution_path)
     root = resolved.root_dir
     entity_abs = safe_join(root, rel_path)
@@ -651,7 +788,7 @@ def list_function_sources(
     if not include_unreferenced:
         return sorted(referenced)
 
-    folder_name, fallback = _resolve_function_source_folder_name(root=root, rel_path=rel_path, preferred_entity_name=entity_name)
+    folder_name, fallback = legacy_function_sources.resolve_function_source_folder_name(root=root, rel_path=rel_path, preferred_entity_name=entity_name)
     dir_rel = Path(rel_path).parent.as_posix()
     base_dir = root if dir_rel == "." else safe_join(root, dir_rel)
 
@@ -686,6 +823,32 @@ def create_new_project(
     model_path: str | None,
     target: str,
 ) -> str:
+    """Create a new minimal v2 solution workspace on disk.
+
+    Parameters
+    ----------
+    solution_name : str
+        Name of the solution and project folder.
+    project_root : str
+        Parent directory where the project will be created.
+    base_path : str | None
+        Optional base folder name (defaults to `Base`).
+    model_path : str | None
+        Optional model folder name (defaults to `Model`).
+    target : str
+        Generator target name for initial solution setup.
+
+    Returns
+    -------
+    str
+        Absolute path to the created `.dm8s` solution file.
+
+    Raises
+    ------
+    Datam8ConflictError
+        If project directory or solution file already exists.
+    Datam8ValidationError
+        If required input arguments are missing."""
     if not solution_name or not project_root or not target:
         raise Datam8ValidationError(message="solutionName, projectRoot and target are required", details=None)
 
@@ -771,14 +934,29 @@ def create_new_project(
     return str(solution_file_path)
 
 
-def rename_folder(from_folder_rel_path: str, to_folder_rel_path: str, solution_path: str | None) -> dict[str, str]:
+def rename_folder(from_folder_rel_path: str, to_folder_rel_path: str, solution_path: str | None) -> PathMutationResult:
+    """Rename folder.
+
+    Parameters
+    ----------
+    from_folder_rel_path : str
+        from_folder_rel_path parameter value.
+    to_folder_rel_path : str
+        to_folder_rel_path parameter value.
+    solution_path : str | None
+        solution_path parameter value.
+
+    Returns
+    -------
+    PathMutationResult
+        Absolute source and destination folder paths."""
     resolved, _sol = read_solution(solution_path)
     root = resolved.root_dir
     from_abs = safe_join(root, from_folder_rel_path)
     to_abs = safe_join(root, to_folder_rel_path)
     to_abs.parent.mkdir(parents=True, exist_ok=True)
     from_abs.rename(to_abs)
-    return {"from": str(from_abs), "to": str(to_abs)}
+    return PathMutationResult(fromAbsPath=str(from_abs), toAbsPath=str(to_abs))
 
 
 def refactor_properties(
@@ -788,7 +966,26 @@ def refactor_properties(
     value_renames: list[dict[str, str]],
     deleted_properties: list[str],
     deleted_values: list[dict[str, str]],
-) -> dict[str, int]:
+) -> RefactorPropertiesResult:
+    """Apply property/value rename and delete operations across workspace JSON.
+
+    Parameters
+    ----------
+    solution_path : str | None
+        Optional explicit solution path.
+    property_renames : list[dict[str, str]]
+        Rename operations (`oldName` -> `newName`) for property keys.
+    value_renames : list[dict[str, str]]
+        Rename operations for property values.
+    deleted_properties : list[str]
+        Property names to remove.
+    deleted_values : list[dict[str, str]]
+        Specific property/value pairs to remove.
+
+    Returns
+    -------
+    RefactorPropertiesResult
+        Summary with the number of updated files."""
     prop_map: dict[str, str] = {r["oldName"]: r["newName"] for r in (property_renames or []) if r.get("oldName") and r.get("newName")}
     value_map: dict[str, dict[str, str]] = {}
     for v in value_renames or []:
@@ -841,14 +1038,18 @@ def refactor_properties(
             return changed, clone
         return False, node
 
-    base_entries = list_base_entities(solution_path)
-    model_entries = list_model_entities(solution_path)
+    resolved, sol = read_solution(solution_path)
+    root = resolved.root_dir
+    candidate_paths = [
+        *_iter_json_files(root, str(sol.basePath)),
+        *_iter_json_files(root, str(sol.modelPath), ignore=[".properties.json"]),
+    ]
     updated = 0
 
-    for entry in [*base_entries, *model_entries]:
-        changed, value = transform_node(entry.content)
+    for abs_path in candidate_paths:
+        changed, value = transform_node(_read_json_file(abs_path))
         if changed:
-            atomic_write_json(Path(entry.absPath), value, indent=4)
+            atomic_write_json(abs_path, value, indent=4)
             updated += 1
 
-    return {"updatedFiles": updated}
+    return RefactorPropertiesResult(updatedFiles=updated)

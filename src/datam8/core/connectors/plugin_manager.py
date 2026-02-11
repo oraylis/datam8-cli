@@ -1,3 +1,21 @@
+# DataM8
+# Copyright (C) 2024-2025 ORAYLIS GmbH
+#
+# This file is part of DataM8.
+#
+# DataM8 is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# DataM8 is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 from __future__ import annotations
 
 import io
@@ -30,6 +48,12 @@ class PluginDescriptor:
 
 
 def default_plugin_dir() -> Path:
+    """Default plugin dir.
+
+    Returns
+    -------
+    Path
+        Computed return value."""
     base = Path(user_data_dir(appname="datam8", appauthor=False))
     plugin_dir = base / "plugins"
     plugin_dir.mkdir(parents=True, exist_ok=True)
@@ -108,6 +132,22 @@ def _parse_manifest(path: Path) -> tuple[str, str, str]:
 
 
 def verify_zip_bundle(*, zip_bytes: bytes) -> PluginDescriptor:
+    """Verify zip bundle.
+
+    Parameters
+    ----------
+    zip_bytes : bytes
+        zip_bytes parameter value.
+
+    Returns
+    -------
+    PluginDescriptor
+        Computed return value.
+
+    Raises
+    ------
+    Datam8ValidationError
+        Raised when validation or runtime execution fails."""
     with tempfile.TemporaryDirectory(prefix="datam8-connector-plugin-verify-") as td:
         temp_root = Path(td)
         _extract_zip_to_tmp(zip_bytes, temp_root)
@@ -142,6 +182,17 @@ def _find_plugin_roots(extracted_root: Path) -> list[Path]:
 
 
 def list_plugins(plugin_dir: Path) -> dict[str, Any]:
+    """List plugins.
+
+    Parameters
+    ----------
+    plugin_dir : Path
+        plugin_dir parameter value.
+
+    Returns
+    -------
+    dict[str, Any]
+        Computed return value."""
     root = _connectors_root(plugin_dir)
     plugins: list[dict[str, Any]] = []
     errors: dict[str, str] = {}
@@ -184,10 +235,41 @@ def list_plugins(plugin_dir: Path) -> dict[str, Any]:
 
 
 def reload(plugin_dir: Path) -> dict[str, Any]:
+    """Reload.
+
+    Parameters
+    ----------
+    plugin_dir : Path
+        plugin_dir parameter value.
+
+    Returns
+    -------
+    dict[str, Any]
+        Computed return value."""
     return list_plugins(plugin_dir)
 
 
 def install_zip(*, plugin_dir: Path, zip_bytes: bytes, file_name: str | None = None) -> dict[str, Any]:
+    """Install zip.
+
+    Parameters
+    ----------
+    plugin_dir : Path
+        plugin_dir parameter value.
+    zip_bytes : bytes
+        zip_bytes parameter value.
+    file_name : str | None
+        file_name parameter value.
+
+    Returns
+    -------
+    dict[str, Any]
+        Computed return value.
+
+    Raises
+    ------
+    Datam8ValidationError
+        Raised when validation or runtime execution fails."""
     with tempfile.TemporaryDirectory(prefix="datam8-connector-plugin-") as td:
         temp_root = Path(td)
         _extract_zip_to_tmp(zip_bytes, temp_root)
@@ -231,10 +313,45 @@ def _download_plugin_zip(url: str) -> bytes:
 
 def install_git_url(*, plugin_dir: Path, git_url: str) -> dict[str, Any]:
     # Backward-compatible name; accepts direct https://...zip URLs.
+    """Install git url.
+
+    Parameters
+    ----------
+    plugin_dir : Path
+        plugin_dir parameter value.
+    git_url : str
+        git_url parameter value.
+
+    Returns
+    -------
+    dict[str, Any]
+        Computed return value."""
     return install_zip(plugin_dir=plugin_dir, zip_bytes=_download_plugin_zip(git_url), file_name=None)
 
 
 def set_enabled(plugin_dir: Path, plugin_id: str, enabled: bool) -> None:
+    """Set enabled.
+
+    Parameters
+    ----------
+    plugin_dir : Path
+        plugin_dir parameter value.
+    plugin_id : str
+        plugin_id parameter value.
+    enabled : bool
+        enabled parameter value.
+
+    Returns
+    -------
+    None
+        Computed return value.
+
+    Raises
+    ------
+    Datam8NotFoundError
+        Raised when validation or runtime execution fails.
+    Datam8ValidationError
+        Raised when validation or runtime execution fails."""
     pid = (plugin_id or "").strip()
     if not pid:
         raise Datam8ValidationError(message="Plugin id is required.", details=None)
@@ -250,6 +367,26 @@ def set_enabled(plugin_dir: Path, plugin_id: str, enabled: bool) -> None:
 
 
 def uninstall(plugin_dir: Path, plugin_id: str) -> None:
+    """Uninstall.
+
+    Parameters
+    ----------
+    plugin_dir : Path
+        plugin_dir parameter value.
+    plugin_id : str
+        plugin_id parameter value.
+
+    Returns
+    -------
+    None
+        Computed return value.
+
+    Raises
+    ------
+    Datam8NotFoundError
+        Raised when validation or runtime execution fails.
+    Datam8ValidationError
+        Raised when validation or runtime execution fails."""
     pid = (plugin_id or "").strip()
     if not pid:
         raise Datam8ValidationError(message="Plugin id is required.", details=None)
@@ -260,4 +397,15 @@ def uninstall(plugin_dir: Path, plugin_id: str) -> None:
 
 
 def connectors_state(plugin_dir: Path) -> dict[str, Any]:
+    """Connectors state.
+
+    Parameters
+    ----------
+    plugin_dir : Path
+        plugin_dir parameter value.
+
+    Returns
+    -------
+    dict[str, Any]
+        Computed return value."""
     return get_connectors_state(plugin_dir=plugin_dir)

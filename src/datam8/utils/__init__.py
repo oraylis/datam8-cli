@@ -75,6 +75,19 @@ def pascal_to_snake_case(text: str) -> str:
 
 
 def delete_path(path: Path, recursive: bool = False) -> None:
+    """Delete path.
+
+    Parameters
+    ----------
+    path : Path
+        path parameter value.
+    recursive : bool
+        recursive parameter value.
+
+    Returns
+    -------
+    None
+        Computed return value."""
     if not path.exists():
         return
 
@@ -93,6 +106,19 @@ def delete_path(path: Path, recursive: bool = False) -> None:
 
 
 def mkdir(path: Path, recursive: bool = False) -> None:
+    """Mkdir.
+
+    Parameters
+    ----------
+    path : Path
+        path parameter value.
+    recursive : bool
+        recursive parameter value.
+
+    Returns
+    -------
+    None
+        Computed return value."""
     if not path.parent.exists() and recursive:
         mkdir(path.parent, recursive=recursive)
 
