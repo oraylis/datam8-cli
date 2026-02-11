@@ -32,6 +32,7 @@ from datam8.core import solution_files, workspace_io
 from .response_models import (
     BaseEntityResponse,
     ConfigResponse,
+    FolderEntityResponse,
     MigrationResponse,
     ModelEntityResponse,
     ResolvedPathsResponse,
@@ -110,10 +111,15 @@ async def solution_full(path: str | None = Query(None)) -> SolutionFullResponse:
         ModelEntityResponse.model_validate(entity.model_dump())
         for entity in workspace_io.list_model_entities(path)
     ]
+    folder_entities = [
+        FolderEntityResponse.model_validate(entity.model_dump())
+        for entity in workspace_io.list_folder_entities(path)
+    ]
     return SolutionFullResponse(
         solution=sol,
         baseEntities=base_entities,
         modelEntities=model_entities,
+        folderEntities=folder_entities,
     )
 
 

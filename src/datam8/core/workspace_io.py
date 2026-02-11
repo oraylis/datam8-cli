@@ -156,6 +156,17 @@ class BaseEntityEntry(BaseModel):
     content: Any
 
 
+class FolderEntityEntry(BaseModel):
+    """Typed folder metadata payload for workspace listings."""
+
+    locator: str
+    name: str
+    absPath: str
+    relPath: str
+    folderPath: str
+    content: Any
+
+
 class PathMutationResult(BaseModel):
     """Typed path mutation result for move/rename/duplicate operations."""
 
@@ -244,6 +255,38 @@ def list_model_entities(solution_path: str | None) -> list[ModelEntityEntry]:
     return entities
 
 
+def list_folder_entities(solution_path: str | None) -> list[FolderEntityEntry]:
+    """List all folder metadata files below the configured model path."""
+    resolved, sol = read_solution(solution_path)
+    root = resolved.root_dir
+    files = [p for p in _iter_json_files(root, str(sol.modelPath)) if p.name == ".properties.json"]
+    entities: list[FolderEntityEntry] = []
+    for abs_path in files:
+        rel = abs_path.relative_to(root).as_posix()
+        folder_rel = abs_path.parent.relative_to(safe_join(root, str(sol.modelPath))).as_posix()
+        folder_path = "" if folder_rel == "." else folder_rel
+        locator = "/folders" if not folder_path else f"/folders/{folder_path}"
+        content = _read_json_file(abs_path)
+        folder_name = abs_path.parent.name
+        if isinstance(content, dict):
+            folders = content.get("folders")
+            if isinstance(folders, list) and folders:
+                first = folders[0]
+                if isinstance(first, dict) and isinstance(first.get("name"), str) and first["name"].strip():
+                    folder_name = first["name"].strip()
+        entities.append(
+            FolderEntityEntry(
+                locator=locator,
+                name=folder_name,
+                absPath=str(abs_path),
+                relPath=rel,
+                folderPath=folder_path,
+                content=content,
+            )
+        )
+    return entities
+
+
 def write_model_entity(rel_path: str, content: Any, solution_path: str | None) -> str:
     """Write a model entity JSON file and run legacy source migration hooks.
 
@@ -263,16 +306,19 @@ def write_model_entity(rel_path: str, content: Any, solution_path: str | None) -
     resolved, _sol = read_solution(solution_path)
     root = resolved.root_dir
     abs_path = safe_join(root, rel_path)
-    prev_entity_name = legacy_function_sources.read_model_entity_name(abs_path) if abs_path.exists() else ""
-    next_entity_name = legacy_function_sources.parse_entity_name_from_model_entity(content)
-    legacy_function_sources.ensure_function_source_folder_name(
-        root=root,
-        rel_path=rel_path,
-        prev_entity_name=prev_entity_name,
-        next_entity_name=next_entity_name,
-    )
+    is_folder_metadata = rel_path.replace("\\", "/").endswith(".properties.json")
+    if not is_folder_metadata:
+        prev_entity_name = legacy_function_sources.read_model_entity_name(abs_path) if abs_path.exists() else ""
+        next_entity_name = legacy_function_sources.parse_entity_name_from_model_entity(content)
+        legacy_function_sources.ensure_function_source_folder_name(
+            root=root,
+            rel_path=rel_path,
+            prev_entity_name=prev_entity_name,
+            next_entity_name=next_entity_name,
+        )
     atomic_write_json(abs_path, content, indent=4)
-    legacy_function_sources.migrate_legacy_function_sources(root=root, rel_path=rel_path, content=content)
+    if not is_folder_metadata:
+        legacy_function_sources.migrate_legacy_function_sources(root=root, rel_path=rel_path, content=content)
     return str(abs_path)
 
 

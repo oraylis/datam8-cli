@@ -45,6 +45,21 @@ def _create_solution(
         {"id": 1, "name": "Customer", "attributes": [], "sources": []},
     )
     _write_json(
+        tmp_path / Path(old_folder_rel) / ".properties.json",
+        {
+            "type": "folders",
+            "folders": [
+                {
+                    "id": 10,
+                    "name": "Old",
+                    "dataProduct": "Sales",
+                    "dataModule": "Customer",
+                    "properties": [],
+                }
+            ],
+        },
+    )
+    _write_json(
         tmp_path / "TestSolution.dm8s",
         {
             "schemaVersion": "2.0.0",
@@ -72,6 +87,19 @@ def test_regenerate_index_with_entities_matches_regenerate_index(tmp_path: Path)
     assert index_only == index_with_entities
     assert len(entities) == 1
     assert entities[0].name == "Customer"
+
+
+def test_list_folder_entities_scans_properties_files(tmp_path: Path) -> None:
+    solution_path = _create_solution(tmp_path, "Model/010-Stage/Old")
+
+    model_entities = workspace_io.list_model_entities(str(solution_path))
+    folder_entities = workspace_io.list_folder_entities(str(solution_path))
+
+    assert len(model_entities) == 1
+    assert len(folder_entities) == 1
+    assert folder_entities[0].relPath.endswith(".properties.json")
+    assert folder_entities[0].folderPath == "010-Stage/Old"
+    assert folder_entities[0].name == "Old"
 
 
 @parametrize_with_cases(

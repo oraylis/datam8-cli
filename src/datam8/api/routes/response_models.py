@@ -63,6 +63,17 @@ class BaseEntityResponse(BaseModel):
     content: Any
 
 
+class FolderEntityResponse(BaseModel):
+    """Typed folder metadata representation."""
+
+    locator: str
+    name: str
+    absPath: str
+    relPath: str
+    folderPath: str
+    content: Any
+
+
 class DirectoryEntryResponse(BaseModel):
     """Directory entry returned by fs list operations."""
 
@@ -84,6 +95,7 @@ class SolutionFullResponse(BaseModel):
     solution: Solution
     baseEntities: list[BaseEntityResponse]
     modelEntities: list[ModelEntityResponse]
+    folderEntities: list[FolderEntityResponse]
 
 
 class SolutionPathResponse(BaseModel):

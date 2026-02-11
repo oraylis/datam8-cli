@@ -49,6 +49,37 @@ All non-readiness logs are written to stderr.
   - Body: `{ "solutionPath": "...", "target": "...", "logLevel": "info", "cleanOutput": true, "payloads": [], "lazy": false }`
   - Response: `{ "status": "succeeded", "target": "...", "outputPath": "..." }`
 
+## `GET /solution/full` payload
+
+- `solution`: parsed solution metadata.
+- `baseEntities`: base JSON entities.
+- `modelEntities`: model JSON entities (excludes folder metadata files).
+- `folderEntities`: folder metadata files discovered under `Model/**/.properties.json`.
+
+## Folder Metadata Contract
+
+- Folder metadata file path: `Model/**/.properties.json`.
+- Wrapper shape follows v2 entities:
+  - `type: "folders"`
+  - `folders: [ { ...folderFields } ]`
+- Folder fields used by Neon/backend:
+  - `id` (number), `name` (string)
+  - optional `displayName`, `description`, `path`
+  - optional `properties` (array of `{ property, value }`)
+  - optional `dataProduct` (string) and `dataModule` (string)
+- Save/update uses existing `POST /model/entities` with `relPath` pointing to `.properties.json`.
+
+### Folder Validation Rules
+
+- `dataModule` requires `dataProduct`.
+- `dataProduct` must exist in `Base/DataProducts.json`.
+- `dataModule` must exist under the selected `dataProduct` in `Base/DataProducts.json`.
+
+### Folder Inheritance Semantics (UI Consumption)
+
+- Folder `properties` inherit down the folder chain (child overrides parent by `property` key).
+- `dataProduct` and `dataModule` inherit from nearest available ancestors.
+
 ## Response contract
 
 - All JSON responses are object payloads with stable top-level fields per endpoint.
