@@ -34,7 +34,12 @@ from .. import config, factory, generate, opts, utils
 from ..core.paths import resolve_solution
 from ..utils import importer
 
-app = typer.Typer()
+app = typer.Typer(
+    name="generate",
+    add_completion=False,
+    no_args_is_help=False,
+    help="Generate a jinja2 template configured in the solution file.",
+)
 
 logger = utils.start_logger(__name__)
 sys.tracebacklimit = 0
@@ -135,7 +140,7 @@ def run_generation(
     )
 
 
-@app.command("generate")
+@app.callback(invoke_without_command=True)
 def command(
     solution_path: Path | None = typer.Option(
         None,

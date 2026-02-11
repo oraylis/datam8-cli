@@ -25,13 +25,18 @@ import typer
 from .. import config, factory, opts, utils
 from ..core.paths import resolve_solution
 
-app = typer.Typer()
+app = typer.Typer(
+    name="validate",
+    add_completion=False,
+    no_args_is_help=False,
+    help="Validate solution model.",
+)
 
 logger = utils.start_logger(__name__)
 sys.tracebacklimit = 0
 
 
-@app.command("validate")
+@app.callback(invoke_without_command=True)
 def command(
     solution_path: Path | None = typer.Option(
         None,

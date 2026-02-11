@@ -33,7 +33,12 @@ from datam8.api.app import create_app
 from datam8.core.paths import resolve_solution
 from datam8.core.version import get_version
 
-app = typer.Typer()
+app = typer.Typer(
+    name="serve",
+    add_completion=False,
+    no_args_is_help=False,
+    help="Starts the DataM8 HTTP backend (desktop-safe).",
+)
 
 logger = utils.start_logger(__name__)
 sys.tracebacklimit = 0
@@ -48,7 +53,7 @@ def _bind(host: str, port: int) -> tuple[socket.socket, int]:
     return sock, actual_port
 
 
-@app.command("serve")
+@app.callback(invoke_without_command=True)
 def command(
     host: str = typer.Option("127.0.0.1", "--host"),
     port: int = typer.Option(0, "--port", min=0, max=65535),
