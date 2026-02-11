@@ -22,9 +22,9 @@ import json
 from pathlib import Path
 
 from pytest_cases import parametrize_with_cases
+from test_070_plugin_loader_cases import CasesVendoredPlugin
 
 from datam8.core.connectors.plugin_host import get_connector, load_connector_class
-from test_070_plugin_loader_cases import CasesVendoredPlugin
 
 
 def _write(path: Path, content: str) -> None:

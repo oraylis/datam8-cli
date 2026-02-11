@@ -22,7 +22,6 @@ import shutil
 from pathlib import Path
 
 from pytest_cases import parametrize_with_cases
-
 from test_050_api_connectors_cases import CasesConnectorValidation
 
 

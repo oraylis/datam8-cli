@@ -22,9 +22,9 @@ import json
 from pathlib import Path
 
 from pytest_cases import parametrize_with_cases
+from test_080_workspace_io_cases import CasesWorkspaceIo
 
 from datam8.core import workspace_io
-from test_080_workspace_io_cases import CasesWorkspaceIo
 
 
 def _write_json(path: Path, payload: dict) -> None:

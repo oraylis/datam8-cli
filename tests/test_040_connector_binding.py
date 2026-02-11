@@ -20,16 +20,16 @@ from __future__ import annotations
 
 import pytest
 from pytest_cases import parametrize_with_cases
+from test_040_connector_binding_cases import (
+    CasesConnectorBindingDecode,
+    CasesConnectorBindingEncode,
+)
 
 from datam8.core.connectors.binding import (
     decode_connector_binding,
     encode_connector_binding,
 )
 from datam8.core.errors import Datam8ValidationError
-from test_040_connector_binding_cases import (
-    CasesConnectorBindingDecode,
-    CasesConnectorBindingEncode,
-)
 
 
 @parametrize_with_cases(

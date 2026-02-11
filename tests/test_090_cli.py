@@ -23,11 +23,10 @@ import re
 from pathlib import Path
 
 from pytest_cases import parametrize_with_cases
+from test_090_cli_cases import CasesCli
 from typer.testing import CliRunner
 
 from datam8.app import app
-from test_090_cli_cases import CasesCli
-
 
 _ANSI_ESCAPE_RE = re.compile(r"\x1B\[[0-?]*[ -/]*[@-~]")
 

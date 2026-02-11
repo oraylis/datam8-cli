@@ -23,7 +23,6 @@ import zipfile
 from pathlib import Path
 
 from pytest_cases import parametrize_with_cases
-
 from test_060_api_plugins_cases import CasesPluginLifecycle
 
 
