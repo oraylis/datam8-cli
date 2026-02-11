@@ -1,11 +1,31 @@
+# DataM8
+# Copyright (C) 2024-2025 ORAYLIS GmbH
+#
+# This file is part of DataM8.
+#
+# DataM8 is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# DataM8 is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
 
+from pydantic import BaseModel
 
-@dataclass(frozen=True)
-class ErrorEnvelope:
+
+class ErrorEnvelope(BaseModel):
+    """Stable JSON envelope for API error responses."""
+
     code: str
     message: str
     details: Any = None
@@ -65,6 +85,17 @@ class Datam8NotImplementedError(Datam8Error):
 
 
 def as_datam8_error(err: Exception) -> Datam8Error:
+    """As datam8 error.
+
+    Parameters
+    ----------
+    err : Exception
+        err parameter value.
+
+    Returns
+    -------
+    Datam8Error
+        Computed return value."""
     if isinstance(err, Datam8Error):
         return err
     return Datam8Error(code="unexpected", message=str(err) or "Unexpected error.", details=None, hint=None, exit_code=10)

@@ -1,15 +1,31 @@
+# DataM8
+# Copyright (C) 2024-2025 ORAYLIS GmbH
+#
+# This file is part of DataM8.
+#
+# DataM8 is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# DataM8 is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 from __future__ import annotations
 
 import os
-from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from datam8.api.routes.jobs import router as jobs_router
-from datam8.api.routes.legacy_api import router as legacy_api_router
+from datam8.api.routes.api import router as api_router
 from datam8.api.routes.system import router as system_router
 from datam8.core.errors import Datam8Error, Datam8ValidationError
 from datam8.core.trace import new_trace_id
@@ -35,10 +51,11 @@ def _status_for_error(err: Datam8Error) -> int:
 
 
 def _is_exempt_path(path: str) -> bool:
-    return path in {"/health", "/version", "/api/health"}
+    return path in {"/health", "/version"}
 
 
-def create_app(*, token: str, enable_openapi: bool = False, job_manager: Any = None) -> FastAPI:
+def create_app(*, token: str, enable_openapi: bool = False) -> FastAPI:
+    """Create and configure the HTTP API application."""
     if enable_openapi:
         app = FastAPI(title="DataM8 API", version=get_version())
     else:
@@ -49,8 +66,6 @@ def create_app(*, token: str, enable_openapi: bool = False, job_manager: Any = N
             redoc_url=None,
             openapi_url=None,
         )
-
-    app.state.job_manager = job_manager
 
     origins_env = os.environ.get("DATAM8_CORS_ORIGINS")
     allow_origin_regex = os.environ.get("DATAM8_CORS_ORIGIN_REGEX")
@@ -87,13 +102,13 @@ def create_app(*, token: str, enable_openapi: bool = False, job_manager: Any = N
             )
             trace_id = getattr(request.state, "trace_id", None)
             env = exc.to_envelope(trace_id=trace_id)
-            return JSONResponse(status_code=401, content=env.__dict__)
+            return JSONResponse(status_code=401, content=env.model_dump())
         got = auth.split(" ", 1)[1].strip()
         if not got or got != token:
             exc = Datam8Error(code="auth", message="Invalid token.", details=None, hint=None, exit_code=7)
             trace_id = getattr(request.state, "trace_id", None)
             env = exc.to_envelope(trace_id=trace_id)
-            return JSONResponse(status_code=401, content=env.__dict__)
+            return JSONResponse(status_code=401, content=env.model_dump())
 
         return await call_next(request)
 
@@ -112,14 +127,14 @@ def create_app(*, token: str, enable_openapi: bool = False, job_manager: Any = N
     async def datam8_error_handler(request: Request, exc: Datam8Error):
         trace_id = getattr(request.state, "trace_id", None)
         env = exc.to_envelope(trace_id=trace_id)
-        return JSONResponse(status_code=_status_for_error(exc), content=env.__dict__)
+        return JSONResponse(status_code=_status_for_error(exc), content=env.model_dump())
 
     @app.exception_handler(RequestValidationError)
     async def request_validation_error_handler(request: Request, exc: RequestValidationError):
         trace_id = getattr(request.state, "trace_id", None)
         err = Datam8ValidationError(message="Invalid request.", details={"errors": exc.errors()})
         env = err.to_envelope(trace_id=trace_id)
-        return JSONResponse(status_code=400, content=env.__dict__)
+        return JSONResponse(status_code=400, content=env.model_dump())
 
     @app.exception_handler(Exception)
     async def unexpected_error_handler(request: Request, exc: Exception):
@@ -127,9 +142,8 @@ def create_app(*, token: str, enable_openapi: bool = False, job_manager: Any = N
         env = Datam8Error(code="unexpected", message="Unexpected error.", details=None, hint=None, exit_code=10).to_envelope(
             trace_id=trace_id
         )
-        return JSONResponse(status_code=500, content=env.__dict__)
+        return JSONResponse(status_code=500, content=env.model_dump())
 
     app.include_router(system_router)
-    app.include_router(jobs_router)
-    app.include_router(legacy_api_router)
+    app.include_router(api_router)
     return app

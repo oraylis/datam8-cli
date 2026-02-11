@@ -38,6 +38,24 @@ type PayloadOrder = int
 def register_payload(
     template: Path | str, order: int = 1
 ) -> Callable[[PayloadFunction], PayloadFunction]:
+    """Register payload.
+
+    Parameters
+    ----------
+    template : Path | str
+        template parameter value.
+    order : int
+        order parameter value.
+
+    Returns
+    -------
+    Callable[[PayloadFunction], PayloadFunction]
+        Computed return value.
+
+    Raises
+    ------
+    PayloadRegisteredMultipleTimesError
+        Raised when validation or runtime execution fails."""
     def register_payload(func: PayloadFunction) -> PayloadFunction:
         logger.debug(f"Registering payload {func.__module__}:{func.__name__}")
 
@@ -69,6 +87,26 @@ def register_payload(
 async def render_payload(
     payload: "PayloadDefinition", model: model.Model, cache: cache.Cache
 ) -> Exception | None:
+    """Render payload.
+
+    Parameters
+    ----------
+    payload : 'PayloadDefinition'
+        payload parameter value.
+    model : model.Model
+        model parameter value.
+    cache : cache.Cache
+        cache parameter value.
+
+    Returns
+    -------
+    Exception | None
+        Computed return value.
+
+    Raises
+    ------
+    Exception
+        Raised when validation or runtime execution fails."""
     logger.debug(f"Render payload: {payload._function.__name__}")
 
     try:
@@ -115,6 +153,23 @@ async def render_payload(
 async def render_template(
     payload_name: str, data: object, template: jinja2.Template, output_path: Path
 ) -> None | Exception:
+    """Render template.
+
+    Parameters
+    ----------
+    payload_name : str
+        payload_name parameter value.
+    data : object
+        data parameter value.
+    template : jinja2.Template
+        template parameter value.
+    output_path : Path
+        output_path parameter value.
+
+    Returns
+    -------
+    None | Exception
+        Computed return value."""
     _output_path = config.solution_folder_path / config.output_path / output_path
     logger.debug(f"[{payload_name}] Write output {template.filename} -> {_output_path}")
 

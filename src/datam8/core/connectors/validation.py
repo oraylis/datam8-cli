@@ -1,3 +1,21 @@
+# DataM8
+# Copyright (C) 2024-2025 ORAYLIS GmbH
+#
+# This file is part of DataM8.
+#
+# DataM8 is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# DataM8 is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 from __future__ import annotations
 
 from typing import Any
@@ -15,6 +33,19 @@ def _get_by_path(obj: Any, path: str) -> Any:
 
 
 def validate_connection_config(manifest: dict[str, Any], raw_config: Any) -> ValidationResult:
+    """Validate connection config.
+
+    Parameters
+    ----------
+    manifest : dict[str, Any]
+        manifest parameter value.
+    raw_config : Any
+        raw_config parameter value.
+
+    Returns
+    -------
+    ValidationResult
+        Computed return value."""
     cfg = raw_config if isinstance(raw_config, dict) else {}
     schema = manifest.get("connectionSchema") if isinstance(manifest, dict) else None
     errors: list[dict[str, str]] = []

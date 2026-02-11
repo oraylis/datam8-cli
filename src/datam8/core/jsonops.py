@@ -1,3 +1,21 @@
+# DataM8
+# Copyright (C) 2024-2025 ORAYLIS GmbH
+#
+# This file is part of DataM8.
+#
+# DataM8 is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# DataM8 is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 from __future__ import annotations
 
 import copy
@@ -7,6 +25,22 @@ from datam8.core.errors import Datam8ValidationError
 
 
 def parse_json_pointer(pointer: str) -> list[str]:
+    """Parse json pointer.
+
+    Parameters
+    ----------
+    pointer : str
+        pointer parameter value.
+
+    Returns
+    -------
+    list[str]
+        Computed return value.
+
+    Raises
+    ------
+    Datam8ValidationError
+        Raised when validation or runtime execution fails."""
     if not isinstance(pointer, str) or not pointer.startswith("/"):
         raise Datam8ValidationError(
             message="Invalid JSON pointer. Expected e.g. /a/b/0",
@@ -17,6 +51,28 @@ def parse_json_pointer(pointer: str) -> list[str]:
 
 
 def set_by_pointer(doc: Any, pointer: str, value: Any, *, create_missing: bool = True) -> Any:
+    """Set by pointer.
+
+    Parameters
+    ----------
+    doc : Any
+        doc parameter value.
+    pointer : str
+        pointer parameter value.
+    value : Any
+        value parameter value.
+    create_missing : bool
+        create_missing parameter value.
+
+    Returns
+    -------
+    Any
+        Computed return value.
+
+    Raises
+    ------
+    Datam8ValidationError
+        Raised when validation or runtime execution fails."""
     parts = parse_json_pointer(pointer)
     if not parts:
         return value
@@ -62,6 +118,19 @@ def set_by_pointer(doc: Any, pointer: str, value: Any, *, create_missing: bool =
 
 def merge_patch(target: Any, patch: Any) -> Any:
     # RFC 7396 (subset): objects are merged; non-objects replace; null deletes.
+    """Merge patch.
+
+    Parameters
+    ----------
+    target : Any
+        target parameter value.
+    patch : Any
+        patch parameter value.
+
+    Returns
+    -------
+    Any
+        Computed return value."""
     if not isinstance(patch, dict):
         return copy.deepcopy(patch)
     if not isinstance(target, dict):

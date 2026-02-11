@@ -1,3 +1,21 @@
+# DataM8
+# Copyright (C) 2024-2025 ORAYLIS GmbH
+#
+# This file is part of DataM8.
+#
+# DataM8 is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# DataM8 is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -16,6 +34,17 @@ class ConnectorBinding:
 
 
 def is_reserved_connection_property(name: str) -> bool:
+    """Is reserved connection property.
+
+    Parameters
+    ----------
+    name : str
+        name parameter value.
+
+    Returns
+    -------
+    bool
+        Computed return value."""
     n = (name or "").strip()
     return n.startswith(CONNECTOR_ID_PREFIX) or n.startswith(CONNECTOR_VERSION_PREFIX)
 
@@ -69,6 +98,26 @@ def encode_connector_binding(
     connector_id: str,
     connector_version: str | None = None,
 ) -> list[dict[str, Any]]:
+    """Encode connector binding.
+
+    Parameters
+    ----------
+    connection_properties : Any
+        connection_properties parameter value.
+    connector_id : str
+        connector_id parameter value.
+    connector_version : str | None
+        connector_version parameter value.
+
+    Returns
+    -------
+    list[dict[str, Any]]
+        Computed return value.
+
+    Raises
+    ------
+    Datam8ValidationError
+        Raised when validation or runtime execution fails."""
     cid = (connector_id or "").strip()
     if not cid:
         raise Datam8ValidationError(message="connector_id is required.", details=None)

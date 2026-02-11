@@ -1,3 +1,21 @@
+# DataM8
+# Copyright (C) 2024-2025 ORAYLIS GmbH
+#
+# This file is part of DataM8.
+#
+# DataM8 is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# DataM8 is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 from __future__ import annotations
 
 import json
@@ -26,6 +44,26 @@ def resolve_model_entity(
     solution_path: str | None,
     by: str = "auto",
 ) -> ResolvedEntity:
+    """Resolve a model entity from different selector forms.
+
+    Parameters
+    ----------
+    selector : str
+        Entity selector value (relPath, locator, id, or name).
+    solution_path : str | None
+        Optional explicit solution path.
+    by : str
+        Selector mode (`auto`, `relPath`, `locator`, `id`, `name`).
+
+    Returns
+    -------
+    ResolvedEntity
+        Resolved entity metadata with absolute and relative paths.
+
+    Raises
+    ------
+    Datam8ValidationError
+        If selector input is invalid or ambiguous."""
     sel = (selector or "").strip()
     if not sel:
         raise Datam8ValidationError(message="Empty entity selector.", details=None)
