@@ -28,8 +28,7 @@ from fastapi.responses import JSONResponse
 from datam8.api.routes.api import router as api_router
 from datam8.api.routes.system import router as system_router
 from datam8.core.errors import Datam8Error, Datam8ValidationError
-from datam8.core.trace import new_trace_id
-from datam8.core.version import get_version
+from datam8.core.runtime_meta import get_version, new_trace_id
 
 
 def _status_for_error(err: Datam8Error) -> int:

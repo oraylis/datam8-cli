@@ -8,12 +8,20 @@
 
 Neon launches the backend over embedded Python (`python -m datam8 serve`) and communicates via localhost HTTP.
 
+## Issues
+
+Issues are tracked centrally in the DataM8 repository:
+
+- https://github.com/oraylis/datam8/issues
+
 ## Key docs
 
 - Backend contract (canonical): `docs/backend-contract.md`
 - Server startup/auth details: `docs/server.md`
 - Connector plugin details: `docs/connectors.md`
 - Agent guidance: `AGENTS.md`
+- Central DataM8 docs: https://github.com/oraylis/datam8/tree/main/docs
+- Legacy generator docs location: https://github.com/oraylis/datam8/tree/main/docs/generator
 
 ## Local development
 
@@ -23,6 +31,8 @@ Neon launches the backend over embedded Python (`python -m datam8 serve`) and co
 - `uv` (https://docs.astral.sh/uv/getting-started/installation/)
 
 ### Clone
+
+The repository uses the `datam8-model` git submodule as schema source during model-code generation.
 
 ```sh
 git clone --recurse-submodules https://github.com/oraylis/datam8-generator.git

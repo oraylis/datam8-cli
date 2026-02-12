@@ -21,13 +21,9 @@ from __future__ import annotations
 import typer
 
 from datam8 import opts as cli_opts
-from datam8.core.solution_files import detect_solution_version
-from datam8.core.workspace_io import (
-    create_new_project,
-    list_base_entities,
-    list_model_entities,
-    read_solution,
-)
+from datam8.core import workspace_service
+from datam8.core.solution_index import detect_solution_version
+from datam8.core.workspace_io import create_new_project, read_solution
 
 from .common import emit_result, make_global_options, resolve_solution_path
 
@@ -83,25 +79,28 @@ def solution_full(
     json_output: cli_opts.JsonOutput = False,
     quiet: cli_opts.Quiet = False,
 ) -> None:
-    """Show solution metadata plus base/model entity listings."""
+    """Show solution metadata plus base/model/folder entity listings."""
     opts = make_global_options(solution=solution_path, json_output=json_output, quiet=quiet)
     active_solution_path = resolve_solution_path(opts)
-    resolved, sol = read_solution(active_solution_path)
-    base_entities = [e.model_dump() for e in list_base_entities(active_solution_path)]
-    model_entities = [e.model_dump() for e in list_model_entities(active_solution_path)]
+    snapshot = workspace_service.get_solution_full_snapshot(active_solution_path)
+    base_entities = [e.model_dump() for e in snapshot.baseEntities]
+    model_entities = [e.model_dump() for e in snapshot.modelEntities]
+    folder_entities = [e.model_dump() for e in snapshot.folderEntities]
     payload = {
-        "solutionPath": str(resolved.solution_file),
-        "solution": sol.model_dump(mode="json"),
+        "solutionPath": snapshot.solutionPath,
+        "solution": snapshot.solution.model_dump(mode="json"),
         "baseEntities": base_entities,
         "modelEntities": model_entities,
+        "folderEntities": folder_entities,
     }
     emit_result(
         opts,
         payload,
         human_lines=[
-            f"solution: {resolved.solution_file}",
+            f"solution: {snapshot.solutionPath}",
             f"baseEntities: {len(base_entities)}",
             f"modelEntities: {len(model_entities)}",
+            f"folderEntities: {len(folder_entities)}",
         ],
     )
 

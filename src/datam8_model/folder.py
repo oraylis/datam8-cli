@@ -40,6 +40,8 @@ class Folder(BaseModel):
     """
     Path of this folder, if not set the current directory will be used.
     """
+    dataProduct: str | None = None
+    dataModule: str | None = None
     properties: Sequence[property.PropertyReference] | None = None
 
     def to_dict(self) -> dict:

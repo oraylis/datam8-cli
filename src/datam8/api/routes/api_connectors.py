@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from typing import Any
 
 from fastapi import APIRouter, Query, Request, Response
@@ -27,7 +28,11 @@ from datam8.core import schema_refresh, workspace_io
 from datam8.core import secrets as secrets_core
 from datam8.core.connectors import plugin_host, plugin_manager
 from datam8.core.connectors import resolve as connector_resolve
-from datam8.core.errors import Datam8NotImplementedError, Datam8ValidationError
+from datam8.core.errors import (
+    Datam8NotFoundError,
+    Datam8NotImplementedError,
+    Datam8ValidationError,
+)
 from datam8.core.lock import SolutionLock
 
 from .common import lock_timeout_seconds, plugin_dir
@@ -41,6 +46,7 @@ from .response_models import (
     MetadataResponse,
     PluginStateResponse,
     RuntimeSecretsResponse,
+    StatusResponse,
     TablesResponse,
     UpdatedEntitiesResponse,
     UsagesResponse,
@@ -122,6 +128,36 @@ class SecretsRuntimeDeleteKeyBody(BaseModel):
     solutionPath: str | None = None
     dataSourceName: str
     key: str
+
+
+class PluginInfoEnvelope(BaseModel):
+    """Single-plugin info envelope."""
+
+    plugin: dict[str, Any]
+
+
+class PluginVerifyResponse(BaseModel):
+    """Plugin verification response payload."""
+
+    verified: bool
+    plugin: dict[str, Any] | None = None
+    bundle: dict[str, Any] | None = None
+
+
+class RuntimeSecretsListResponse(BaseModel):
+    """Runtime secret key list payload."""
+
+    dataSourceName: str
+    count: int
+    secrets: list[dict[str, Any]]
+
+
+class RuntimeSecretValueResponse(BaseModel):
+    """Single runtime secret value payload."""
+
+    dataSourceName: str
+    key: str
+    secret: dict[str, Any]
 
 
 @router.get("/connectors")
@@ -233,6 +269,54 @@ async def plugins_uninstall(body: PluginIdBody) -> PluginStateResponse:
     return PluginStateResponse.model_validate(plugin_manager.reload(configured_plugin_dir))
 
 
+@router.get("/plugins/{pluginId}/info")
+async def plugin_info(pluginId: str) -> PluginInfoEnvelope:
+    """Return metadata for one installed plugin."""
+    state = plugin_manager.reload(plugin_dir())
+    plugin = next(
+        (
+            p
+            for p in state.get("plugins", [])
+            if isinstance(p, dict) and p.get("id") == pluginId
+        ),
+        None,
+    )
+    if not plugin:
+        raise Datam8NotFoundError(message="Plugin not found.", details={"id": pluginId})
+    return PluginInfoEnvelope(plugin=plugin)
+
+
+@router.post("/plugins/{pluginId}/verify")
+async def plugin_verify(pluginId: str) -> PluginVerifyResponse:
+    """Verify metadata of one installed plugin."""
+    state = plugin_manager.reload(plugin_dir())
+    plugin = next(
+        (
+            p
+            for p in state.get("plugins", [])
+            if isinstance(p, dict) and p.get("id") == pluginId
+        ),
+        None,
+    )
+    if not plugin:
+        raise Datam8NotFoundError(message="Plugin not found.", details={"id": pluginId})
+    verified = "sha256" in plugin and "entry" in plugin
+    return PluginVerifyResponse(verified=verified, plugin=plugin)
+
+
+@router.post("/plugins/verify")
+async def plugins_verify(req: Request) -> PluginVerifyResponse:
+    """Verify plugin metadata or validate a ZIP plugin bundle."""
+    content_type = (req.headers.get("content-type") or "").lower()
+    if "application/zip" in content_type:
+        bundle = plugin_manager.verify_zip_bundle(zip_bytes=await req.body())
+        return PluginVerifyResponse(verified=True, bundle=asdict(bundle))
+    raise Datam8ValidationError(
+        message="Only ZIP bundle verification is supported.",
+        details=None,
+    )
+
+
 @router.post("/datasources/{dataSourceId}/list-tables")
 async def datasources_list_tables(
     dataSourceId: str,
@@ -257,6 +341,32 @@ async def datasources_list_tables(
         )
     tables = connector_cls.list_tables(cfg, resolver)  # type: ignore[attr-defined]
     return TablesResponse(tables=tables)
+
+
+@router.post("/datasources/{dataSourceId}/test")
+async def datasources_test(
+    dataSourceId: str,
+    body: DataSourceAuthBody,
+) -> StatusResponse:
+    """Resolve and test datasource connector connectivity."""
+    stored = secrets_core.get_runtime_secrets_map(
+        solution_path=body.solutionPath,
+        data_source_name=dataSourceId,
+        include_values=True,
+    )
+    merged = {**stored, **(body.runtimeSecrets or {})}
+    connector_cls, manifest, cfg, resolver = connector_resolve.resolve_and_validate(
+        solution_path=body.solutionPath,
+        data_source_id=dataSourceId,
+        runtime_secrets=merged,
+    )
+    if hasattr(connector_cls, "test_connection"):
+        connector_cls.test_connection(cfg, resolver)  # type: ignore[attr-defined]
+    connector_id = manifest.get("id")
+    return StatusResponse(
+        status="ok",
+        connector=str(connector_id) if connector_id is not None else None,
+    )
 
 
 @router.post("/datasources/{dataSourceId}/table-metadata")
@@ -442,6 +552,40 @@ async def secrets_runtime_get(
                 key=key.strip(),
             )
     return RuntimeSecretsResponse(runtimeSecrets=refs or None)
+
+
+@router.get("/secrets/runtime/list")
+async def secrets_runtime_list(
+    solutionPath: str | None = Query(None),
+    dataSourceName: str = Query(...),
+) -> RuntimeSecretsListResponse:
+    """List runtime secret keys for a datasource."""
+    entries = secrets_core.list_runtime_secret_keys(solutionPath, dataSourceName)
+    return RuntimeSecretsListResponse(
+        dataSourceName=dataSourceName,
+        count=len(entries),
+        secrets=entries,
+    )
+
+
+@router.get("/secrets/runtime/key")
+async def secrets_runtime_get_key(
+    solutionPath: str | None = Query(None),
+    dataSourceName: str = Query(...),
+    key: str = Query(...),
+) -> RuntimeSecretValueResponse:
+    """Read one runtime secret value for a datasource key."""
+    entry = secrets_core.get_runtime_secret(
+        solution_path=solutionPath,
+        data_source_name=dataSourceName,
+        key=key,
+        reveal=True,
+    )
+    return RuntimeSecretValueResponse(
+        dataSourceName=dataSourceName,
+        key=key,
+        secret=entry,
+    )
 
 
 @router.put("/secrets/runtime")

@@ -27,7 +27,7 @@ from pydantic import BaseModel
 
 from datam8.core.atomic import atomic_write_json
 from datam8.core.errors import Datam8ValidationError
-from datam8.core.solution_files import iter_solution_json_files
+from datam8.core.solution_index import iter_solution_json_files
 
 
 class RefactorChange(BaseModel):

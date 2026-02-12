@@ -22,8 +22,7 @@ from pathlib import Path
 import rich
 import typer
 
-from .. import config, factory, opts, utils
-from ..core.paths import resolve_solution
+from .. import factory, opts, utils
 
 app = typer.Typer(
     name="validate",
@@ -62,15 +61,13 @@ def command(
     if not isinstance(effective_log_level, str) or not effective_log_level.strip():
         effective_log_level = opts.LogLevels.WARNING.value
 
-    resolved = resolve_solution(str(solution_path))
     try:
-        config.log_level = opts.LogLevels(effective_log_level.strip().lower())
-    except Exception:
-        config.log_level = opts.LogLevels.WARNING
-    config.lazy = False
-    config.solution_path = resolved.solution_file
-    config.solution_folder_path = resolved.root_dir
-
-    _ = factory.create_model()
+        _ = factory.validate_solution_model(
+            solution_path=solution_path,
+            log_level=effective_log_level,
+        )
+    except Exception as err:
+        logger.error(err)
+        sys.exit(1)
 
     rich.print("Validation successfull")

@@ -19,17 +19,17 @@
 from __future__ import annotations
 
 import importlib.metadata
+import uuid
+
+
+def new_trace_id() -> str:
+    """Create a new trace id."""
+    return str(uuid.uuid4())
 
 
 def get_version() -> str:
-    """Get version.
-
-    Returns
-    -------
-    str
-        Computed return value."""
+    """Return package version."""
     try:
         return importlib.metadata.version("datam8")
     except Exception:
         return "0.0.0"
-
