@@ -30,6 +30,12 @@ class ModelParseException(Exception):
         self.inner_exceptions = inner_exceptions
         self.message = msg
 
+    def __str__(self) -> str:
+        if not self.inner_exceptions:
+            return self.message
+        details = "\n".join(str(err) for err in self.inner_exceptions)
+        return f"{self.message}\n{details}"
+
 
 class NotSupportedModelVersion(Exception):
     def __init__(self, version: str):

@@ -30,10 +30,10 @@ from typing import Any
 
 import typer
 
-from datam8.core.duration import parse_duration_seconds
 from datam8.core.errors import Datam8ValidationError
 from datam8.core.lock import SolutionLock
-from datam8.core.version import get_version
+from datam8.core.parse_utils import parse_duration_seconds
+from datam8.core.runtime_meta import get_version
 
 
 @dataclass(frozen=True)

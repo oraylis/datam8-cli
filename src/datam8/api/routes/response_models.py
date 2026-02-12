@@ -63,6 +63,17 @@ class BaseEntityResponse(BaseModel):
     content: Any
 
 
+class FolderEntityResponse(BaseModel):
+    """Typed folder metadata representation."""
+
+    locator: str
+    name: str
+    absPath: str
+    relPath: str
+    folderPath: str
+    content: Any
+
+
 class DirectoryEntryResponse(BaseModel):
     """Directory entry returned by fs list operations."""
 
@@ -84,11 +95,27 @@ class SolutionFullResponse(BaseModel):
     solution: Solution
     baseEntities: list[BaseEntityResponse]
     modelEntities: list[ModelEntityResponse]
+    folderEntities: list[FolderEntityResponse]
 
 
 class SolutionPathResponse(BaseModel):
     """Path response for created projects."""
 
+    solutionPath: str
+
+
+class SolutionInfoResponse(BaseModel):
+    """Resolved solution info payload."""
+
+    solutionPath: str
+    solution: Solution
+    resolvedPaths: ResolvedPathsResponse
+
+
+class SolutionValidateResponse(BaseModel):
+    """Solution validation status payload."""
+
+    status: str
     solutionPath: str
 
 
@@ -123,6 +150,27 @@ class ContentResponse(BaseModel):
     """Text content response."""
 
     content: str
+
+
+class JsonDocumentResponse(BaseModel):
+    """JSON document response."""
+
+    relPath: str
+    content: Any
+
+
+class ModelDocumentResponse(BaseModel):
+    """Model JSON document response."""
+
+    entity: str
+    content: Any
+
+
+class ValidationStatusResponse(BaseModel):
+    """Simple validation status response."""
+
+    status: str
+    relPath: str
 
 
 class ScriptListResponse(BaseModel):
@@ -197,6 +245,13 @@ class AvailableResponse(BaseModel):
     """Boolean capability response."""
 
     available: bool
+
+
+class StatusResponse(BaseModel):
+    """Generic operation status payload."""
+
+    status: str
+    connector: str | None = None
 
 
 class MigrationResponse(BaseModel):

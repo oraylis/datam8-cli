@@ -236,6 +236,8 @@ def __parse_base_entities(
         for k, v in base_entities.items()
     }
 
+    __validate_folder_product_module(unpacked_entities)
+
     for _t, _entity in unpacked_entities.items():
         logger.info(f"Parsed {_t} entities: {len(_entity)}")
 
@@ -259,3 +261,53 @@ def __parse_base_entity_file(
     logger.debug(rel_path)
 
     return rel_path, (entities_type, entities)
+
+
+def __validate_folder_product_module(
+    base_entities: dict[str, EntityDict[Any]],
+) -> None:
+    data_products: EntityDict[Any] = base_entities.get(b.EntityType.DATA_PRODUCTS.value, {})
+    folders: EntityDict[Any] = base_entities.get(b.EntityType.FOLDERS.value, {})
+
+    known_products: dict[str, set[str]] = {}
+    for wrapped in data_products.values():
+        product_name = (getattr(wrapped.entity, "name", "") or "").strip()
+        if not product_name:
+            continue
+        module_names: set[str] = set()
+        for module in getattr(wrapped.entity, "dataModules", []) or []:
+            module_name = (getattr(module, "name", "") or "").strip()
+            if module_name:
+                module_names.add(module_name)
+        known_products[product_name] = module_names
+
+    issues: list[str] = []
+    for wrapped in folders.values():
+        locator = str(wrapped.locator)
+        data_product = (getattr(wrapped.entity, "dataProduct", "") or "").strip()
+        data_module = (getattr(wrapped.entity, "dataModule", "") or "").strip()
+
+        if data_module and not data_product:
+            issues.append(
+                f"{locator}: dataModule '{data_module}' requires dataProduct."
+            )
+            continue
+
+        if data_product and data_product not in known_products:
+            issues.append(
+                f"{locator}: dataProduct '{data_product}' does not exist in Base/DataProducts.json."
+            )
+            continue
+
+        if data_module and data_product:
+            available_modules = known_products.get(data_product, set())
+            if data_module not in available_modules:
+                issues.append(
+                    f"{locator}: dataModule '{data_module}' does not exist under dataProduct '{data_product}'."
+                )
+
+    if issues:
+        raise errors.ModelParseException(
+            msg="Folder metadata validation failed.",
+            inner_exceptions=[ValueError(issue) for issue in issues],
+        )

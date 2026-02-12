@@ -24,8 +24,8 @@ from pathlib import Path
 from typing import Any
 
 from datam8.core.errors import Datam8NotFoundError, Datam8ValidationError
-from datam8.core.indexing import read_index
 from datam8.core.paths import safe_join
+from datam8.core.solution_index import read_index
 from datam8.core.workspace_io import list_model_entities, read_solution
 
 

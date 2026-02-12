@@ -102,8 +102,67 @@ def test_plugins_api_install_enable_disable_uninstall(
         response.raise_for_status()
         assert connector_id in _connector_ids(response.json())
 
+        response = client.get(f"/plugins/{connector_id}/info", headers=headers)
+        response.raise_for_status()
+        assert response.json().get("plugin", {}).get("id") == connector_id
+
+        response = client.post(f"/plugins/{connector_id}/verify", headers=headers)
+        response.raise_for_status()
+        assert isinstance(response.json().get("verified"), bool)
+
+        response = client.post(
+            "/plugins/verify",
+            headers={
+                **headers,
+                "Content-Type": "application/zip",
+            },
+            content=zip_bytes,
+        )
+        response.raise_for_status()
+        assert response.json().get("verified") is True
+
         response = client.post("/plugins/uninstall", headers=headers, json={"id": connector_id})
         response.raise_for_status()
         response = client.get("/connectors", headers=headers)
         response.raise_for_status()
         assert connector_id not in _connector_ids(response.json())
+
+
+def test_datasource_test_endpoint_calls_connector_test(api_client, monkeypatch) -> None:
+    token = "datasource-test-token"
+    headers = {"Authorization": f"Bearer {token}"}
+    called: dict[str, bool] = {"test": False}
+
+    class _FakeConnector:
+        @staticmethod
+        def test_connection(cfg, resolver) -> None:
+            _ = cfg
+            _ = resolver
+            called["test"] = True
+
+    monkeypatch.setattr(
+        "datam8.api.routes.api_connectors.secrets_core.get_runtime_secrets_map",
+        lambda solution_path, data_source_name, include_values: {},
+    )
+    monkeypatch.setattr(
+        "datam8.api.routes.api_connectors.connector_resolve.resolve_and_validate",
+        lambda solution_path, data_source_id, runtime_secrets: (
+            _FakeConnector,
+            {"id": "fake-connector"},
+            {"config": True},
+            {"resolver": True},
+        ),
+    )
+
+    with api_client(token=token) as client:
+        response = client.post(
+            "/datasources/SampleDataSource/test",
+            headers=headers,
+            json={"solutionPath": "C:/tmp/TestSolution.dm8s", "runtimeSecrets": {"password": "x"}},
+        )
+        response.raise_for_status()
+        payload = response.json()
+
+    assert payload["status"] == "ok"
+    assert payload["connector"] == "fake-connector"
+    assert called["test"] is True

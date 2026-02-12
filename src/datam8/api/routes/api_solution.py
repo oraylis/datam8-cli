@@ -19,25 +19,34 @@
 from __future__ import annotations
 
 import os
+from functools import partial
 from typing import Any
 
 from fastapi import APIRouter, Query
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
+from pydantic_core import ValidationError
 
+from datam8 import factory, model_exceptions, parser_exceptions
 from datam8.core import (
     migration_v1_to_v2 as migration_v1_to_v2_core,
 )
-from datam8.core import solution_files, workspace_io
+from datam8.core import workspace_io, workspace_service
+from datam8.core.errors import Datam8ValidationError
+from datam8.core.solution_index import detect_solution_version
 
 from .response_models import (
     BaseEntityResponse,
     ConfigResponse,
+    FolderEntityResponse,
     MigrationResponse,
     ModelEntityResponse,
     ResolvedPathsResponse,
     SolutionFullResponse,
+    SolutionInfoResponse,
     SolutionPathResponse,
     SolutionResponse,
+    SolutionValidateResponse,
     VersionResponse,
 )
 
@@ -71,7 +80,7 @@ async def config() -> ConfigResponse:
 @router.get("/solution/inspect")
 async def solution_inspect(path: str = Query(...)) -> VersionResponse:
     """Detect and return the solution format version."""
-    return VersionResponse(version=solution_files.detect_solution_version(path))
+    return VersionResponse(version=detect_solution_version(path))
 
 
 @router.post("/migration/v1-to-v2")
@@ -98,23 +107,80 @@ async def solution(path: str | None = Query(None)) -> SolutionResponse:
     )
 
 
+@router.get("/solution/info")
+async def solution_info(path: str | None = Query(None)) -> SolutionInfoResponse:
+    """Return resolved solution metadata including solution path."""
+    resolved, sol = workspace_io.read_solution(path)
+    return SolutionInfoResponse(
+        solutionPath=str(resolved.solution_file),
+        solution=sol,
+        resolvedPaths=ResolvedPathsResponse(base=str(sol.basePath), model=str(sol.modelPath)),
+    )
+
+
 @router.get("/solution/full")
 async def solution_full(path: str | None = Query(None)) -> SolutionFullResponse:
     """Read and return the full solution with base/model entities."""
-    _resolved, sol = workspace_io.read_solution(path)
+    snapshot = workspace_service.get_solution_full_snapshot(path)
     base_entities = [
         BaseEntityResponse.model_validate(entity.model_dump())
-        for entity in workspace_io.list_base_entities(path)
+        for entity in snapshot.baseEntities
     ]
     model_entities = [
         ModelEntityResponse.model_validate(entity.model_dump())
-        for entity in workspace_io.list_model_entities(path)
+        for entity in snapshot.modelEntities
+    ]
+    folder_entities = [
+        FolderEntityResponse.model_validate(entity.model_dump())
+        for entity in snapshot.folderEntities
     ]
     return SolutionFullResponse(
-        solution=sol,
+        solution=snapshot.solution,
         baseEntities=base_entities,
         modelEntities=model_entities,
+        folderEntities=folder_entities,
     )
+
+
+@router.post("/solution/validate")
+async def solution_validate(path: str | None = Query(None)) -> SolutionValidateResponse:
+    """Validate that a solution can be resolved and parsed."""
+    resolved, _sol = workspace_io.read_solution(path)
+    return SolutionValidateResponse(status="ok", solutionPath=str(resolved.solution_file))
+
+
+@router.post("/validate")
+async def validate(path: str | None = Query(None), logLevel: str | None = Query(None)) -> SolutionValidateResponse:
+    """Validate full model parsing/resolution (CLI `datam8 validate` parity)."""
+    candidate = path or os.environ.get("DATAM8_SOLUTION_PATH")
+    if not candidate:
+        raise Datam8ValidationError(
+            message="No solution specified. Use path query parameter or DATAM8_SOLUTION_PATH.",
+            details=None,
+        )
+
+    try:
+        resolved_solution = await run_in_threadpool(
+            partial(
+                factory.validate_solution_model,
+                solution_path=candidate,
+                log_level=logLevel,
+            )
+        )
+    except (
+        RecursionError,
+        ValidationError,
+        parser_exceptions.ModelParseException,
+        parser_exceptions.NotSupportedModelVersion,
+        model_exceptions.EntityNotFoundError,
+        model_exceptions.PropertiesNotResolvedError,
+    ) as err:
+        raise Datam8ValidationError(
+            message="Solution model validation failed.",
+            details={"error": str(err)},
+        )
+
+    return SolutionValidateResponse(status="ok", solutionPath=str(resolved_solution))
 
 
 @router.post("/solution/new-project")
