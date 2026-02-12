@@ -23,18 +23,12 @@ import json
 import typer
 
 from datam8 import opts as cli_opts
+from datam8.core import workspace_service
 from datam8.core.jsonops import merge_patch, set_by_pointer
-from datam8.core.workspace_io import (
-    delete_base_entity,
-    list_base_entities,
-    read_solution,
-    read_workspace_json,
-    write_base_entity,
-)
+from datam8.core.workspace_io import read_workspace_json
 
 from .common import (
     emit_result,
-    lock_context,
     make_global_options,
     open_in_editor,
     read_json_arg,
@@ -57,7 +51,7 @@ def list_entities(
 ) -> None:
     """List Base entities."""
     opts = make_global_options(solution=solution_path, json_output=json_output, quiet=quiet)
-    entities = list_base_entities(resolve_solution_path(opts))
+    entities = workspace_service.list_base_entities(resolve_solution_path(opts))
     payload = {"count": len(entities), "entities": [e.model_dump() for e in entities]}
     emit_result(opts, payload, human_lines=[e.relPath for e in entities])
 
@@ -96,9 +90,13 @@ def save_entity(
     )
     active_solution_path = resolve_solution_path(opts)
     doc = read_json_arg(content)
-    resolved, _ = read_solution(active_solution_path)
-    with lock_context(opts=opts, lock_file_root=resolved.root_dir):
-        abs_path = write_base_entity(rel_path, doc, active_solution_path)
+    abs_path = workspace_service.save_base_entity(
+        rel_path=rel_path,
+        content=doc,
+        solution_path=active_solution_path,
+        no_lock=opts.no_lock,
+        lock_timeout=opts.lock_timeout,
+    )
     payload = {"status": "saved", "absPath": abs_path}
     emit_result(opts, payload, human_lines=[f"saved: {abs_path}"])
 
@@ -127,9 +125,13 @@ def set_pointer(
     current = read_workspace_json(rel_path, active_solution_path)
     value = read_json_arg(value_json)
     next_doc = set_by_pointer(current, pointer, value, create_missing=create_missing)
-    resolved, _ = read_solution(active_solution_path)
-    with lock_context(opts=opts, lock_file_root=resolved.root_dir):
-        abs_path = write_base_entity(rel_path, next_doc, active_solution_path)
+    abs_path = workspace_service.save_base_entity(
+        rel_path=rel_path,
+        content=next_doc,
+        solution_path=active_solution_path,
+        no_lock=opts.no_lock,
+        lock_timeout=opts.lock_timeout,
+    )
     payload = {"status": "saved", "absPath": abs_path}
     emit_result(opts, payload, human_lines=[f"saved: {abs_path}"])
 
@@ -156,9 +158,13 @@ def patch_entity(
     current = read_workspace_json(rel_path, active_solution_path)
     patch = read_json_arg(patch_json)
     next_doc = merge_patch(current, patch)
-    resolved, _ = read_solution(active_solution_path)
-    with lock_context(opts=opts, lock_file_root=resolved.root_dir):
-        abs_path = write_base_entity(rel_path, next_doc, active_solution_path)
+    abs_path = workspace_service.save_base_entity(
+        rel_path=rel_path,
+        content=next_doc,
+        solution_path=active_solution_path,
+        no_lock=opts.no_lock,
+        lock_timeout=opts.lock_timeout,
+    )
     payload = {"status": "saved", "absPath": abs_path}
     emit_result(opts, payload, human_lines=[f"saved: {abs_path}"])
 
@@ -184,9 +190,13 @@ def edit_entity(
     current = read_workspace_json(rel_path, active_solution_path)
     edited_raw = open_in_editor(suffix=".json", initial_text=json.dumps(current, indent=4, ensure_ascii=False) + "\n")
     next_doc = json.loads(edited_raw)
-    resolved, _ = read_solution(active_solution_path)
-    with lock_context(opts=opts, lock_file_root=resolved.root_dir):
-        abs_path = write_base_entity(rel_path, next_doc, active_solution_path)
+    abs_path = workspace_service.save_base_entity(
+        rel_path=rel_path,
+        content=next_doc,
+        solution_path=active_solution_path,
+        no_lock=opts.no_lock,
+        lock_timeout=opts.lock_timeout,
+    )
     payload = {"status": "saved", "absPath": abs_path}
     emit_result(opts, payload, human_lines=[f"saved: {abs_path}"])
 
@@ -209,8 +219,11 @@ def delete_entity(
         no_lock=no_lock,
     )
     active_solution_path = resolve_solution_path(opts)
-    resolved, _ = read_solution(active_solution_path)
-    with lock_context(opts=opts, lock_file_root=resolved.root_dir):
-        abs_path = delete_base_entity(rel_path, active_solution_path)
+    abs_path = workspace_service.delete_base_entity(
+        rel_path=rel_path,
+        solution_path=active_solution_path,
+        no_lock=opts.no_lock,
+        lock_timeout=opts.lock_timeout,
+    )
     payload = {"status": "deleted", "absPath": abs_path}
     emit_result(opts, payload, human_lines=[f"deleted: {abs_path}"])

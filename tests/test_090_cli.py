@@ -75,6 +75,52 @@ def _create_minimal_solution(root: Path) -> Path:
     return solution_file
 
 
+def _create_solution_with_folder_metadata(root: Path, *, folder_name: str = "Sales") -> Path:
+    base_path = root / "Base"
+    folder_path = root / "Model" / "010-Stage" / folder_name
+    generate_path = root / "Generate" / "dummy" / "__modules"
+    output_path = root / "Output" / "dummy" / "generated"
+    base_path.mkdir(parents=True, exist_ok=True)
+    folder_path.mkdir(parents=True, exist_ok=True)
+    generate_path.mkdir(parents=True, exist_ok=True)
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    _write_json(base_path / "DataProducts.json", {"type": "dataProducts", "dataProducts": []})
+    _write_json(
+        folder_path / "Customer.json",
+        {
+            "id": 1,
+            "name": "Customer",
+            "attributes": [],
+            "sources": [],
+        },
+    )
+    _write_json(
+        folder_path / ".properties.json",
+        {
+            "type": "folders",
+            "folders": [{"id": 101, "name": folder_name, "properties": []}],
+        },
+    )
+
+    solution = {
+        "schemaVersion": "2.0.0",
+        "basePath": "Base",
+        "modelPath": "Model",
+        "generatorTargets": [
+            {
+                "name": "dummy",
+                "isDefault": True,
+                "sourcePath": "Generate/dummy",
+                "outputPath": "Output/dummy/generated",
+            }
+        ],
+    }
+    solution_file = root / "TestSolution.dm8s"
+    _write_json(solution_file, solution)
+    return solution_file
+
+
 def _normalized_output(result) -> str:
     chunks: list[bytes] = []
     stdout_bytes = getattr(result, "stdout_bytes", None)
@@ -159,3 +205,118 @@ def test_generate_validate_serve_stay_single_call_commands(case_data, monkeypatc
 
     serve = runner.invoke(app, ["serve"])
     assert serve.exit_code != 0
+
+
+def test_solution_full_includes_folder_entities_in_cli(tmp_path: Path) -> None:
+    runner = CliRunner()
+    solution_file = _create_solution_with_folder_metadata(tmp_path)
+
+    result = runner.invoke(
+        app,
+        ["solution", "full", "--json", "--solution", str(solution_file)],
+    )
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert "folderEntities" in payload
+    assert len(payload["folderEntities"]) == 1
+    assert payload["folderEntities"][0]["folderPath"] == "010-Stage/Sales"
+
+
+def test_model_folder_rename_returns_refreshed_entities(tmp_path: Path) -> None:
+    runner = CliRunner()
+    solution_file = _create_solution_with_folder_metadata(tmp_path, folder_name="Old")
+    from_rel = "Model/010-Stage/Old"
+    to_rel = "Model/010-Stage/New"
+
+    result = runner.invoke(
+        app,
+        [
+            "model",
+            "folder-rename",
+            from_rel,
+            to_rel,
+            "--json",
+            "--solution",
+            str(solution_file),
+        ],
+    )
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "renamed"
+    assert payload["toAbsPath"].replace("\\", "/").endswith(to_rel)
+    assert "index" in payload
+    assert len(payload["entities"]) == 1
+    assert payload["entities"][0]["relPath"] == "Model/010-Stage/New/Customer.json"
+
+
+def test_model_folder_metadata_get_save_delete(tmp_path: Path) -> None:
+    runner = CliRunner()
+    solution_file = _create_solution_with_folder_metadata(tmp_path)
+    rel_path = "Model/010-Stage/Sales/.properties.json"
+
+    get_result = runner.invoke(
+        app,
+        [
+            "model",
+            "folder-metadata",
+            "get",
+            rel_path,
+            "--json",
+            "--solution",
+            str(solution_file),
+        ],
+    )
+    assert get_result.exit_code == 0
+    get_payload = json.loads(get_result.stdout)
+    assert get_payload["content"]["type"] == "folders"
+
+    save_payload = {
+        "type": "folders",
+        "folders": [{"id": 777, "name": "Sales", "displayName": "Sales Folder", "properties": []}],
+    }
+    save_result = runner.invoke(
+        app,
+        [
+            "model",
+            "folder-metadata",
+            "save",
+            rel_path,
+            json.dumps(save_payload),
+            "--json",
+            "--solution",
+            str(solution_file),
+        ],
+    )
+    assert save_result.exit_code == 0
+
+    get_after_save = runner.invoke(
+        app,
+        [
+            "model",
+            "folder-metadata",
+            "get",
+            rel_path,
+            "--json",
+            "--solution",
+            str(solution_file),
+        ],
+    )
+    assert get_after_save.exit_code == 0
+    after_payload = json.loads(get_after_save.stdout)
+    assert after_payload["content"]["folders"][0]["id"] == 777
+    assert after_payload["content"]["folders"][0]["displayName"] == "Sales Folder"
+
+    delete_result = runner.invoke(
+        app,
+        [
+            "model",
+            "folder-metadata",
+            "delete",
+            rel_path,
+            "--json",
+            "--solution",
+            str(solution_file),
+        ],
+    )
+    assert delete_result.exit_code == 0
+    assert not (tmp_path / rel_path).exists()

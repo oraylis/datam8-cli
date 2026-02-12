@@ -23,10 +23,10 @@ import json
 import typer
 
 from datam8 import opts as cli_opts
-from datam8.core.indexing import read_index, validate_index
-from datam8.core.workspace_io import read_solution, regenerate_index
+from datam8.core import workspace_service
+from datam8.core.solution_index import read_index, validate_index
 
-from .common import emit_result, lock_context, make_global_options, resolve_solution_path
+from .common import emit_result, make_global_options, resolve_solution_path
 
 app = typer.Typer(
     name="index",
@@ -53,9 +53,11 @@ def regenerate(
         no_lock=no_lock,
     )
     active_solution_path = resolve_solution_path(opts)
-    resolved, _ = read_solution(active_solution_path)
-    with lock_context(opts=opts, lock_file_root=resolved.root_dir):
-        index = regenerate_index(active_solution_path)
+    index = workspace_service.regenerate_index(
+        solution_path=active_solution_path,
+        no_lock=opts.no_lock,
+        lock_timeout=opts.lock_timeout,
+    )
     payload = {"status": "index_regenerated", "index": index}
     emit_result(opts, payload, human_lines=["index regenerated"])
 

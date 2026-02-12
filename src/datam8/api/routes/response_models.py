@@ -104,6 +104,21 @@ class SolutionPathResponse(BaseModel):
     solutionPath: str
 
 
+class SolutionInfoResponse(BaseModel):
+    """Resolved solution info payload."""
+
+    solutionPath: str
+    solution: Solution
+    resolvedPaths: ResolvedPathsResponse
+
+
+class SolutionValidateResponse(BaseModel):
+    """Solution validation status payload."""
+
+    status: str
+    solutionPath: str
+
+
 class ModelEntitiesResponse(BaseModel):
     """Counted model entities response."""
 
@@ -135,6 +150,27 @@ class ContentResponse(BaseModel):
     """Text content response."""
 
     content: str
+
+
+class JsonDocumentResponse(BaseModel):
+    """JSON document response."""
+
+    relPath: str
+    content: Any
+
+
+class ModelDocumentResponse(BaseModel):
+    """Model JSON document response."""
+
+    entity: str
+    content: Any
+
+
+class ValidationStatusResponse(BaseModel):
+    """Simple validation status response."""
+
+    status: str
+    relPath: str
 
 
 class ScriptListResponse(BaseModel):
@@ -209,6 +245,13 @@ class AvailableResponse(BaseModel):
     """Boolean capability response."""
 
     available: bool
+
+
+class StatusResponse(BaseModel):
+    """Generic operation status payload."""
+
+    status: str
+    connector: str | None = None
 
 
 class MigrationResponse(BaseModel):

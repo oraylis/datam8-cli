@@ -23,7 +23,7 @@ All non-readiness logs are written to stderr.
 - No auth required: `GET /health`, `GET /version`
 - All other endpoints require: `Authorization: Bearer <token>`
 
-## Endpoint surface used by Neon
+## Endpoint surface used by Neon (plus parity extensions)
 
 ### System
 
@@ -35,13 +35,21 @@ All non-readiness logs are written to stderr.
 
 - Filesystem: `GET /fs/list`
 - Solution: `GET /solution`, `GET /solution/full`, `GET /solution/inspect`, `POST /solution/new-project`
+  - Full model validate parity: `POST /validate`
 - Migration: `POST /migration/v1-to-v2`
 - Model entities: `GET|POST|DELETE /model/entities`, `POST /model/entities/move`, `POST /model/folder/rename`
+  - Parity aliases: `GET /model/entity`, `POST /model/entity/create`, `POST /model/entity/validate`, `POST /model/entity/set`, `POST /model/entity/patch`, `POST /model/entity/duplicate`
+  - Folder metadata explicit endpoints: `GET|POST|DELETE /model/folder-metadata`
 - Model functions: `GET|POST /model/function/source`, `POST /model/function/rename`
 - Base entities: `GET|POST|DELETE /base/entities`
+  - Parity aliases: `GET /base/entity`, `POST /base/entity/set`, `POST /base/entity/patch`
+- Solution parity aliases: `GET /solution/info`, `POST /solution/validate`
 - Index/refactor: `POST /index/regenerate`, `GET /index/show`, `GET /index/validate`, `POST /refactor/properties`, `POST /refactor/keys`, `POST /refactor/values`, `POST /refactor/entity-id`
 - Search: `GET /search/entities`, `GET /search/text`
 - Connectors/plugins/secrets under `/connectors/*`, `/plugins/*`, `/datasources/*`, `/http/datasources/*`, `/secrets/*`
+  - Datasource parity endpoint: `POST /datasources/{dataSourceId}/test`
+  - Plugin parity endpoints: `GET /plugins/{pluginId}/info`, `POST /plugins/{pluginId}/verify`, `POST /plugins/verify`
+  - Secrets parity endpoints: `GET /secrets/runtime/list`, `GET /secrets/runtime/key`
 
 ### Generation
 
@@ -67,7 +75,7 @@ All non-readiness logs are written to stderr.
   - optional `displayName`, `description`, `path`
   - optional `properties` (array of `{ property, value }`)
   - optional `dataProduct` (string) and `dataModule` (string)
-- Save/update uses existing `POST /model/entities` with `relPath` pointing to `.properties.json`.
+- Save/update uses `POST /model/entities` or `POST /model/folder-metadata` with `relPath` pointing to `.properties.json`.
 
 ### Folder Validation Rules
 

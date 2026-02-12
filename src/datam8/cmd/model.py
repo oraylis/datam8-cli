@@ -23,24 +23,14 @@ import json
 import typer
 
 from datam8 import opts as cli_opts
+from datam8.core import workspace_service
 from datam8.core.entity_resolution import resolve_model_entity
 from datam8.core.errors import Datam8ValidationError
 from datam8.core.jsonops import merge_patch, set_by_pointer
-from datam8.core.workspace_io import (
-    create_model_entity,
-    delete_model_entity,
-    duplicate_model_entity,
-    list_model_entities,
-    move_model_entity,
-    read_solution,
-    read_workspace_json,
-    rename_folder,
-    write_model_entity,
-)
+from datam8.core.workspace_io import read_workspace_json
 
 from .common import (
     emit_result,
-    lock_context,
     make_global_options,
     open_in_editor,
     read_json_arg,
@@ -54,6 +44,14 @@ app = typer.Typer(
     help="Read and edit Model entities.",
 )
 
+folder_metadata_app = typer.Typer(
+    name="folder-metadata",
+    add_completion=False,
+    no_args_is_help=True,
+    help="Read and edit Model folder metadata files (*.properties.json).",
+)
+app.add_typer(folder_metadata_app, name="folder-metadata")
+
 
 @app.command("list")
 def list_entities(
@@ -63,7 +61,7 @@ def list_entities(
 ) -> None:
     """List model entities."""
     opts = make_global_options(solution=solution_path, json_output=json_output, quiet=quiet)
-    entities = list_model_entities(resolve_solution_path(opts))
+    entities = workspace_service.list_model_entities(resolve_solution_path(opts))
     payload = {"count": len(entities), "entities": [e.model_dump() for e in entities]}
     emit_result(opts, payload, human_lines=[e.relPath for e in entities])
 
@@ -104,9 +102,13 @@ def create_entity(
         no_lock=no_lock,
     )
     active_solution_path = resolve_solution_path(opts)
-    resolved, _ = read_solution(active_solution_path)
-    with lock_context(opts=opts, lock_file_root=resolved.root_dir):
-        abs_path = create_model_entity(rel_path, name=name, solution_path=active_solution_path)
+    abs_path = workspace_service.create_model_entity(
+        rel_path=rel_path,
+        name=name,
+        solution_path=active_solution_path,
+        no_lock=opts.no_lock,
+        lock_timeout=opts.lock_timeout,
+    )
     payload = {"status": "created", "absPath": abs_path}
     emit_result(opts, payload, human_lines=[f"created: {abs_path}"])
 
@@ -133,9 +135,13 @@ def save_entity(
     active_solution_path = resolve_solution_path(opts)
     entity = resolve_model_entity(selector, solution_path=active_solution_path, by=by)
     doc = read_json_arg(content)
-    resolved, _ = read_solution(active_solution_path)
-    with lock_context(opts=opts, lock_file_root=resolved.root_dir):
-        abs_path = write_model_entity(entity.rel_path, doc, active_solution_path)
+    abs_path = workspace_service.save_model_entity(
+        rel_path=entity.rel_path,
+        content=doc,
+        solution_path=active_solution_path,
+        no_lock=opts.no_lock,
+        lock_timeout=opts.lock_timeout,
+    )
     payload = {"status": "saved", "entity": entity.rel_path, "absPath": abs_path}
     emit_result(opts, payload, human_lines=[f"saved: {abs_path}"])
 
@@ -184,9 +190,13 @@ def set_pointer(
     current = read_workspace_json(entity.rel_path, active_solution_path)
     value = read_json_arg(value_json)
     next_doc = set_by_pointer(current, pointer, value, create_missing=create_missing)
-    resolved, _ = read_solution(active_solution_path)
-    with lock_context(opts=opts, lock_file_root=resolved.root_dir):
-        abs_path = write_model_entity(entity.rel_path, next_doc, active_solution_path)
+    abs_path = workspace_service.save_model_entity(
+        rel_path=entity.rel_path,
+        content=next_doc,
+        solution_path=active_solution_path,
+        no_lock=opts.no_lock,
+        lock_timeout=opts.lock_timeout,
+    )
     payload = {"status": "saved", "entity": entity.rel_path, "absPath": abs_path}
     emit_result(opts, payload, human_lines=[f"saved: {abs_path}"])
 
@@ -215,9 +225,13 @@ def patch_entity(
     current = read_workspace_json(entity.rel_path, active_solution_path)
     patch = read_json_arg(patch_json)
     next_doc = merge_patch(current, patch)
-    resolved, _ = read_solution(active_solution_path)
-    with lock_context(opts=opts, lock_file_root=resolved.root_dir):
-        abs_path = write_model_entity(entity.rel_path, next_doc, active_solution_path)
+    abs_path = workspace_service.save_model_entity(
+        rel_path=entity.rel_path,
+        content=next_doc,
+        solution_path=active_solution_path,
+        no_lock=opts.no_lock,
+        lock_timeout=opts.lock_timeout,
+    )
     payload = {"status": "saved", "entity": entity.rel_path, "absPath": abs_path}
     emit_result(opts, payload, human_lines=[f"saved: {abs_path}"])
 
@@ -242,9 +256,12 @@ def delete_entity(
     )
     active_solution_path = resolve_solution_path(opts)
     entity = resolve_model_entity(selector, solution_path=active_solution_path, by=by)
-    resolved, _ = read_solution(active_solution_path)
-    with lock_context(opts=opts, lock_file_root=resolved.root_dir):
-        abs_path = delete_model_entity(entity.rel_path, active_solution_path)
+    abs_path = workspace_service.delete_model_entity(
+        rel_path=entity.rel_path,
+        solution_path=active_solution_path,
+        no_lock=opts.no_lock,
+        lock_timeout=opts.lock_timeout,
+    )
     payload = {"status": "deleted", "entity": entity.rel_path, "absPath": abs_path}
     emit_result(opts, payload, human_lines=[f"deleted: {abs_path}"])
 
@@ -268,9 +285,13 @@ def move_entity(
         no_lock=no_lock,
     )
     active_solution_path = resolve_solution_path(opts)
-    resolved, _ = read_solution(active_solution_path)
-    with lock_context(opts=opts, lock_file_root=resolved.root_dir):
-        result = move_model_entity(from_rel_path, to_rel_path, active_solution_path)
+    result = workspace_service.move_model_entity(
+        from_rel_path=from_rel_path,
+        to_rel_path=to_rel_path,
+        solution_path=active_solution_path,
+        no_lock=opts.no_lock,
+        lock_timeout=opts.lock_timeout,
+    )
     payload = {"status": "moved", **result.model_dump()}
     emit_result(
         opts,
@@ -298,9 +319,13 @@ def duplicate_entity(
         no_lock=no_lock,
     )
     active_solution_path = resolve_solution_path(opts)
-    resolved, _ = read_solution(active_solution_path)
-    with lock_context(opts=opts, lock_file_root=resolved.root_dir):
-        result = duplicate_model_entity(from_rel_path, to_rel_path, solution_path=active_solution_path)
+    result = workspace_service.duplicate_model_entity(
+        from_rel_path=from_rel_path,
+        to_rel_path=to_rel_path,
+        solution_path=active_solution_path,
+        no_lock=opts.no_lock,
+        lock_timeout=opts.lock_timeout,
+    )
     payload = {"status": "duplicated", **result.model_dump()}
     emit_result(
         opts,
@@ -319,7 +344,7 @@ def rename_model_folder(
     lock_timeout: cli_opts.LockTimeout = "10s",
     no_lock: cli_opts.NoLock = False,
 ) -> None:
-    """Rename a model folder path."""
+    """Rename a model folder path and regenerate index."""
     opts = make_global_options(
         solution=solution_path,
         json_output=json_output,
@@ -328,11 +353,105 @@ def rename_model_folder(
         no_lock=no_lock,
     )
     active_solution_path = resolve_solution_path(opts)
-    resolved, _ = read_solution(active_solution_path)
-    with lock_context(opts=opts, lock_file_root=resolved.root_dir):
-        result = rename_folder(from_folder_rel_path, to_folder_rel_path, active_solution_path)
-    payload = {"status": "renamed", **result.model_dump()}
-    emit_result(opts, payload, human_lines=[f"renamed: {result.fromAbsPath} -> {result.toAbsPath}"])
+    result = workspace_service.rename_model_folder(
+        from_folder_rel_path=from_folder_rel_path,
+        to_folder_rel_path=to_folder_rel_path,
+        solution_path=active_solution_path,
+        no_lock=opts.no_lock,
+        lock_timeout=opts.lock_timeout,
+    )
+    payload = {
+        "status": "renamed",
+        "fromAbsPath": result.fromAbsPath,
+        "toAbsPath": result.toAbsPath,
+        "entities": [entity.model_dump() for entity in result.entities],
+        "index": result.index,
+    }
+    emit_result(
+        opts,
+        payload,
+        human_lines=[
+            f"renamed: {result.fromAbsPath} -> {result.toAbsPath}",
+            f"modelEntities: {len(result.entities)}",
+        ],
+    )
+
+
+@folder_metadata_app.command("get")
+def get_folder_metadata(
+    rel_path: str = typer.Argument(..., help="Folder metadata relPath (*.properties.json)."),
+    solution_path: cli_opts.SolutionPathOptional = None,
+    json_output: cli_opts.JsonOutput = False,
+    quiet: cli_opts.Quiet = False,
+) -> None:
+    """Read a folder metadata JSON document."""
+    opts = make_global_options(solution=solution_path, json_output=json_output, quiet=quiet)
+    active_solution_path = resolve_solution_path(opts)
+    content = workspace_service.read_folder_metadata(
+        rel_path=rel_path,
+        solution_path=active_solution_path,
+    )
+    payload = {"relPath": rel_path, "content": content}
+    emit_result(opts, payload, human_lines=[json.dumps(content, indent=2, ensure_ascii=False)])
+
+
+@folder_metadata_app.command("save")
+def save_folder_metadata_cmd(
+    rel_path: str = typer.Argument(..., help="Folder metadata relPath (*.properties.json)."),
+    content: str = typer.Argument(..., help="JSON string, @file, or '-' for stdin."),
+    solution_path: cli_opts.SolutionPathOptional = None,
+    json_output: cli_opts.JsonOutput = False,
+    quiet: cli_opts.Quiet = False,
+    lock_timeout: cli_opts.LockTimeout = "10s",
+    no_lock: cli_opts.NoLock = False,
+) -> None:
+    """Write a folder metadata JSON document."""
+    opts = make_global_options(
+        solution=solution_path,
+        json_output=json_output,
+        quiet=quiet,
+        lock_timeout=lock_timeout,
+        no_lock=no_lock,
+    )
+    active_solution_path = resolve_solution_path(opts)
+    doc = read_json_arg(content)
+    abs_path = workspace_service.save_folder_metadata(
+        rel_path=rel_path,
+        content=doc,
+        solution_path=active_solution_path,
+        no_lock=opts.no_lock,
+        lock_timeout=opts.lock_timeout,
+    )
+    payload = {"status": "saved", "relPath": rel_path, "absPath": abs_path}
+    emit_result(opts, payload, human_lines=[f"saved: {abs_path}"])
+
+
+@folder_metadata_app.command("delete")
+def delete_folder_metadata_cmd(
+    rel_path: str = typer.Argument(..., help="Folder metadata relPath (*.properties.json)."),
+    solution_path: cli_opts.SolutionPathOptional = None,
+    json_output: cli_opts.JsonOutput = False,
+    quiet: cli_opts.Quiet = False,
+    lock_timeout: cli_opts.LockTimeout = "10s",
+    no_lock: cli_opts.NoLock = False,
+) -> None:
+    """Delete a folder metadata JSON document."""
+    opts = make_global_options(
+        solution=solution_path,
+        json_output=json_output,
+        quiet=quiet,
+        lock_timeout=lock_timeout,
+        no_lock=no_lock,
+    )
+    active_solution_path = resolve_solution_path(opts)
+    abs_path = workspace_service.delete_folder_metadata(
+        rel_path=rel_path,
+        solution_path=active_solution_path,
+        no_lock=opts.no_lock,
+        lock_timeout=opts.lock_timeout,
+    )
+    payload = {"status": "deleted", "relPath": rel_path, "absPath": abs_path}
+    emit_result(opts, payload, human_lines=[f"deleted: {abs_path}"])
 
 
 @app.command("edit")
@@ -358,8 +477,12 @@ def edit_entity(
     current = read_workspace_json(entity.rel_path, active_solution_path)
     edited_raw = open_in_editor(suffix=".json", initial_text=json.dumps(current, indent=4, ensure_ascii=False) + "\n")
     next_doc = json.loads(edited_raw)
-    resolved, _ = read_solution(active_solution_path)
-    with lock_context(opts=opts, lock_file_root=resolved.root_dir):
-        abs_path = write_model_entity(entity.rel_path, next_doc, active_solution_path)
+    abs_path = workspace_service.save_model_entity(
+        rel_path=entity.rel_path,
+        content=next_doc,
+        solution_path=active_solution_path,
+        no_lock=opts.no_lock,
+        lock_timeout=opts.lock_timeout,
+    )
     payload = {"status": "saved", "entity": entity.rel_path, "absPath": abs_path}
     emit_result(opts, payload, human_lines=[f"saved: {abs_path}"])

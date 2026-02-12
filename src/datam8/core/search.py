@@ -22,7 +22,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from datam8.core.solution_files import iter_solution_json_files
+from datam8.core.solution_index import iter_solution_json_files
 from datam8.core.workspace_io import list_model_entities
 
 

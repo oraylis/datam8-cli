@@ -20,19 +20,119 @@ import asyncio
 import dataclasses
 import os
 from collections.abc import Callable, Sequence
+from concurrent import futures
 from pathlib import Path
 from typing import Protocol
 
 import jinja2
+from pydantic import BaseModel
 
-from . import config, model, utils
-from .utils import cache
+from datam8_model.solution import GeneratorTarget
+
+from . import config, factory, model, model_exceptions, opts, utils
+from .core.paths import resolve_solution
+from .utils import cache, importer
 
 logger = utils.start_logger(__name__)
 payload_functions: dict["PayloadOrder", list["PayloadDefinition"]] = {}
 
 type PayloadFunction = Callable[[model.Model, cache.Cache], Sequence[IPayload]]
 type PayloadOrder = int
+
+
+class GenerateResult(BaseModel):
+    """Typed result of a synchronous generation run."""
+
+    status: str
+    target: str
+    outputPath: str
+
+
+def run_generation(
+    *,
+    solution_path: Path,
+    target: str,
+    log_level: opts.LogLevels | str,
+    clean_output: bool,
+    payloads: Sequence[str],
+    generate_all: bool,
+    lazy: bool,
+) -> GenerateResult:
+    """Execute the generator synchronously and return metadata about the run."""
+    if isinstance(log_level, str):
+        try:
+            log_level = opts.LogLevels(log_level.strip().lower())
+        except Exception:
+            log_level = opts.LogLevels.INFO
+
+    resolved = resolve_solution(str(solution_path))
+    config.log_level = log_level
+    config.solution_path = resolved.solution_file
+    config.lazy = lazy
+    config.solution_folder_path = resolved.root_dir
+
+    parsed_model = factory.create_model_or_raise()
+    payload_cache = cache.Cache()
+
+    if generate_all:
+        logger.warning("The --all option is set, but is currently ignored.")
+
+    try:
+        if target == "none":
+
+            def filter_targets(_target: GeneratorTarget) -> bool:
+                if _target.isDefault is None:
+                    return False
+                return _target.isDefault
+
+            generator_target = [_t for _t in parsed_model.solution.generatorTargets if filter_targets(_t)].pop()
+        else:
+            generator_target = parsed_model.get_generator_target(target)
+
+        config.template_path = generator_target.sourcePath
+        config.output_path = generator_target.outputPath
+        config.module_path = config.solution_folder_path / generator_target.sourcePath / "__modules"
+        output_path_abs = config.solution_folder_path / config.output_path
+
+        importer.enable_target_modules()
+        _ = importer.load_modules(config.module_path)
+
+        if clean_output and output_path_abs.exists():
+            logger.warning("Cleaning output...")
+            utils.delete_path(output_path_abs, recursive=True)
+
+        if not output_path_abs.exists():
+            utils.mkdir(output_path_abs, recursive=True)
+
+        selected_payloads = {
+            order: [
+                payload
+                for payload in payload_functions[order]
+                if payload.name in payloads or not payloads
+            ]
+            for order in sorted(payload_functions)
+        }
+
+        for order in selected_payloads:
+            executor = futures.ThreadPoolExecutor()
+
+            def render_payload_for_order(payload: PayloadDefinition) -> Exception | None:
+                return asyncio.run(render_payload(payload, parsed_model, payload_cache))
+
+            results = executor.map(render_payload_for_order, selected_payloads[order])
+            executor.shutdown()
+            errors = [_result for _result in results if _result]
+            if errors:
+                raise RenderError()
+    except model_exceptions.InvalidGeneratorTargetError as err:
+        logger.error(err)
+        raise
+
+    return GenerateResult(
+        status="succeeded",
+        target=target if target != "none" else "default",
+        outputPath=str(output_path_abs),
+    )
 
 
 def register_payload(

@@ -22,8 +22,8 @@ import os
 from pathlib import Path
 from typing import Any
 
-from datam8.core import duration
 from datam8.core.connectors import plugin_manager
+from datam8.core.parse_utils import parse_duration_seconds
 
 
 def plugin_dir() -> Path:
@@ -39,7 +39,7 @@ def lock_timeout_seconds(body: Any) -> float:
     try:
         value = body.get("lockTimeout")
         if isinstance(value, str) and value.strip():
-            return duration.parse_duration_seconds(value)
+            return parse_duration_seconds(value)
     except Exception:
         pass
-    return duration.parse_duration_seconds("10s")
+    return parse_duration_seconds("10s")

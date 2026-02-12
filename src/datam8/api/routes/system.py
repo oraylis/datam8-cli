@@ -21,7 +21,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from datam8.core.version import get_version
+from datam8.core.runtime_meta import get_version
 
 router = APIRouter()
 

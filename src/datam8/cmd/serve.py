@@ -31,7 +31,7 @@ import uvicorn
 from datam8 import utils
 from datam8.api.app import create_app
 from datam8.core.paths import resolve_solution
-from datam8.core.version import get_version
+from datam8.core.runtime_meta import get_version
 
 app = typer.Typer(
     name="serve",
