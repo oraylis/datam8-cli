@@ -449,7 +449,7 @@ async def datasources_usages(
     path: str | None = Query(None, alias="path"),
 ) -> UsagesResponse:
     """Return model usages for a datasource."""
-    model_entities = [entity.model_dump() for entity in workspace_io.list_model_entities(path)]
+    model_entities = workspace_io.list_model_entities(path)
     usages = schema_refresh.find_data_source_usages(
         path,
         dataSourceId,
@@ -470,7 +470,7 @@ async def datasources_refresh_preview(
         include_values=True,
     )
     merged = {**stored, **(body.runtimeSecrets or {})}
-    model_entities = [entity.model_dump() for entity in workspace_io.list_model_entities(body.solutionPath)]
+    model_entities = workspace_io.list_model_entities(body.solutionPath)
     usage_refs: list[schema_refresh.UsageRef] = []
     for usage in body.usages or []:
         if not isinstance(usage, dict):
@@ -505,7 +505,7 @@ async def datasources_refresh_apply(
         include_values=True,
     )
     merged = {**stored, **(body.runtimeSecrets or {})}
-    model_entities = [entity.model_dump() for entity in workspace_io.list_model_entities(body.solutionPath)]
+    model_entities = workspace_io.list_model_entities(body.solutionPath)
     resolved, _sol = workspace_io.read_solution(body.solutionPath)
     if body.noLock:
         updated_entities = schema_refresh.apply_schema_changes(

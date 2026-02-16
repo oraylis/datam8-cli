@@ -22,6 +22,9 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from datam8_model.base import BaseEntities
+from datam8_model.folder import Folder
+from datam8_model.model import Locator, ModelEntity
 from datam8_model.solution import Solution
 
 
@@ -47,11 +50,11 @@ class ResolvedPathsResponse(BaseModel):
 class ModelEntityResponse(BaseModel):
     """Typed model entity representation."""
 
-    locator: str
+    locator: Locator
     name: str
     absPath: str
     relPath: str
-    content: Any
+    content: ModelEntity
 
 
 class BaseEntityResponse(BaseModel):
@@ -60,18 +63,18 @@ class BaseEntityResponse(BaseModel):
     name: str
     absPath: str
     relPath: str
-    content: Any
+    content: BaseEntities
 
 
 class FolderEntityResponse(BaseModel):
     """Typed folder metadata representation."""
 
-    locator: str
+    locator: Locator
     name: str
     absPath: str
     relPath: str
     folderPath: str
-    content: Any
+    content: Folder
 
 
 class DirectoryEntryResponse(BaseModel):

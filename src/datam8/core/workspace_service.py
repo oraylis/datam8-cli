@@ -28,6 +28,7 @@ from datam8.core import workspace_io
 from datam8.core.errors import Datam8ValidationError
 from datam8.core.lock import SolutionLock
 from datam8.core.parse_utils import parse_duration_seconds
+from datam8_model import folder as folder_model
 from datam8_model.solution import Solution
 
 
@@ -245,10 +246,10 @@ def regenerate_index(
     )
 
 
-def read_folder_metadata(*, rel_path: str, solution_path: str | None) -> Any:
+def read_folder_metadata(*, rel_path: str, solution_path: str | None) -> folder_model.Folder:
     """Read folder metadata from a `.properties.json` file."""
     _validate_folder_metadata_rel_path(rel_path)
-    return workspace_io.read_workspace_json(rel_path, solution_path)
+    return workspace_io.read_folder_metadata(rel_path, solution_path)
 
 
 def save_folder_metadata(

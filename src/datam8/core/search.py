@@ -22,6 +22,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from datam8.core.locator_codec import locator_to_string
 from datam8.core.solution_index import iter_solution_json_files
 from datam8.core.workspace_io import list_model_entities
 
@@ -51,7 +52,8 @@ def search_entities(*, solution_path: str | None, query: str) -> dict[str, Any]:
     entities = list_model_entities(solution_path)
     matches = []
     for e in entities:
-        if q in (e.name or "").lower() or q in (e.locator or "").lower() or q in (e.relPath or "").lower():
+        locator_str = locator_to_string(e.locator).lower()
+        if q in (e.name or "").lower() or q in locator_str or q in (e.relPath or "").lower():
             matches.append(e.model_dump())
     return {"count": len(matches), "entities": matches}
 

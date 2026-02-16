@@ -52,7 +52,7 @@ def list_entities(
     """List Base entities."""
     opts = make_global_options(solution=solution_path, json_output=json_output, quiet=quiet)
     entities = workspace_service.list_base_entities(resolve_solution_path(opts))
-    payload = {"count": len(entities), "entities": [e.model_dump() for e in entities]}
+    payload = {"count": len(entities), "entities": [e.model_dump(mode="json") for e in entities]}
     emit_result(opts, payload, human_lines=[e.relPath for e in entities])
 
 

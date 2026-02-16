@@ -46,14 +46,27 @@ def _create_minimal_solution(root: Path) -> Path:
     generate_path.mkdir(parents=True, exist_ok=True)
     output_path.mkdir(parents=True, exist_ok=True)
 
-    _write_json(base_path / "DataProducts.json", {"type": "dataProducts", "dataProducts": []})
+    _write_json(
+        base_path / "DataProducts.json",
+        {"type": "dataProducts", "dataProducts": [{"name": "Default", "dataModules": [{"name": "Default"}]}]},
+    )
     _write_json(
         model_path / "Customer.json",
         {
             "id": 1,
             "name": "Customer",
-            "attributes": [],
+            "attributes": [
+                {
+                    "ordinalNumber": 10,
+                    "name": "id",
+                    "attributeType": "Physical",
+                    "dataType": {"type": "int", "nullable": False},
+                    "dateAdded": "2024-01-01T00:00:00Z",
+                }
+            ],
             "sources": [],
+            "transformations": [],
+            "relationships": [],
         },
     )
 
@@ -85,22 +98,32 @@ def _create_solution_with_folder_metadata(root: Path, *, folder_name: str = "Sal
     generate_path.mkdir(parents=True, exist_ok=True)
     output_path.mkdir(parents=True, exist_ok=True)
 
-    _write_json(base_path / "DataProducts.json", {"type": "dataProducts", "dataProducts": []})
+    _write_json(
+        base_path / "DataProducts.json",
+        {"type": "dataProducts", "dataProducts": [{"name": "Default", "dataModules": [{"name": "Default"}]}]},
+    )
     _write_json(
         folder_path / "Customer.json",
         {
             "id": 1,
             "name": "Customer",
-            "attributes": [],
+            "attributes": [
+                {
+                    "ordinalNumber": 10,
+                    "name": "id",
+                    "attributeType": "Physical",
+                    "dataType": {"type": "int", "nullable": False},
+                    "dateAdded": "2024-01-01T00:00:00Z",
+                }
+            ],
             "sources": [],
+            "transformations": [],
+            "relationships": [],
         },
     )
     _write_json(
         folder_path / ".properties.json",
-        {
-            "type": "folders",
-            "folders": [{"id": 101, "name": folder_name, "properties": []}],
-        },
+        {"id": 101, "name": folder_name, "properties": []},
     )
 
     solution = {
@@ -268,11 +291,13 @@ def test_model_folder_metadata_get_save_delete(tmp_path: Path) -> None:
     )
     assert get_result.exit_code == 0
     get_payload = json.loads(get_result.stdout)
-    assert get_payload["content"]["type"] == "folders"
+    assert get_payload["content"]["name"] == "Sales"
 
     save_payload = {
-        "type": "folders",
-        "folders": [{"id": 777, "name": "Sales", "displayName": "Sales Folder", "properties": []}],
+        "id": 777,
+        "name": "Sales",
+        "displayName": "Sales Folder",
+        "properties": [],
     }
     save_result = runner.invoke(
         app,
@@ -303,8 +328,8 @@ def test_model_folder_metadata_get_save_delete(tmp_path: Path) -> None:
     )
     assert get_after_save.exit_code == 0
     after_payload = json.loads(get_after_save.stdout)
-    assert after_payload["content"]["folders"][0]["id"] == 777
-    assert after_payload["content"]["folders"][0]["displayName"] == "Sales Folder"
+    assert after_payload["content"]["id"] == 777
+    assert after_payload["content"]["displayName"] == "Sales Folder"
 
     delete_result = runner.invoke(
         app,
