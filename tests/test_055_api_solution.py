@@ -30,14 +30,32 @@ def _write_json(path: Path, payload: dict) -> None:
 def _create_solution(tmp_path: Path) -> Path:
     base = tmp_path / "Base"
     model = tmp_path / "Model" / "010-Stage" / "Sales"
-    _write_json(base / "DataProducts.json", {"type": "dataProducts", "dataProducts": []})
-    _write_json(model / "Customer.json", {"id": 1, "name": "Customer", "attributes": [], "sources": []})
+    _write_json(
+        base / "DataProducts.json",
+        {"type": "dataProducts", "dataProducts": [{"name": "Default", "dataModules": [{"name": "Default"}]}]},
+    )
+    _write_json(
+        model / "Customer.json",
+        {
+            "id": 1,
+            "name": "Customer",
+            "attributes": [
+                {
+                    "ordinalNumber": 10,
+                    "name": "id",
+                    "attributeType": "Physical",
+                    "dataType": {"type": "int", "nullable": False},
+                    "dateAdded": "2024-01-01T00:00:00Z",
+                }
+            ],
+            "sources": [],
+            "transformations": [],
+            "relationships": [],
+        },
+    )
     _write_json(
         model / ".properties.json",
-        {
-            "type": "folders",
-            "folders": [{"id": 101, "name": "Sales", "properties": []}],
-        },
+        {"id": 101, "name": "Sales", "properties": []},
     )
     _write_json(
         tmp_path / "TestSolution.dm8s",
@@ -74,4 +92,4 @@ def test_solution_full_includes_folder_entities(tmp_path: Path, api_client) -> N
     assert "folderEntities" in payload
     assert len(payload["folderEntities"]) == 1
     assert payload["folderEntities"][0]["folderPath"] == "010-Stage/Sales"
-    assert payload["folderEntities"][0]["content"]["type"] == "folders"
+    assert payload["folderEntities"][0]["content"]["name"] == "Sales"

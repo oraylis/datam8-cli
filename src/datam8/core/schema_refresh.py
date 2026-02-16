@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -32,12 +33,18 @@ from datam8.core.errors import (
     Datam8ValidationError,
 )
 from datam8.core.workspace_io import (
+    ModelEntityEntry,
     list_base_entities,
     list_model_entities,
     write_model_entity,
 )
+from datam8_model import attribute as attribute_model
+from datam8_model import base as base_model
+from datam8_model import data_type as data_type_model
+from datam8_model import model as model_model
 
 DataType = dict[str, Any]
+ModelEntityInput = ModelEntityEntry | dict[str, Any]
 
 
 def _opt_int_gt0(v: Any) -> int | None:
@@ -57,17 +64,7 @@ def _opt_int_gte0(v: Any) -> int | None:
 
 
 def sanitize_data_type(input_value: Any) -> DataType:
-    """Sanitize data type.
-
-    Parameters
-    ----------
-    input_value : Any
-        input_value parameter value.
-
-    Returns
-    -------
-    DataType
-        Computed return value."""
+    """Sanitize data type."""
     raw = input_value if isinstance(input_value, dict) else None
 
     if isinstance(raw, dict) and isinstance(raw.get("type"), str):
@@ -108,34 +105,12 @@ def sanitize_data_type(input_value: Any) -> DataType:
 
 
 def normalize_data_type(dt: Any) -> DataType:
-    """Normalize data type.
-
-    Parameters
-    ----------
-    dt : Any
-        dt parameter value.
-
-    Returns
-    -------
-    DataType
-        Computed return value."""
+    """Normalize data type."""
     return sanitize_data_type(dt)
 
 
 def is_same_data_type(a: Any, b: Any) -> bool:
-    """Is same data type.
-
-    Parameters
-    ----------
-    a : Any
-        a parameter value.
-    b : Any
-        b parameter value.
-
-    Returns
-    -------
-    bool
-        Computed return value."""
+    """Is same data type."""
     left = sanitize_data_type(a)
     right = sanitize_data_type(b)
     return (
@@ -147,19 +122,7 @@ def is_same_data_type(a: Any, b: Any) -> bool:
 
 
 def safe_merge_data_type(current: Any, source: Any) -> DataType:
-    """Safe merge data type.
-
-    Parameters
-    ----------
-    current : Any
-        current parameter value.
-    source : Any
-        source parameter value.
-
-    Returns
-    -------
-    DataType
-        Computed return value."""
+    """Safe merge data type."""
     current_s = sanitize_data_type(current)
     source_s = sanitize_data_type(source)
     merged: DataType = {**current_s, **source_s}
@@ -184,72 +147,88 @@ def _split_source_location(source_location: str) -> tuple[str, str]:
     return "", src
 
 
-def _list_model_entities(solution_path: str | None) -> list[dict[str, Any]]:
-    return [e.model_dump() for e in list_model_entities(solution_path)]
+def _data_type_payload(value: data_type_model.DataType | DataType | str | None) -> DataType | str | None:
+    if isinstance(value, data_type_model.DataType):
+        return value.model_dump(mode="json")
+    return value
+
+
+def _to_data_type_model(value: Any) -> data_type_model.DataType:
+    return data_type_model.DataType.model_validate(sanitize_data_type(value))
+
+
+def _coerce_model_entity_entry(value: ModelEntityInput) -> ModelEntityEntry | None:
+    if isinstance(value, ModelEntityEntry):
+        return value
+    if not isinstance(value, dict):
+        return None
+    try:
+        return ModelEntityEntry.model_validate(value)
+    except Exception:
+        return None
+
+
+def _list_model_entities(solution_path: str | None) -> list[ModelEntityEntry]:
+    return list_model_entities(solution_path)
 
 
 def _resolved_model_entities(
     *,
     solution_path: str | None,
-    model_entities: list[dict[str, Any]] | None,
-) -> list[dict[str, Any]]:
-    if isinstance(model_entities, list):
-        return model_entities
+    model_entities: Sequence[ModelEntityInput] | None,
+) -> list[ModelEntityEntry]:
+    if model_entities is not None:
+        coerced = [_coerce_model_entity_entry(e) for e in model_entities]
+        return [e for e in coerced if e is not None]
     return _list_model_entities(solution_path)
+
+
+def _layer_from_rel_path(rel_path: str) -> str | None:
+    parts = [p for p in rel_path.replace("\\", "/").split("/") if p]
+    for p in parts:
+        if re.match(r"^\d+-", p):
+            return p
+    return None
+
+
+def _get_external_source(
+    entity: model_model.ModelEntity,
+    source_index: int,
+) -> model_model.ExternalModelSource | None:
+    if source_index < 0 or source_index >= len(entity.sources):
+        return None
+    source = entity.sources[source_index]
+    if isinstance(source, model_model.ExternalModelSource):
+        return source
+    return None
 
 
 def find_data_source_usages(
     solution_path: str | None,
     data_source_name: str,
     *,
-    model_entities: list[dict[str, Any]] | None = None,
+    model_entities: Sequence[ModelEntityInput] | None = None,
 ) -> list[dict[str, Any]]:
-    """Find data source usages.
-
-    Parameters
-    ----------
-    solution_path : str | None
-        solution_path parameter value.
-    data_source_name : str
-        data_source_name parameter value.
-    model_entities : list[dict[str, Any]] | None
-        model_entities parameter value.
-
-    Returns
-    -------
-    list[dict[str, Any]]
-        Computed return value."""
+    """Find data source usages."""
     usages: list[dict[str, Any]] = []
     entities = _resolved_model_entities(solution_path=solution_path, model_entities=model_entities)
 
     for ent in entities:
-        rel_path = str(ent.get("relPath") or "").replace("\\", "/")
-        content = ent.get("content") if isinstance(ent.get("content"), dict) else None
-        sources = content.get("sources") if isinstance(content, dict) else None
-        if not isinstance(sources, list):
-            continue
-
-        layer: str | None = None
-        parts = [p for p in rel_path.split("/") if p]
-        for p in parts:
-            if re.match(r"^\d+-", p):
-                layer = p
-                break
-
-        for idx, src in enumerate(sources):
-            if not isinstance(src, dict):
+        layer = _layer_from_rel_path(ent.relPath)
+        for idx, src in enumerate(ent.content.sources):
+            if not isinstance(src, model_model.ExternalModelSource):
                 continue
-            if src.get("dataSource") != data_source_name:
+            if src.dataSource != data_source_name:
                 continue
             usages.append(
                 {
-                    "entityRelPath": ent.get("relPath"),
-                    "entityName": ent.get("name"),
+                    "entityRelPath": ent.relPath,
+                    "entityName": ent.name,
                     "layer": layer,
                     "sourceIndex": idx,
-                    "dataSource": src.get("dataSource"),
-                    "sourceAlias": src.get("sourceAlias"),
-                    "sourceLocation": src.get("sourceLocation"),
+                    "dataSource": src.dataSource,
+                    "sourceAlias": src.sourceAlias,
+                    "sourceLocation": src.sourceLocation,
                 }
             )
 
@@ -323,28 +302,7 @@ def fetch_source_metadata(
     source_location: str,
     runtime_secrets: dict[str, str] | None,
 ) -> list[dict[str, Any]]:
-    """Fetch source metadata.
-
-    Parameters
-    ----------
-    solution_path : str | None
-        solution_path parameter value.
-    data_source_name : str
-        data_source_name parameter value.
-    source_location : str
-        source_location parameter value.
-    runtime_secrets : dict[str, str] | None
-        runtime_secrets parameter value.
-
-    Returns
-    -------
-    list[dict[str, Any]]
-        Computed return value.
-
-    Raises
-    ------
-    Datam8ExternalSystemError
-        Raised when validation or runtime execution fails."""
+    """Fetch source metadata."""
     connector_cls, manifest, cfg, resolver = resolve_and_validate(
         solution_path=solution_path,
         data_source_id=data_source_name,
@@ -390,23 +348,23 @@ def _get_data_type_mapping(solution_path: str | None, data_source_name: str) -> 
     if not ds_entry or not dst_entry:
         return {"sourceMapping": [], "typeMapping": []}
 
-    ds_list = ds_entry.content.get("dataSources") if isinstance(ds_entry.content, dict) else None
-    dst_list = dst_entry.content.get("dataSourceTypes") if isinstance(dst_entry.content, dict) else None
-    if not isinstance(ds_list, list) or not isinstance(dst_list, list):
+    if not isinstance(ds_entry.content.root, base_model.DataSources):
+        return {"sourceMapping": [], "typeMapping": []}
+    if not isinstance(dst_entry.content.root, base_model.DataSourceTypes):
         return {"sourceMapping": [], "typeMapping": []}
 
-    data_source = next((d for d in ds_list if isinstance(d, dict) and d.get("name") == data_source_name), None)
-    if not isinstance(data_source, dict):
+    ds_list = ds_entry.content.root.dataSources
+    dst_list = dst_entry.content.root.dataSourceTypes
+
+    data_source = next((d for d in ds_list if d.name == data_source_name), None)
+    if data_source is None:
         return {"sourceMapping": [], "typeMapping": []}
 
-    type_name = data_source.get("type") or data_source.get("dataSourceType")
-    data_source_type = next((t for t in dst_list if isinstance(t, dict) and t.get("name") == type_name), None)
+    type_name = data_source.type
+    data_source_type = next((t for t in dst_list if t.name == type_name), None)
 
-    source_mapping_raw = data_source.get("dataTypeMapping")
-    source_mapping = [m for m in source_mapping_raw if isinstance(m, dict)] if isinstance(source_mapping_raw, list) else []
-
-    type_mapping_raw = data_source_type.get("dataTypeMapping") if isinstance(data_source_type, dict) else None
-    type_mapping = [m for m in type_mapping_raw if isinstance(m, dict)] if isinstance(type_mapping_raw, list) else []
+    source_mapping = [m.model_dump(mode="json") for m in (data_source.dataTypeMapping or [])]
+    type_mapping = [m.model_dump(mode="json") for m in (data_source_type.dataTypeMapping if data_source_type else [])]
 
     return {"sourceMapping": source_mapping, "typeMapping": type_mapping}
 
@@ -442,62 +400,38 @@ def preview_schema_changes(
     solution_path: str | None,
     usages: list[UsageRef],
     runtime_secrets: dict[str, str] | None,
-    model_entities: list[dict[str, Any]] | None = None,
+    model_entities: Sequence[ModelEntityInput] | None = None,
 ) -> list[dict[str, Any]]:
-    """Preview schema changes.
-
-    Parameters
-    ----------
-    solution_path : str | None
-        solution_path parameter value.
-    usages : list[UsageRef]
-        usages parameter value.
-    runtime_secrets : dict[str, str] | None
-        runtime_secrets parameter value.
-    model_entities : list[dict[str, Any]] | None
-        model_entities parameter value.
-
-    Returns
-    -------
-    list[dict[str, Any]]
-        Computed return value."""
+    """Preview schema changes."""
     diffs: list[dict[str, Any]] = []
     entities = _resolved_model_entities(solution_path=solution_path, model_entities=model_entities)
-    entity_map = {str(e.get("relPath")): e for e in entities if isinstance(e, dict) and e.get("relPath")}
+    entity_map = {e.relPath: e for e in entities}
 
     for usage in usages:
         ent_entry = entity_map.get(usage.entity_rel_path)
         if not ent_entry:
             continue
-        entity = ent_entry.get("content") if isinstance(ent_entry.get("content"), dict) else None
-        if not isinstance(entity, dict):
-            continue
-        sources = entity.get("sources")
-        if not isinstance(sources, list) or usage.source_index < 0 or usage.source_index >= len(sources):
-            continue
-        source = sources[usage.source_index]
-        if not isinstance(source, dict):
+        entity = ent_entry.content
+        source = _get_external_source(entity, usage.source_index)
+        if source is None:
             continue
 
         source_metadata = fetch_source_metadata(
             solution_path=solution_path,
-            data_source_name=str(source.get("dataSource") or ""),
-            source_location=str(source.get("sourceLocation") or ""),
+            data_source_name=source.dataSource,
+            source_location=source.sourceLocation,
             runtime_secrets=runtime_secrets,
         )
 
-        mapping_raw = source.get("mapping")
-        mapping = mapping_raw if isinstance(mapping_raw, list) else []
-        attributes_raw = entity.get("attributes")
-        attributes = attributes_raw if isinstance(attributes_raw, list) else []
-
+        mapping = list(source.mapping or [])
+        attributes = list(entity.attributes)
         changes: list[dict[str, Any]] = []
 
         for src_col in source_metadata:
             src_name = src_col.get("name")
             if not isinstance(src_name, str):
                 continue
-            existing_map = next((m for m in mapping if isinstance(m, dict) and m.get("sourceName") == src_name), None)
+            existing_map = next((m for m in mapping if m.sourceName == src_name), None)
             if not existing_map:
                 changes.append(
                     {
@@ -509,13 +443,13 @@ def preview_schema_changes(
                 )
                 continue
 
-            existing_type = normalize_data_type(existing_map.get("sourceDataType"))
+            existing_type = normalize_data_type(_data_type_payload(existing_map.sourceDataType))
             new_type = sanitize_data_type(src_col.get("dataType"))
             merged_type = safe_merge_data_type(existing_type, new_type)
             source_after = {**src_col, "dataType": merged_type}
 
-            target_name = existing_map.get("targetName")
-            attr = next((a for a in attributes if isinstance(a, dict) and a.get("name") == target_name), None)
+            target_name = existing_map.targetName
+            attr = next((a for a in attributes if a.name == target_name), None)
 
             if not is_same_data_type(existing_type, merged_type):
                 changes.append(
@@ -524,8 +458,8 @@ def preview_schema_changes(
                         "columnName": src_name,
                         "sourceBefore": {"name": src_name, "dataType": existing_type, "isPrimaryKey": False},
                         "sourceAfter": source_after,
-                        "entityAttributeName": attr.get("name") if isinstance(attr, dict) else None,
-                        "entityAttributeBefore": attr,
+                        "entityAttributeName": attr.name if attr else None,
+                        "entityAttributeBefore": attr.model_dump(mode="json") if attr else None,
                         "applyToEntitySuggested": True,
                     }
                 )
@@ -537,14 +471,14 @@ def preview_schema_changes(
                         "columnName": src_name,
                         "sourceBefore": {"name": src_name, "dataType": existing_type, "isPrimaryKey": False},
                         "sourceAfter": source_after,
-                        "entityAttributeName": attr.get("name") if isinstance(attr, dict) else None,
-                        "entityAttributeBefore": attr,
+                        "entityAttributeName": attr.name if attr else None,
+                        "entityAttributeBefore": attr.model_dump(mode="json") if attr else None,
                         "applyToEntitySuggested": False,
                     }
                 )
 
-            if isinstance(attr, dict):
-                attr_is_pk = bool(attr.get("isBusinessKey") or attr.get("isPrimaryKey") or False)
+            if attr:
+                attr_is_pk = bool(attr.isBusinessKey or False)
                 if bool(src_col.get("isPrimaryKey", False)) != attr_is_pk:
                     changes.append(
                         {
@@ -552,32 +486,31 @@ def preview_schema_changes(
                             "columnName": src_name,
                             "sourceBefore": {"name": src_name, "dataType": existing_type, "isPrimaryKey": attr_is_pk},
                             "sourceAfter": src_col,
-                            "entityAttributeName": attr.get("name"),
-                            "entityAttributeBefore": attr,
+                            "entityAttributeName": attr.name,
+                            "entityAttributeBefore": attr.model_dump(mode="json"),
                             "applyToEntitySuggested": False,
                         }
                     )
 
         for map_item in mapping:
-            if not isinstance(map_item, dict):
-                continue
-            src_name = map_item.get("sourceName")
-            if not isinstance(src_name, str):
-                continue
+            src_name = map_item.sourceName
             exists = next((c for c in source_metadata if isinstance(c, dict) and c.get("name") == src_name), None)
             if exists:
                 continue
-            target_name = map_item.get("targetName")
-            attr = next((a for a in attributes if isinstance(a, dict) and a.get("name") == target_name), None)
-            if isinstance(attr, dict) and attr.get("dateDeleted"):
+            attr = next((a for a in attributes if a.name == map_item.targetName), None)
+            if attr and attr.dateDeleted:
                 continue
             changes.append(
                 {
                     "changeType": "REMOVED_COLUMN",
                     "columnName": src_name,
-                    "sourceBefore": {"name": src_name, "dataType": normalize_data_type(map_item.get("sourceDataType")), "isPrimaryKey": False},
-                    "entityAttributeName": attr.get("name") if isinstance(attr, dict) else None,
-                    "entityAttributeBefore": attr,
+                    "sourceBefore": {
+                        "name": src_name,
+                        "dataType": normalize_data_type(_data_type_payload(map_item.sourceDataType)),
+                        "isPrimaryKey": False,
+                    },
+                    "entityAttributeName": attr.name if attr else None,
+                    "entityAttributeBefore": attr.model_dump(mode="json") if attr else None,
                     "applyToEntitySuggested": True,
                 }
             )
@@ -586,11 +519,11 @@ def preview_schema_changes(
             diffs.append(
                 {
                     "entityRelPath": usage.entity_rel_path,
-                    "entityName": ent_entry.get("name"),
+                    "entityName": ent_entry.name,
                     "sourceIndex": usage.source_index,
-                    "dataSource": source.get("dataSource"),
-                    "sourceAlias": source.get("sourceAlias"),
-                    "sourceLocation": source.get("sourceLocation"),
+                    "dataSource": source.dataSource,
+                    "sourceAlias": source.sourceAlias,
+                    "sourceLocation": source.sourceLocation,
                     "changes": changes,
                     "summary": {
                         "newColumns": len([c for c in changes if c.get("changeType") == "NEW_COLUMN"]),
@@ -610,28 +543,12 @@ def apply_schema_changes(
     solution_path: str | None,
     diffs: list[dict[str, Any]],
     runtime_secrets: dict[str, str] | None,
-    model_entities: list[dict[str, Any]] | None = None,
+    model_entities: Sequence[ModelEntityInput] | None = None,
 ) -> list[dict[str, Any]]:
-    """Apply schema changes.
-
-    Parameters
-    ----------
-    solution_path : str | None
-        solution_path parameter value.
-    diffs : list[dict[str, Any]]
-        diffs parameter value.
-    runtime_secrets : dict[str, str] | None
-        runtime_secrets parameter value.
-    model_entities : list[dict[str, Any]] | None
-        model_entities parameter value.
-
-    Returns
-    -------
-    list[dict[str, Any]]
-        Computed return value."""
+    """Apply schema changes."""
     result: list[dict[str, Any]] = []
     entities = _resolved_model_entities(solution_path=solution_path, model_entities=model_entities)
-    entity_map = {str(e.get("relPath")): e for e in entities if isinstance(e, dict) and e.get("relPath")}
+    entity_map = {e.relPath: e for e in entities}
     mapping_cache: dict[str, dict[str, list[dict[str, Any]]]] = {}
 
     for diff_item in diffs:
@@ -644,19 +561,13 @@ def apply_schema_changes(
         if not ent_entry:
             continue
 
-        entity = ent_entry.get("content") if isinstance(ent_entry.get("content"), dict) else None
-        if not isinstance(entity, dict):
-            continue
-        sources = entity.get("sources")
-        if not isinstance(sources, list) or source_index < 0 or source_index >= len(sources):
-            continue
-        source = sources[source_index]
-        if not isinstance(source, dict):
+        entity = ent_entry.content
+        source = _get_external_source(entity, source_index)
+        if source is None:
             continue
 
-        ds_name = str(source.get("dataSource") or "")
-        source_location = str(source.get("sourceLocation") or "")
-
+        ds_name = source.dataSource
+        source_location = source.sourceLocation
         source_metadata = fetch_source_metadata(
             solution_path=solution_path,
             data_source_name=ds_name,
@@ -671,46 +582,46 @@ def apply_schema_changes(
 
         attributes_changed = 0
         mappings_changed = 0
-        now = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        now = datetime.now(UTC).replace(microsecond=0)
 
-        new_mapping: list[dict[str, Any]] = []
-        current_mapping_raw = source.get("mapping")
-        current_mapping = current_mapping_raw if isinstance(current_mapping_raw, list) else []
+        new_mapping: list[model_model.SourceAttributeMapping] = []
+        current_mapping = list(source.mapping or [])
 
         for src_col in source_metadata:
             if not isinstance(src_col, dict) or not isinstance(src_col.get("name"), str):
                 continue
             src_name = src_col["name"]
-            existing_map = next((m for m in current_mapping if isinstance(m, dict) and m.get("sourceName") == src_name), None)
+            existing_map = next((m for m in current_mapping if m.sourceName == src_name), None)
             if existing_map:
-                existing_type = normalize_data_type(existing_map.get("sourceDataType"))
+                existing_type = normalize_data_type(_data_type_payload(existing_map.sourceDataType))
                 new_type = sanitize_data_type(src_col.get("dataType"))
                 merged_type = safe_merge_data_type(existing_type, new_type)
-                mapping_changed = (not is_same_data_type(existing_type, merged_type)) or bool(existing_type.get("nullable")) != bool(merged_type.get("nullable"))
-                sanitized_existing = {**existing_map, "sourceDataType": merged_type}
+                mapping_changed = (not is_same_data_type(existing_type, merged_type)) or bool(existing_type.get("nullable")) != bool(
+                    merged_type.get("nullable")
+                )
+                next_map = existing_map.model_copy(deep=True)
+                next_map.sourceDataType = _to_data_type_model(merged_type)
                 if mapping_changed:
                     mappings_changed += 1
-                new_mapping.append(sanitized_existing)
+                new_mapping.append(next_map)
             else:
                 mappings_changed += 1
                 new_mapping.append(
-                    {
-                        "targetName": src_name,
-                        "sourceName": src_name,
-                        "sourceDataType": sanitize_data_type(src_col.get("dataType")),
-                        "properties": [],
-                    }
+                    model_model.SourceAttributeMapping(
+                        targetName=src_name,
+                        sourceName=src_name,
+                        sourceDataType=_to_data_type_model(src_col.get("dataType")),
+                        properties=[],
+                    )
                 )
 
         if len(new_mapping) != len(current_mapping):
             mappings_changed += 1
-        source["mapping"] = new_mapping
+        source.mapping = new_mapping
 
-        # Apply to entity schema (selected changes only)
         changes_raw = diff_item.get("changes")
         changes = changes_raw if isinstance(changes_raw, list) else []
-        if not isinstance(entity.get("attributes"), list):
-            entity["attributes"] = []
+        attributes = list(entity.attributes)
 
         for ch in changes:
             if not isinstance(ch, dict) or not ch.get("applyToEntity"):
@@ -719,8 +630,9 @@ def apply_schema_changes(
             change_type = ch.get("changeType")
             if not isinstance(column_name, str) or not isinstance(change_type, str):
                 continue
-            map_entry = next((m for m in new_mapping if isinstance(m, dict) and m.get("sourceName") == column_name), None)
-            target_name = (map_entry.get("targetName") if isinstance(map_entry, dict) else None) or column_name
+
+            map_entry = next((m for m in new_mapping if m.sourceName == column_name), None)
+            target_name = map_entry.targetName if map_entry else column_name
 
             if change_type == "NEW_COLUMN":
                 src_col = next((c for c in source_metadata if isinstance(c, dict) and c.get("name") == column_name), None)
@@ -728,73 +640,71 @@ def apply_schema_changes(
                     continue
                 source_type_simple = sanitize_data_type(src_col.get("dataType")).get("type")
                 target_type_name = _resolve_target_type(mappings, str(source_type_simple or "string"))
-                new_attr_dt = sanitize_data_type({**sanitize_data_type(src_col.get("dataType")), "type": target_type_name})
-                attr = next((a for a in entity["attributes"] if isinstance(a, dict) and a.get("name") == target_name), None)
-                if isinstance(attr, dict):
-                    if attr.get("dateDeleted"):
-                        attr.pop("dateDeleted", None)
-                        attr["dateModified"] = now
-                        attr["dataType"] = safe_merge_data_type(normalize_data_type(attr.get("dataType")), new_attr_dt)
+                new_attr_dt = _to_data_type_model({**sanitize_data_type(src_col.get("dataType")), "type": target_type_name})
+                attr = next((a for a in attributes if a.name == target_name), None)
+                if attr:
+                    if attr.dateDeleted:
+                        attr.dateDeleted = None
+                        attr.dateModified = now
+                        attr.dataType = _to_data_type_model(safe_merge_data_type(_data_type_payload(attr.dataType), new_attr_dt.model_dump(mode="json")))
                         attributes_changed += 1
                 else:
-                    max_ordinal = 0
-                    for a in entity["attributes"]:
-                        if isinstance(a, dict) and isinstance(a.get("ordinalNumber"), int):
-                            max_ordinal = max(max_ordinal, a.get("ordinalNumber") or 0)
-                    entity["attributes"].append(
-                        {
-                            "name": target_name,
-                            "attributeType": "Physical",
-                            "ordinalNumber": max_ordinal + 10,
-                            "dataType": new_attr_dt,
-                            "dateAdded": now,
-                        }
+                    max_ordinal = max((a.ordinalNumber for a in attributes), default=0)
+                    attributes.append(
+                        attribute_model.Attribute(
+                            name=target_name,
+                            attributeType="Physical",
+                            ordinalNumber=max_ordinal + 10,
+                            dataType=new_attr_dt,
+                            dateAdded=now,
+                        )
                     )
                     attributes_changed += 1
 
             elif change_type == "REMOVED_COLUMN":
-                attr = next((a for a in entity["attributes"] if isinstance(a, dict) and a.get("name") == target_name), None)
+                attr = next((a for a in attributes if a.name == target_name), None)
                 if not attr and isinstance(ch.get("entityAttributeName"), str):
                     ea = ch.get("entityAttributeName")
-                    attr = next((a for a in entity["attributes"] if isinstance(a, dict) and a.get("name") == ea), None)
-                if isinstance(attr, dict):
-                    attr["dateDeleted"] = now
+                    attr = next((a for a in attributes if a.name == ea), None)
+                if attr:
+                    attr.dateDeleted = now
                     attributes_changed += 1
 
             elif change_type in {"TYPE_CHANGED", "NULLABILITY_CHANGED"}:
                 src_col = next((c for c in source_metadata if isinstance(c, dict) and c.get("name") == column_name), None)
                 if not src_col:
                     continue
-                attr = next((a for a in entity["attributes"] if isinstance(a, dict) and a.get("name") == target_name), None)
-                if not isinstance(attr, dict):
+                attr = next((a for a in attributes if a.name == target_name), None)
+                if not attr:
                     continue
                 source_type_simple = sanitize_data_type(src_col.get("dataType")).get("type")
                 target_type_name = _resolve_target_type(mappings, str(source_type_simple or "string"))
-                new_attr_dt = sanitize_data_type({**sanitize_data_type(src_col.get("dataType")), "type": target_type_name})
-                attr["dataType"] = safe_merge_data_type(normalize_data_type(attr.get("dataType")), new_attr_dt)
-                attr["dateModified"] = now
+                new_attr_dt = _to_data_type_model({**sanitize_data_type(src_col.get("dataType")), "type": target_type_name})
+                attr.dataType = _to_data_type_model(safe_merge_data_type(_data_type_payload(attr.dataType), new_attr_dt.model_dump(mode="json")))
+                attr.dateModified = now
                 attributes_changed += 1
 
             elif change_type == "PK_CHANGED":
                 src_col = next((c for c in source_metadata if isinstance(c, dict) and c.get("name") == column_name), None)
                 if not src_col:
                     continue
-                attr = next((a for a in entity["attributes"] if isinstance(a, dict) and a.get("name") == target_name), None)
-                if not isinstance(attr, dict):
+                attr = next((a for a in attributes if a.name == target_name), None)
+                if not attr:
                     continue
-                attr["isBusinessKey"] = bool(src_col.get("isPrimaryKey", False))
-                attr["dateModified"] = now
+                attr.isBusinessKey = bool(src_col.get("isPrimaryKey", False))
+                attr.dateModified = now
                 attributes_changed += 1
 
-        # Persist entity
+        entity.attributes = attributes
+
         write_model_entity(entity_rel_path, entity, solution_path)
         result.append(
             {
                 "entityRelPath": entity_rel_path,
-                "entityName": ent_entry.get("name"),
+                "entityName": ent_entry.name,
                 "attributesChanged": attributes_changed,
                 "mappingsChanged": mappings_changed,
-                "content": entity,
+                "content": entity.model_dump(mode="json"),
             }
         )
 

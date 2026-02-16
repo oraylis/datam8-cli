@@ -37,6 +37,8 @@ from datam8.core.errors import (
     Datam8ValidationError,
 )
 from datam8.core.workspace_io import list_base_entities
+from datam8_model import base as base_model
+from datam8_model import data_source as data_source_model
 
 
 def _is_record(value: Any) -> bool:
@@ -73,24 +75,24 @@ def load_data_source_context(solution_path: str | None, data_source_id: str) -> 
     data_sources_file = next((e for e in base_entities if e.name == "DataSources"), None)
     if not data_sources_file:
         raise Datam8NotFoundError(message="DataSources.json not found in solution.", details=None)
-    ds_list = (data_sources_file.content or {}).get("dataSources") if isinstance(data_sources_file.content, dict) else None
-    if not isinstance(ds_list, list):
+    if not isinstance(data_sources_file.content.root, base_model.DataSources):
         raise Datam8ValidationError(message="DataSources.json is missing a dataSources array.", details=None)
-    data_source = next((ds for ds in ds_list if isinstance(ds, dict) and ds.get("name") == data_source_id), None)
+    ds_list = data_sources_file.content.root.dataSources
+    data_source = next((ds for ds in ds_list if ds.name == data_source_id), None)
     if not data_source:
         raise Datam8NotFoundError(message=f"DataSource '{data_source_id}' not found.", details=None)
 
     data_source_types_file = next((e for e in base_entities if e.name == "DataSourceTypes"), None)
     if not data_source_types_file:
         raise Datam8NotFoundError(message="DataSourceTypes.json not found in solution.", details=None)
-    types_list = (data_source_types_file.content or {}).get("dataSourceTypes") if isinstance(data_source_types_file.content, dict) else None
-    if not isinstance(types_list, list):
+    if not isinstance(data_source_types_file.content.root, base_model.DataSourceTypes):
         raise Datam8ValidationError(message="DataSourceTypes.json is missing a dataSourceTypes array.", details=None)
+    types_list = data_source_types_file.content.root.dataSourceTypes
 
-    type_name = data_source.get("type") or data_source.get("dataSourceType")
+    type_name = data_source.type
     if not isinstance(type_name, str) or not type_name.strip():
         raise Datam8ValidationError(message=f"DataSource '{data_source_id}' is missing a type name.", details=None)
-    data_source_type = next((t for t in types_list if isinstance(t, dict) and t.get("name") == type_name), None)
+    data_source_type = next((t for t in types_list if t.name == type_name), None)
     if not data_source_type:
         raise Datam8NotFoundError(message=f"DataSourceType '{type_name}' not found.", details=None)
 
@@ -123,20 +125,20 @@ def resolve_and_validate(
     Datam8ValidationError
         Raised when validation or runtime execution fails."""
     ctx = load_data_source_context(solution_path, data_source_id)
-    data_source = ctx["dataSource"]
-    data_source_type = ctx["dataSourceType"]
-    binding = decode_connector_binding(data_source_type.get("connectionProperties"))
+    data_source: data_source_model.DataSource = ctx["dataSource"]
+    data_source_type: data_source_model.DataSourceType = ctx["dataSourceType"]
+    binding = decode_connector_binding(data_source_type.connectionProperties)
     if not binding:
         raise Datam8ValidationError(
             code="connector_missing",
-            message=f"DataSourceType '{data_source_type.get('name')}' has no connector binding.",
-            details={"dataSourceType": data_source_type.get("name")},
+            message=f"DataSourceType '{data_source_type.name}' has no connector binding.",
+            details={"dataSourceType": data_source_type.name},
         )
 
     plugin = get_connector(plugin_dir=_plugin_dir(), connector_id=binding.connector_id)
     connector_cls = load_connector_class(plugin)
 
-    raw_props = data_source.get("extendedProperties") if isinstance(data_source, dict) else None
+    raw_props = data_source.extendedProperties
     if raw_props is None:
         raw_props = {}
     if not _is_record(raw_props):

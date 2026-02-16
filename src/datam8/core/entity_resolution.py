@@ -24,16 +24,30 @@ from pathlib import Path
 from typing import Any
 
 from datam8.core.errors import Datam8NotFoundError, Datam8ValidationError
+from datam8.core.locator_codec import (
+    locator_to_string,
+    model_locator_to_relpath,
+    parse_locator,
+)
 from datam8.core.paths import safe_join
-from datam8.core.solution_index import read_index
+from datam8.core.solution_index import (
+    find_index_entry_by_locator,
+    iter_index_entries,
+    iter_index_paths,
+    parse_index_locator,
+    read_index,
+    relpath_from_index_abs_path,
+    relpath_from_locator,
+)
 from datam8.core.workspace_io import list_model_entities, read_solution
+from datam8_model.model import Locator
 
 
 @dataclass(frozen=True)
 class ResolvedEntity:
     rel_path: str
     abs_path: str
-    locator: str | None = None
+    locator: Locator | None = None
     name: str | None = None
     id: int | None = None
 
@@ -105,18 +119,24 @@ def _resolve_by_relpath(rel_path: str, solution_path: str | None) -> ResolvedEnt
 
 
 def _resolve_by_locator(locator: str, solution_path: str | None) -> ResolvedEntity:
-    resolved, _sol = read_solution(solution_path)
+    resolved, sol = read_solution(solution_path)
     root = resolved.root_dir
-    loc = locator.strip()
-    if not loc.startswith("/"):
-        raise Datam8ValidationError(message="Locator must start with '/'.", details={"locator": locator})
+    try:
+        loc = parse_locator(locator)
+    except Exception as e:
+        raise Datam8ValidationError(message="Invalid locator.", details={"locator": locator, "error": str(e)})
+    if loc.entityType != "modelEntities":
+        raise Datam8ValidationError(
+            message="Model entity locator must have entityType 'modelEntities'.",
+            details={"locator": loc.model_dump(mode="json")},
+        )
 
     # 1) Prefer index.json (if present and usable)
     try:
         idx = read_index(solution_path)
-        found = _find_index_entry_by_locator(idx, loc)
+        found = find_index_entry_by_locator(idx, loc)
         if found:
-            rel = _rel_from_index_entry(found, root) or _rel_from_locator(loc)
+            rel = relpath_from_index_abs_path(found, root=root) or _require_model_relpath(loc, model_path=str(sol.modelPath))
             abs_path = safe_join(root, rel)
             if abs_path.exists():
                 info = _try_read_entity_info(abs_path)
@@ -125,7 +145,7 @@ def _resolve_by_locator(locator: str, solution_path: str | None) -> ResolvedEnti
         pass
 
     # 2) Deterministic from locator
-    rel = _rel_from_locator(loc)
+    rel = _require_model_relpath(loc, model_path=str(sol.modelPath))
     abs_path = safe_join(root, rel)
     if abs_path.exists():
         info = _try_read_entity_info(abs_path)
@@ -134,25 +154,25 @@ def _resolve_by_locator(locator: str, solution_path: str | None) -> ResolvedEnti
     # 3) Scan
     entities = list_model_entities(solution_path)
     for e in entities:
-        if e.locator == loc:
+        if locator_to_string(e.locator) == locator_to_string(loc):
             abs_path = safe_join(root, e.relPath)
             info = _try_read_entity_info(abs_path)
             return ResolvedEntity(rel_path=e.relPath, abs_path=str(abs_path), locator=loc, name=e.name, **info)
 
-    raise Datam8NotFoundError(message="Entity not found by locator.", details={"locator": locator})
+    raise Datam8NotFoundError(message="Entity not found by locator.", details={"locator": loc.model_dump(mode="json")})
 
 
 def _resolve_by_id(entity_id: int, solution_path: str | None) -> ResolvedEntity:
     if entity_id < 0:
         raise Datam8ValidationError(message="Invalid id.", details={"id": entity_id})
-    resolved, _sol = read_solution(solution_path)
+    resolved, sol = read_solution(solution_path)
     root = resolved.root_dir
 
     # Prefer index.json to limit scan set.
     candidates: list[str] = []
     try:
         idx = read_index(solution_path)
-        for p in _iter_index_paths(idx, root):
+        for p in iter_index_paths(idx, root=root, model_path=str(sol.modelPath)):
             candidates.append(p)
     except Exception:
         candidates = []
@@ -165,7 +185,7 @@ def _resolve_by_id(entity_id: int, solution_path: str | None) -> ResolvedEntity:
                 return ResolvedEntity(rel_path=rel, abs_path=str(abs_path), **info)
 
     for e in list_model_entities(solution_path):
-        if isinstance(e.content, dict) and e.content.get("id") == entity_id:
+        if e.content.id == entity_id:
             abs_path = safe_join(root, e.relPath)
             info = _try_read_entity_info(abs_path)
             return ResolvedEntity(rel_path=e.relPath, abs_path=str(abs_path), locator=e.locator, name=e.name, **info)
@@ -174,7 +194,7 @@ def _resolve_by_id(entity_id: int, solution_path: str | None) -> ResolvedEntity:
 
 
 def _resolve_by_name(name: str, solution_path: str | None) -> ResolvedEntity:
-    resolved, _sol = read_solution(solution_path)
+    resolved, sol = read_solution(solution_path)
     root = resolved.root_dir
     n = name.strip()
 
@@ -182,7 +202,7 @@ def _resolve_by_name(name: str, solution_path: str | None) -> ResolvedEntity:
     matches: list[dict[str, Any]] = []
     try:
         idx = read_index(solution_path)
-        for entry in _iter_index_entries(idx):
+        for entry in iter_index_entries(idx):
             if entry.get("name") == n:
                 matches.append(entry)
     except Exception:
@@ -194,11 +214,14 @@ def _resolve_by_name(name: str, solution_path: str | None) -> ResolvedEntity:
                 message="Ambiguous entity name; use --by locator or provide a relPath.",
                 details={"name": n, "matches": [{"locator": m.get("locator"), "absPath": m.get("absPath")} for m in matches]},
             )
-        rel = _rel_from_index_entry(matches[0], root) or _rel_from_locator(matches[0].get("locator", ""))
+        loc = parse_index_locator(matches[0].get("locator"))
+        rel = relpath_from_index_abs_path(matches[0], root=root) or (model_locator_to_relpath(locator=loc, model_path=str(sol.modelPath)) if loc else None)
+        if rel is None:
+            raise Datam8NotFoundError(message="Entity not found by name.", details={"name": n})
         abs_path = safe_join(root, rel)
         if abs_path.exists():
             info = _try_read_entity_info(abs_path)
-            return ResolvedEntity(rel_path=rel, abs_path=str(abs_path), locator=matches[0].get("locator"), **info)
+            return ResolvedEntity(rel_path=rel, abs_path=str(abs_path), locator=loc, **info)
 
     entities = list_model_entities(solution_path)
     candidates = [e for e in entities if e.name == n]
@@ -207,7 +230,10 @@ def _resolve_by_name(name: str, solution_path: str | None) -> ResolvedEntity:
     if len(candidates) > 1:
         raise Datam8ValidationError(
             message="Ambiguous entity name; use --by locator or provide a relPath.",
-            details={"name": n, "matches": [{"relPath": e.relPath, "locator": e.locator} for e in candidates]},
+            details={
+                "name": n,
+                "matches": [{"relPath": e.relPath, "locator": e.locator.model_dump(mode="json")} for e in candidates],
+            },
         )
     e = candidates[0]
     abs_path = safe_join(root, e.relPath)
@@ -231,56 +257,12 @@ def _try_read_entity_info(abs_path: Path) -> dict[str, Any]:
     return out
 
 
-def _iter_index_entries(index: dict[str, Any]) -> list[dict[str, Any]]:
-    entries: list[dict[str, Any]] = []
-    for _k, block in index.items():
-        if not isinstance(block, dict):
-            continue
-        ent = block.get("entry")
-        if isinstance(ent, list):
-            for e in ent:
-                if isinstance(e, dict):
-                    entries.append(e)
-    return entries
-
-
-def _find_index_entry_by_locator(index: dict[str, Any], locator: str) -> dict[str, Any] | None:
-    for e in _iter_index_entries(index):
-        if e.get("locator") == locator:
-            return e
-    return None
-
-
-def _rel_from_index_entry(entry: dict[str, Any], root: Path) -> str | None:
-    abs_path = entry.get("absPath")
-    if isinstance(abs_path, str) and abs_path:
-        try:
-            p = Path(abs_path)
-            if p.is_absolute():
-                rp = p.resolve()
-                if rp.is_relative_to(root.resolve()):
-                    return rp.relative_to(root.resolve()).as_posix()
-        except Exception:
-            pass
-    return None
-
-
-def _rel_from_locator(locator: str) -> str:
-    loc = locator.strip().lstrip("/")
-    if loc.lower().endswith(".json"):
-        return loc
-    return loc + ".json"
-
-
-def _iter_index_paths(index: dict[str, Any], root: Path) -> list[str]:
-    rels: list[str] = []
-    for e in _iter_index_entries(index):
-        loc = e.get("locator")
-        if isinstance(loc, str) and loc.startswith("/"):
-            rels.append(_rel_from_locator(loc))
-        else:
-            rel = _rel_from_index_entry(e, root)
-            if rel:
-                rels.append(rel)
-    return rels
+def _require_model_relpath(locator: Locator, *, model_path: str) -> str:
+    rel = relpath_from_locator(locator, model_path=model_path)
+    if rel is None:
+        raise Datam8ValidationError(
+            message="Model entity locator must have entityType 'modelEntities'.",
+            details={"locator": locator.model_dump(mode="json")},
+        )
+    return rel
 

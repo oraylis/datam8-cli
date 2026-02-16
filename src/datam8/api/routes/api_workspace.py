@@ -23,7 +23,7 @@ from typing import Any
 
 from fastapi import APIRouter, Query
 from fastapi.concurrency import run_in_threadpool
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from datam8.core import refactor as refactor_core
 from datam8.core import search as search_core
@@ -35,6 +35,7 @@ from datam8.core.lock import SolutionLock
 from datam8.core.parse_utils import parse_duration_seconds
 from datam8.core.solution_index import read_index, validate_index
 from datam8.generate import GenerateResult, run_generation
+from datam8_model import model as model_model
 
 from .common import lock_timeout_seconds
 from .response_models import (
@@ -267,7 +268,7 @@ async def model_entity_get(
 ) -> ModelDocumentResponse:
     """Read a model entity by selector."""
     entity = resolve_model_entity(selector, solution_path=solutionPath, by=by)
-    content = workspace_io.read_workspace_json(entity.rel_path, solutionPath)
+    content = model_model.ModelEntity.model_validate(workspace_io.read_workspace_json(entity.rel_path, solutionPath))
     return ModelDocumentResponse(entity=entity.rel_path, content=content)
 
 
@@ -286,13 +287,14 @@ async def model_entity_create(body: ModelEntityCreateBody) -> MessageWithPathRes
 
 @router.post("/model/entity/validate")
 async def model_entity_validate(body: ModelEntitySelectorBody) -> ValidationStatusResponse:
-    """Validate that a model entity resolves to a JSON object."""
+    """Validate that a model entity matches the schema."""
     entity = resolve_model_entity(body.selector, solution_path=body.solutionPath, by=body.by)
-    content = workspace_io.read_workspace_json(entity.rel_path, body.solutionPath)
-    if not isinstance(content, dict):
+    try:
+        model_model.ModelEntity.model_validate(workspace_io.read_workspace_json(entity.rel_path, body.solutionPath))
+    except ValidationError as e:
         raise Datam8ValidationError(
-            message="Model entity must be a JSON object.",
-            details={"relPath": entity.rel_path},
+            message="Model entity validation failed.",
+            details={"relPath": entity.rel_path, "errors": e.errors()},
         )
     return ValidationStatusResponse(status="ok", relPath=entity.rel_path)
 
@@ -535,7 +537,7 @@ async def base_entity_get(
     solutionPath: str | None = Query(None),
 ) -> JsonDocumentResponse:
     """Read a base entity JSON document."""
-    content = workspace_io.read_workspace_json(relPath, solutionPath)
+    content = workspace_io.read_base_entity(relPath, solutionPath)
     return JsonDocumentResponse(relPath=relPath, content=content)
 
 

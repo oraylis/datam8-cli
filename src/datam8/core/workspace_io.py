@@ -22,6 +22,7 @@ import json
 import os
 import re
 from collections.abc import Iterable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -34,7 +35,17 @@ from datam8.core.errors import (
     Datam8NotFoundError,
     Datam8ValidationError,
 )
+from datam8.core.locator_codec import (
+    folder_path_to_locator,
+    locator_sort_key,
+    relpath_to_model_locator,
+)
 from datam8.core.paths import ResolvedSolution, resolve_solution, safe_join
+from datam8_model import attribute as attribute_model
+from datam8_model import base as base_model
+from datam8_model import data_type as data_type_model
+from datam8_model import folder as folder_model
+from datam8_model import model as model_model
 from datam8_model.solution import Solution
 
 
@@ -78,11 +89,6 @@ def read_solution(solution_path: str | None) -> tuple[ResolvedSolution, Solution
             details={"solution": str(resolved.solution_file), "errors": e.errors()},
         )
     return resolved, sol
-
-
-def _normalize_locator(rel_path: str) -> str:
-    without_ext = re.sub(r"\.json$", "", rel_path, flags=re.IGNORECASE)
-    return "/" + without_ext.replace("\\", "/").lstrip("/")
 
 
 def _iter_json_files(root: Path, rel_dir: str, *, ignore: Iterable[str] = ()) -> list[Path]:
@@ -137,14 +143,24 @@ def read_workspace_json(rel_path: str, solution_path: str | None) -> Any:
     return _read_json_file(abs_path)
 
 
+def read_base_entity(rel_path: str, solution_path: str | None) -> base_model.BaseEntities:
+    raw = read_workspace_json(rel_path, solution_path)
+    return _validate_base_entities(raw, path=rel_path)
+
+
+def read_folder_metadata(rel_path: str, solution_path: str | None) -> folder_model.Folder:
+    raw = read_workspace_json(rel_path, solution_path)
+    return _coerce_folder_metadata(raw, path=rel_path)
+
+
 class ModelEntityEntry(BaseModel):
     """Typed model entity payload for workspace listings."""
 
-    locator: str
+    locator: model_model.Locator
     name: str
     absPath: str
     relPath: str
-    content: Any
+    content: model_model.ModelEntity
 
 
 class BaseEntityEntry(BaseModel):
@@ -153,18 +169,48 @@ class BaseEntityEntry(BaseModel):
     name: str
     absPath: str
     relPath: str
-    content: Any
+    content: base_model.BaseEntities
 
 
 class FolderEntityEntry(BaseModel):
     """Typed folder metadata payload for workspace listings."""
 
-    locator: str
+    locator: model_model.Locator
     name: str
     absPath: str
     relPath: str
     folderPath: str
-    content: Any
+    content: folder_model.Folder
+
+
+def _validate_model_entity(payload: Any, *, path: str) -> model_model.ModelEntity:
+    try:
+        return model_model.ModelEntity.model_validate(payload)
+    except ValidationError as e:
+        raise Datam8ValidationError(
+            message="Model entity validation failed.",
+            details={"path": path, "errors": e.errors()},
+        )
+
+
+def _validate_base_entities(payload: Any, *, path: str) -> base_model.BaseEntities:
+    try:
+        return base_model.BaseEntities.model_validate(payload)
+    except ValidationError as e:
+        raise Datam8ValidationError(
+            message="Base entity validation failed.",
+            details={"path": path, "errors": e.errors()},
+        )
+
+
+def _coerce_folder_metadata(payload: Any, *, path: str) -> folder_model.Folder:
+    try:
+        return folder_model.Folder.model_validate(payload)
+    except ValidationError as e:
+        raise Datam8ValidationError(
+            message="Folder metadata validation failed.",
+            details={"path": path, "errors": e.errors()},
+        )
 
 
 class PathMutationResult(BaseModel):
@@ -219,7 +265,7 @@ def list_base_entities(solution_path: str | None) -> list[BaseEntityEntry]:
                 name=abs_path.stem,
                 absPath=str(abs_path),
                 relPath=rel,
-                content=_read_json_file(abs_path),
+                content=_validate_base_entities(_read_json_file(abs_path), path=str(abs_path)),
             )
         )
     return entries
@@ -245,11 +291,11 @@ def list_model_entities(solution_path: str | None) -> list[ModelEntityEntry]:
         rel = abs_path.relative_to(root).as_posix()
         entities.append(
             ModelEntityEntry(
-                locator=_normalize_locator(rel),
+                locator=relpath_to_model_locator(rel_path=rel, model_path=str(sol.modelPath)),
                 name=abs_path.stem,
                 absPath=str(abs_path),
                 relPath=rel,
-                content=_read_json_file(abs_path),
+                content=_validate_model_entity(_read_json_file(abs_path), path=str(abs_path)),
             )
         )
     return entities
@@ -265,15 +311,9 @@ def list_folder_entities(solution_path: str | None) -> list[FolderEntityEntry]:
         rel = abs_path.relative_to(root).as_posix()
         folder_rel = abs_path.parent.relative_to(safe_join(root, str(sol.modelPath))).as_posix()
         folder_path = "" if folder_rel == "." else folder_rel
-        locator = "/folders" if not folder_path else f"/folders/{folder_path}"
-        content = _read_json_file(abs_path)
-        folder_name = abs_path.parent.name
-        if isinstance(content, dict):
-            folders = content.get("folders")
-            if isinstance(folders, list) and folders:
-                first = folders[0]
-                if isinstance(first, dict) and isinstance(first.get("name"), str) and first["name"].strip():
-                    folder_name = first["name"].strip()
+        locator = folder_path_to_locator(folder_path)
+        content = _coerce_folder_metadata(_read_json_file(abs_path), path=str(abs_path))
+        folder_name = content.name or abs_path.parent.name
         entities.append(
             FolderEntityEntry(
                 locator=locator,
@@ -307,18 +347,24 @@ def write_model_entity(rel_path: str, content: Any, solution_path: str | None) -
     root = resolved.root_dir
     abs_path = safe_join(root, rel_path)
     is_folder_metadata = rel_path.replace("\\", "/").endswith(".properties.json")
+    validated: model_model.ModelEntity | None = None
     if not is_folder_metadata:
+        validated = _validate_model_entity(content, path=rel_path)
+        serialized: Any = validated.model_dump(mode="json")
         prev_entity_name = legacy_function_sources.read_model_entity_name(abs_path) if abs_path.exists() else ""
-        next_entity_name = legacy_function_sources.parse_entity_name_from_model_entity(content)
+        next_entity_name = validated.name
         legacy_function_sources.ensure_function_source_folder_name(
             root=root,
             rel_path=rel_path,
             prev_entity_name=prev_entity_name,
             next_entity_name=next_entity_name,
         )
-    atomic_write_json(abs_path, content, indent=4)
-    if not is_folder_metadata:
-        legacy_function_sources.migrate_legacy_function_sources(root=root, rel_path=rel_path, content=content)
+    else:
+        validated_folder = _coerce_folder_metadata(content, path=rel_path)
+        serialized = validated_folder.model_dump(mode="json")
+    atomic_write_json(abs_path, serialized, indent=4)
+    if validated is not None:
+        legacy_function_sources.migrate_legacy_function_sources(root=root, rel_path=rel_path, content=validated)
     return str(abs_path)
 
 
@@ -349,8 +395,29 @@ def create_model_entity(rel_path: str, *, name: str | None, solution_path: str |
     if abs_path.exists():
         raise Datam8ConflictError(message="Model entity already exists.", details={"relPath": rel_path})
     entity_name = (name or "").strip() or Path(rel_path).stem
-    content: dict[str, Any] = {"name": entity_name}
-    atomic_write_json(abs_path, content, indent=4)
+    next_id = 1
+    for p in _iter_json_files(root, str(_sol.modelPath), ignore=[".properties.json"]):
+        data = _read_json_file(p)
+        if isinstance(data, dict) and isinstance(data.get("id"), int):
+            next_id = max(next_id, data["id"] + 1)
+
+    template = model_model.ModelEntity(
+        id=next_id,
+        name=entity_name,
+        attributes=[
+            attribute_model.Attribute(
+                ordinalNumber=10,
+                name="id",
+                attributeType="Physical",
+                dataType=data_type_model.DataType(type="int", nullable=False),
+                dateAdded=datetime.now(UTC),
+            )
+        ],
+        sources=[],
+        transformations=[],
+        relationships=[],
+    )
+    atomic_write_json(abs_path, template.model_dump(mode="json"), indent=4)
     return str(abs_path)
 
 
@@ -486,18 +553,17 @@ def duplicate_model_entity(
         raise Datam8NotFoundError(message="Model entity not found.", details={"relPath": from_rel_path})
     if to_abs.exists():
         raise Datam8ConflictError(message="Target model entity already exists.", details={"relPath": to_rel_path})
-    content = _read_json_file(from_abs)
-    if isinstance(content, dict):
-        if new_name is not None:
-            content["name"] = new_name
-        if new_id is not None:
-            content["id"] = new_id
+    content = _validate_model_entity(_read_json_file(from_abs), path=str(from_abs))
+    if new_name is not None:
+        content.name = new_name
+    if new_id is not None:
+        content.id = new_id
     to_abs.parent.mkdir(parents=True, exist_ok=True)
-    atomic_write_json(to_abs, content, indent=4)
+    atomic_write_json(to_abs, content.model_dump(mode="json"), indent=4)
 
     entity_name = legacy_function_sources.read_model_entity_name(from_abs)
     from_folder = legacy_function_sources.derive_function_source_folder_name(from_rel_path, entity_name)
-    to_folder = legacy_function_sources.derive_function_source_folder_name(to_rel_path, legacy_function_sources.parse_entity_name_from_model_entity(content))
+    to_folder = legacy_function_sources.derive_function_source_folder_name(to_rel_path, content.name)
     if from_folder and to_folder:
         from_dir_rel = Path(from_rel_path).parent.as_posix()
         to_dir_rel = Path(to_rel_path).parent.as_posix()
@@ -528,7 +594,8 @@ def write_base_entity(rel_path: str, content: Any, solution_path: str | None) ->
     resolved, _sol = read_solution(solution_path)
     root = resolved.root_dir
     abs_path = safe_join(root, rel_path)
-    atomic_write_json(abs_path, content, indent=4)
+    validated = _validate_base_entities(content, path=rel_path)
+    atomic_write_json(abs_path, validated.model_dump(mode="json"), indent=4)
     return str(abs_path)
 
 
@@ -562,7 +629,7 @@ def _build_index(*, sol: Solution, entities: list[ModelEntityEntry]) -> dict[str
         slug = m.group(1).lower() if m else segment.lower()
         return f"{slug}Index"
 
-    index: dict[str, dict[str, list[dict[str, str]]]] = {}
+    index: dict[str, dict[str, list[dict[str, Any]]]] = {}
     for entity in entities:
         try:
             rel_from_model = Path(entity.relPath).relative_to(Path(str(sol.modelPath))).as_posix()
@@ -571,10 +638,21 @@ def _build_index(*, sol: Solution, entities: list[ModelEntityEntry]) -> dict[str
         zone_segment = rel_from_model.split("/")[0] if rel_from_model else "model"
         key = zone_to_key(zone_segment or "model")
         index.setdefault(key, {"entry": []})
-        index[key]["entry"].append({"locator": entity.locator, "name": entity.name, "absPath": entity.absPath})
+        index[key]["entry"].append(
+            {
+                "locator": entity.locator.model_dump(mode="json"),
+                "name": entity.name,
+                "absPath": entity.absPath,
+            }
+        )
 
     for k in sorted(index.keys()):
-        index[k]["entry"].sort(key=lambda e: (e["locator"], e["name"]))
+        index[k]["entry"].sort(
+            key=lambda e: (
+                locator_sort_key(model_model.Locator.model_validate(e.get("locator"))),
+                str(e.get("name") or ""),
+            )
+        )
     return index
 
 
@@ -965,10 +1043,26 @@ def create_new_project(
     base_files: dict[str, Any] = {
         "AttributeTypes": {"type": "attributeTypes", "attributeTypes": default_attribute_types},
         "DataTypes": {"type": "dataTypes", "dataTypes": default_data_types},
-        "DataSourceTypes": {"type": "dataSourceTypes", "dataSourceTypes": []},
+        "DataSourceTypes": {
+            "type": "dataSourceTypes",
+            "dataSourceTypes": [
+                {
+                    "name": "Generic",
+                    "displayName": "Generic",
+                    "dataTypeMapping": [{"sourceType": "string", "targetType": "string"}],
+                    "connectionProperties": [],
+                }
+            ],
+        },
         "DataSources": {"type": "dataSources", "dataSources": []},
-        "DataProducts": {"type": "dataProducts", "dataProducts": []},
-        "Zones": {"type": "zones", "zones": []},
+        "DataProducts": {
+            "type": "dataProducts",
+            "dataProducts": [{"name": "Default", "dataModules": [{"name": "Default"}]}],
+        },
+        "Zones": {
+            "type": "zones",
+            "zones": [{"name": "Raw", "targetName": "Raw", "displayName": "Raw", "localFolderName": "010-Raw"}],
+        },
         "Properties": {"type": "properties", "properties": []},
         "PropertyValues": {"type": "propertyValues", "propertyValues": []},
     }

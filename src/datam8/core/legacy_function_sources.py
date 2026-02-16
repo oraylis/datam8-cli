@@ -25,6 +25,7 @@ from typing import Any
 
 from datam8.core.errors import Datam8ValidationError
 from datam8.core.paths import safe_join
+from datam8_model import model as model_model
 
 
 def sanitize_path_segment(value: str) -> str:
@@ -35,6 +36,8 @@ def sanitize_path_segment(value: str) -> str:
 
 def parse_entity_name_from_model_entity(content: Any) -> str:
     """Extract `name` from a model entity payload."""
+    if isinstance(content, model_model.ModelEntity):
+        return content.name.strip()
     if not isinstance(content, dict):
         return ""
     name = content.get("name")
@@ -246,19 +249,28 @@ def migrate_legacy_function_sources(*, root: Path, rel_path: str, content: Any) 
         rel_path=rel_path,
         preferred_entity_name=entity_name,
     )
-    transforms = content.get("transformations") if isinstance(content, dict) else None
-    if not isinstance(transforms, list):
-        return
     sources: list[str] = []
-    for transform in transforms:
-        if not isinstance(transform, dict) or transform.get("kind") != "function":
-            continue
-        function = transform.get("function")
-        if not isinstance(function, dict):
-            continue
-        source = function.get("source")
-        if isinstance(source, str) and source.strip():
-            sources.append(source.strip())
+    if isinstance(content, model_model.ModelEntity):
+        for transform in content.transformations:
+            if str(transform.kind.value) != "function":
+                continue
+            if transform.function and isinstance(transform.function.source, str) and transform.function.source.strip():
+                sources.append(transform.function.source.strip())
+    elif isinstance(content, dict):
+        transforms = content.get("transformations")
+        if not isinstance(transforms, list):
+            return
+        for transform in transforms:
+            if not isinstance(transform, dict) or transform.get("kind") != "function":
+                continue
+            function = transform.get("function")
+            if not isinstance(function, dict):
+                continue
+            source = function.get("source")
+            if isinstance(source, str) and source.strip():
+                sources.append(source.strip())
+    else:
+        return
     for source in sources:
         try:
             ensure_basename(source)

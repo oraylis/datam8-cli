@@ -30,11 +30,32 @@ def _write_json(path: Path, payload: dict) -> None:
 def _create_solution(tmp_path: Path) -> Path:
     base = tmp_path / "Base"
     model = tmp_path / "Model" / "010-Stage" / "Sales"
-    _write_json(base / "DataProducts.json", {"type": "dataProducts", "dataProducts": []})
-    _write_json(model / "Customer.json", {"id": 1, "name": "Customer", "attributes": [], "sources": []})
+    _write_json(
+        base / "DataProducts.json",
+        {"type": "dataProducts", "dataProducts": [{"name": "Default", "dataModules": [{"name": "Default"}]}]},
+    )
+    _write_json(
+        model / "Customer.json",
+        {
+            "id": 1,
+            "name": "Customer",
+            "attributes": [
+                {
+                    "ordinalNumber": 10,
+                    "name": "id",
+                    "attributeType": "Physical",
+                    "dataType": {"type": "int", "nullable": False},
+                    "dateAdded": "2024-01-01T00:00:00Z",
+                }
+            ],
+            "sources": [],
+            "transformations": [],
+            "relationships": [],
+        },
+    )
     _write_json(
         model / ".properties.json",
-        {"type": "folders", "folders": [{"id": 101, "name": "Sales", "properties": []}]},
+        {"id": 101, "name": "Sales", "properties": []},
     )
     _write_json(
         tmp_path / "TestSolution.dm8s",
@@ -103,15 +124,15 @@ def test_base_entity_alias_get_set_patch(tmp_path: Path, api_client) -> None:
             headers={"Authorization": f"Bearer {token}"},
         )
         get_before.raise_for_status()
-        assert get_before.json()["content"]["dataProducts"] == []
+        assert len(get_before.json()["content"]["dataProducts"]) == 1
 
         set_resp = client.post(
             "/base/entity/set",
             headers={"Authorization": f"Bearer {token}"},
             json={
                 "relPath": "Base/DataProducts.json",
-                "pointer": "/dataProducts/0",
-                "value": {"name": "Sales", "dataModules": []},
+                "pointer": "/dataProducts/1",
+                "value": {"name": "Sales", "dataModules": [{"name": "Staging"}]},
                 "solutionPath": str(solution_path),
                 "noLock": True,
             },
@@ -239,7 +260,7 @@ def test_model_entity_aliases_and_folder_metadata_aliases(tmp_path: Path, api_cl
             headers={"Authorization": f"Bearer {token}"},
         )
         folder_get.raise_for_status()
-        assert folder_get.json()["content"]["type"] == "folders"
+        assert folder_get.json()["content"]["name"] == "Sales"
 
         folder_save = client.post(
             "/model/folder-metadata",
@@ -247,8 +268,9 @@ def test_model_entity_aliases_and_folder_metadata_aliases(tmp_path: Path, api_cl
             json={
                 "relPath": "Model/010-Stage/Sales/.properties.json",
                 "content": {
-                    "type": "folders",
-                    "folders": [{"id": 999, "name": "Sales", "properties": []}],
+                    "id": 999,
+                    "name": "Sales",
+                    "properties": [],
                 },
                 "solutionPath": str(solution_path),
                 "noLock": True,

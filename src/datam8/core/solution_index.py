@@ -24,8 +24,14 @@ from pathlib import Path
 from typing import Any
 
 from datam8.core.errors import Datam8NotFoundError, Datam8ValidationError
+from datam8.core.locator_codec import (
+    locator_to_string,
+    model_locator_to_relpath,
+    parse_locator,
+)
 from datam8.core.paths import safe_join
 from datam8.core.workspace_io import read_solution
+from datam8_model.model import Locator
 
 
 def iter_solution_json_files(solution_path: str | None) -> Iterator[Path]:
@@ -96,7 +102,7 @@ def read_index(solution_path: str | None) -> dict[str, Any]:
 
 def validate_index(solution_path: str | None) -> dict[str, Any]:
     """Validate index locators and duplicate entries."""
-    resolved, _sol = read_solution(solution_path)
+    resolved, sol = read_solution(solution_path)
     root = resolved.root_dir
     data = read_index(solution_path)
 
@@ -114,24 +120,25 @@ def validate_index(solution_path: str | None) -> dict[str, Any]:
         for entry in entries:
             if not isinstance(entry, dict):
                 continue
-            locator = entry.get("locator")
+            locator = parse_index_locator(entry.get("locator"))
             name = entry.get("name")
             abs_path = entry.get("absPath")
-            if not isinstance(locator, str) or not isinstance(name, str) or not isinstance(abs_path, str):
+            if locator is None or not isinstance(name, str) or not isinstance(abs_path, str):
                 continue
+            locator_key = locator_to_string(locator)
             checked += 1
-            if locator in locators:
+            if locator_key in locators:
                 duplicates.append(
-                    {"locator": locator, "first": locators[locator], "second": abs_path}
+                    {"locator": locator_key, "first": locators[locator_key], "second": abs_path}
                 )
             else:
-                locators[locator] = abs_path
+                locators[locator_key] = abs_path
 
-            rel = _rel_from_locator(locator)
+            rel = relpath_from_locator(locator, model_path=str(sol.modelPath))
             if rel:
                 target = safe_join(root, rel)
                 if not target.exists():
-                    missing.append({"locator": locator, "expectedRelPath": rel})
+                    missing.append({"locator": locator_key, "expectedRelPath": rel})
 
     return {
         "ok": not duplicates and not missing,
@@ -141,13 +148,67 @@ def validate_index(solution_path: str | None) -> dict[str, Any]:
     }
 
 
-def _rel_from_locator(locator: str) -> str | None:
-    loc = (locator or "").strip()
-    if not loc.startswith("/"):
+def iter_index_entries(index: dict[str, Any]) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    for _k, block in index.items():
+        if not isinstance(block, dict):
+            continue
+        ent = block.get("entry")
+        if isinstance(ent, list):
+            for e in ent:
+                if isinstance(e, dict):
+                    entries.append(e)
+    return entries
+
+
+def parse_index_locator(value: Any) -> Locator | None:
+    try:
+        return parse_locator(value)
+    except Exception:
         return None
-    pathish = loc.lstrip("/")
-    if not pathish:
+
+
+def find_index_entry_by_locator(index: dict[str, Any], locator: Locator) -> dict[str, Any] | None:
+    for entry in iter_index_entries(index):
+        loc = parse_index_locator(entry.get("locator"))
+        if loc and locator_to_string(loc) == locator_to_string(locator):
+            return entry
+    return None
+
+
+def relpath_from_index_abs_path(entry: dict[str, Any], *, root: Path) -> str | None:
+    abs_path = entry.get("absPath")
+    if isinstance(abs_path, str) and abs_path:
+        try:
+            p = Path(abs_path)
+            if p.is_absolute():
+                rp = p.resolve()
+                if rp.is_relative_to(root.resolve()):
+                    return rp.relative_to(root.resolve()).as_posix()
+        except Exception:
+            pass
+    return None
+
+
+def relpath_from_locator(locator: Any, *, model_path: str) -> str | None:
+    if locator is None:
         return None
-    if pathish.lower().endswith(".json"):
-        return pathish
-    return pathish + ".json"
+    parsed = locator if isinstance(locator, Locator) else parse_index_locator(locator)
+    if parsed is None:
+        return None
+    if parsed.entityType != "modelEntities":
+        return None
+    return model_locator_to_relpath(locator=parsed, model_path=model_path)
+
+
+def iter_index_paths(index: dict[str, Any], *, root: Path, model_path: str) -> list[str]:
+    rels: list[str] = []
+    for entry in iter_index_entries(index):
+        rel = relpath_from_locator(entry.get("locator"), model_path=model_path)
+        if rel:
+            rels.append(rel)
+            continue
+        rel = relpath_from_index_abs_path(entry, root=root)
+        if rel:
+            rels.append(rel)
+    return rels

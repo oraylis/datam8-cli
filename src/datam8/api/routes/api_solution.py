@@ -123,15 +123,33 @@ async def solution_full(path: str | None = Query(None)) -> SolutionFullResponse:
     """Read and return the full solution with base/model entities."""
     snapshot = workspace_service.get_solution_full_snapshot(path)
     base_entities = [
-        BaseEntityResponse.model_validate(entity.model_dump())
+        BaseEntityResponse(
+            name=entity.name,
+            absPath=entity.absPath,
+            relPath=entity.relPath,
+            content=entity.content,
+        )
         for entity in snapshot.baseEntities
     ]
     model_entities = [
-        ModelEntityResponse.model_validate(entity.model_dump())
+        ModelEntityResponse(
+            locator=entity.locator,
+            name=entity.name,
+            absPath=entity.absPath,
+            relPath=entity.relPath,
+            content=entity.content,
+        )
         for entity in snapshot.modelEntities
     ]
     folder_entities = [
-        FolderEntityResponse.model_validate(entity.model_dump())
+        FolderEntityResponse(
+            locator=entity.locator,
+            name=entity.name,
+            absPath=entity.absPath,
+            relPath=entity.relPath,
+            folderPath=entity.folderPath,
+            content=entity.content,
+        )
         for entity in snapshot.folderEntities
     ]
     return SolutionFullResponse(

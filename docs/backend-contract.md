@@ -60,16 +60,14 @@ All non-readiness logs are written to stderr.
 ## `GET /solution/full` payload
 
 - `solution`: parsed solution metadata.
-- `baseEntities`: base JSON entities.
-- `modelEntities`: model JSON entities (excludes folder metadata files).
+- `baseEntities`: base JSON entities (`content` is a typed base wrapper object).
+- `modelEntities`: model JSON entities (excludes folder metadata files; `locator` is a locator object).
 - `folderEntities`: folder metadata files discovered under `Model/**/.properties.json`.
 
 ## Folder Metadata Contract
 
 - Folder metadata file path: `Model/**/.properties.json`.
-- Wrapper shape follows v2 entities:
-  - `type: "folders"`
-  - `folders: [ { ...folderFields } ]`
+- File content is a direct folder object (no `folders[]` wrapper).
 - Folder fields used by Neon/backend:
   - `id` (number), `name` (string)
   - optional `displayName`, `description`, `path`
@@ -99,6 +97,10 @@ All non-readiness logs are written to stderr.
 - Stable and workflow-critical fields are exposed via explicit typed response models.
 - Plugin-/connector-driven payloads with intentionally dynamic shape remain open objects to avoid over-constraining connector implementations.
 - Dynamic sections are still wrapped in typed top-level response envelopes to keep endpoint contracts stable.
+- Locator fields in model/folder payloads are typed objects:
+  - `entityType: string`
+  - `folders: string[]`
+  - `entityName: string | null`
 
 ## Implementation notes (non-contract)
 

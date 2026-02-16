@@ -83,9 +83,9 @@ def solution_full(
     opts = make_global_options(solution=solution_path, json_output=json_output, quiet=quiet)
     active_solution_path = resolve_solution_path(opts)
     snapshot = workspace_service.get_solution_full_snapshot(active_solution_path)
-    base_entities = [e.model_dump() for e in snapshot.baseEntities]
-    model_entities = [e.model_dump() for e in snapshot.modelEntities]
-    folder_entities = [e.model_dump() for e in snapshot.folderEntities]
+    base_entities = [e.model_dump(mode="json") for e in snapshot.baseEntities]
+    model_entities = [e.model_dump(mode="json") for e in snapshot.modelEntities]
+    folder_entities = [e.model_dump(mode="json") for e in snapshot.folderEntities]
     payload = {
         "solutionPath": snapshot.solutionPath,
         "solution": snapshot.solution.model_dump(mode="json"),

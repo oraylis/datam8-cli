@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 
 import typer
+from pydantic import ValidationError
 
 from datam8 import opts as cli_opts
 from datam8.core import workspace_service
@@ -28,6 +29,7 @@ from datam8.core.entity_resolution import resolve_model_entity
 from datam8.core.errors import Datam8ValidationError
 from datam8.core.jsonops import merge_patch, set_by_pointer
 from datam8.core.workspace_io import read_workspace_json
+from datam8_model import model as model_model
 
 from .common import (
     emit_result,
@@ -62,7 +64,7 @@ def list_entities(
     """List model entities."""
     opts = make_global_options(solution=solution_path, json_output=json_output, quiet=quiet)
     entities = workspace_service.list_model_entities(resolve_solution_path(opts))
-    payload = {"count": len(entities), "entities": [e.model_dump() for e in entities]}
+    payload = {"count": len(entities), "entities": [e.model_dump(mode="json") for e in entities]}
     emit_result(opts, payload, human_lines=[e.relPath for e in entities])
 
 
@@ -154,13 +156,18 @@ def validate_entity(
     json_output: cli_opts.JsonOutput = False,
     quiet: cli_opts.Quiet = False,
 ) -> None:
-    """Validate that a model entity is a JSON object."""
+    """Validate that a model entity matches the schema."""
     opts = make_global_options(solution=solution_path, json_output=json_output, quiet=quiet)
     active_solution_path = resolve_solution_path(opts)
     entity = resolve_model_entity(selector, solution_path=active_solution_path, by=by)
     content = read_workspace_json(entity.rel_path, active_solution_path)
-    if not isinstance(content, dict):
-        raise Datam8ValidationError(message="Model entity must be a JSON object.", details={"relPath": entity.rel_path})
+    try:
+        model_model.ModelEntity.model_validate(content)
+    except ValidationError as e:
+        raise Datam8ValidationError(
+            message="Model entity validation failed.",
+            details={"relPath": entity.rel_path, "errors": e.errors()},
+        )
     emit_result(opts, {"status": "ok", "relPath": entity.rel_path}, human_lines=[f"ok: {entity.rel_path}"])
 
 
@@ -364,7 +371,7 @@ def rename_model_folder(
         "status": "renamed",
         "fromAbsPath": result.fromAbsPath,
         "toAbsPath": result.toAbsPath,
-        "entities": [entity.model_dump() for entity in result.entities],
+        "entities": [entity.model_dump(mode="json") for entity in result.entities],
         "index": result.index,
     }
     emit_result(
@@ -391,8 +398,9 @@ def get_folder_metadata(
         rel_path=rel_path,
         solution_path=active_solution_path,
     )
-    payload = {"relPath": rel_path, "content": content}
-    emit_result(opts, payload, human_lines=[json.dumps(content, indent=2, ensure_ascii=False)])
+    content_payload = content.model_dump(mode="json")
+    payload = {"relPath": rel_path, "content": content_payload}
+    emit_result(opts, payload, human_lines=[json.dumps(content_payload, indent=2, ensure_ascii=False)])
 
 
 @folder_metadata_app.command("save")

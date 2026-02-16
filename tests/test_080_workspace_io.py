@@ -39,24 +39,37 @@ def _create_solution(
     base = tmp_path / "Base"
     old_entity = tmp_path / Path(old_folder_rel) / "Customer.json"
 
-    _write_json(base / "DataProducts.json", {"type": "dataProducts", "dataProducts": []})
+    _write_json(
+        base / "DataProducts.json",
+        {"type": "dataProducts", "dataProducts": [{"name": "Default", "dataModules": [{"name": "Default"}]}]},
+    )
     _write_json(
         old_entity,
-        {"id": 1, "name": "Customer", "attributes": [], "sources": []},
+        {
+            "id": 1,
+            "name": "Customer",
+            "attributes": [
+                {
+                    "ordinalNumber": 10,
+                    "name": "id",
+                    "attributeType": "Physical",
+                    "dataType": {"type": "int", "nullable": False},
+                    "dateAdded": "2024-01-01T00:00:00Z",
+                }
+            ],
+            "sources": [],
+            "transformations": [],
+            "relationships": [],
+        },
     )
     _write_json(
         tmp_path / Path(old_folder_rel) / ".properties.json",
         {
-            "type": "folders",
-            "folders": [
-                {
-                    "id": 10,
-                    "name": "Old",
-                    "dataProduct": "Sales",
-                    "dataModule": "Customer",
-                    "properties": [],
-                }
-            ],
+            "id": 10,
+            "name": "Old",
+            "dataProduct": "Sales",
+            "dataModule": "Customer",
+            "properties": [],
         },
     )
     _write_json(
