@@ -71,7 +71,6 @@ def _dump_sparse_json(model: BaseModel) -> Any:
     return model.model_dump(
         mode="json",
         exclude_unset=True,
-        exclude_defaults=True,
         exclude_none=True,
     )
 
@@ -361,7 +360,6 @@ async def model_entity_duplicate(body: DuplicateEntityBody) -> MoveEntityRespons
 @router.get(
     "/model/entities",
     response_model_exclude_unset=True,
-    response_model_exclude_defaults=True,
     response_model_exclude_none=True,
 )
 async def model_entities(path: str | None = Query(None)) -> ModelEntitiesResponse:
@@ -423,7 +421,6 @@ async def model_entities_move(body: MoveEntityBody) -> MoveEntityResponse:
 @router.post(
     "/model/folder/rename",
     response_model_exclude_unset=True,
-    response_model_exclude_defaults=True,
     response_model_exclude_none=True,
 )
 async def model_folder_rename(body: RenameFolderBody) -> RenameFolderResponse:
@@ -555,7 +552,6 @@ async def generator_run(body: GenerateBody) -> GenerateResult:
 @router.get(
     "/base/entities",
     response_model_exclude_unset=True,
-    response_model_exclude_defaults=True,
     response_model_exclude_none=True,
 )
 async def base_entities(path: str | None = Query(None)) -> BaseEntitiesResponse:
