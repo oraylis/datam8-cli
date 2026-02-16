@@ -92,7 +92,7 @@ jobs:
         run: uv sync
 
       - name: Run pytests
-        run: uv run pytest --solution-path "$DATAM8_SOLUTION_PATH" --junitxml=TEST-generator-pytest.xml
+        run: uv run pytest --junitxml=TEST-generator-pytest.xml
         continue-on-error: true
 
       - name: Publish Test Results
