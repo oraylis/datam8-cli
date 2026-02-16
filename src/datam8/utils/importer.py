@@ -34,7 +34,8 @@ def enable_target_modules() -> None:
     None
         Computed return value."""
     logger.info("Enable importing from target __modules")
-    sys.meta_path.append(TargetModuleFinder)
+    if TargetModuleFinder not in sys.meta_path:
+        sys.meta_path.append(TargetModuleFinder)
 
 
 @utils.get_logger
