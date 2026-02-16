@@ -150,7 +150,7 @@ def read_base_entity(rel_path: str, solution_path: str | None) -> base_model.Bas
 
 def read_folder_metadata(rel_path: str, solution_path: str | None) -> folder_model.Folder:
     raw = read_workspace_json(rel_path, solution_path)
-    return _coerce_folder_metadata(raw, path=rel_path)
+    return _extract_single_folder(_validate_folder_metadata_container(raw, path=rel_path), path=rel_path)
 
 
 class ModelEntityEntry(BaseModel):
@@ -211,6 +211,46 @@ def _coerce_folder_metadata(payload: Any, *, path: str) -> folder_model.Folder:
             message="Folder metadata validation failed.",
             details={"path": path, "errors": e.errors()},
         )
+
+
+def _validate_folder_metadata_container(payload: Any, *, path: str) -> base_model.Folders:
+    try:
+        return base_model.Folders.model_validate(payload)
+    except ValidationError as e:
+        raise Datam8ValidationError(
+            message="Folder metadata validation failed.",
+            details={"path": path, "errors": e.errors()},
+        )
+
+
+def _extract_single_folder(container: base_model.Folders, *, path: str) -> folder_model.Folder:
+    folders = list(container.folders or [])
+    if len(folders) != 1:
+        raise Datam8ValidationError(
+            message="Folder metadata validation failed.",
+            details={
+                "path": path,
+                "errors": [
+                    {
+                        "type": "value_error",
+                        "loc": ["folders"],
+                        "msg": "Folder metadata must contain exactly one folder entry.",
+                        "input": container.model_dump(mode="json"),
+                    }
+                ],
+            },
+        )
+    return folders[0]
+
+
+def _coerce_folder_metadata_for_write(payload: Any, *, path: str) -> base_model.Folders:
+    if isinstance(payload, dict) and payload.get("type") == "folders":
+        validated = _validate_folder_metadata_container(payload, path=path)
+        _extract_single_folder(validated, path=path)
+        return validated
+
+    folder = _coerce_folder_metadata(payload, path=path)
+    return base_model.Folders(type="folders", folders=[folder])
 
 
 def _dump_sparse_json(model: BaseModel) -> Any:
@@ -321,7 +361,8 @@ def list_folder_entities(solution_path: str | None) -> list[FolderEntityEntry]:
         folder_rel = abs_path.parent.relative_to(safe_join(root, str(sol.modelPath))).as_posix()
         folder_path = "" if folder_rel == "." else folder_rel
         locator = folder_path_to_locator(folder_path)
-        content = _coerce_folder_metadata(_read_json_file(abs_path), path=str(abs_path))
+        container = _validate_folder_metadata_container(_read_json_file(abs_path), path=str(abs_path))
+        content = _extract_single_folder(container, path=str(abs_path))
         folder_name = content.name or abs_path.parent.name
         entities.append(
             FolderEntityEntry(
@@ -369,8 +410,8 @@ def write_model_entity(rel_path: str, content: Any, solution_path: str | None) -
             next_entity_name=next_entity_name,
         )
     else:
-        validated_folder = _coerce_folder_metadata(content, path=rel_path)
-        serialized = _dump_sparse_json(validated_folder)
+        validated_folders = _coerce_folder_metadata_for_write(content, path=rel_path)
+        serialized = _dump_sparse_json(validated_folders)
     atomic_write_json(abs_path, serialized, indent=4)
     if validated is not None:
         legacy_function_sources.migrate_legacy_function_sources(root=root, rel_path=rel_path, content=validated)

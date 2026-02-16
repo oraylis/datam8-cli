@@ -55,7 +55,10 @@ def _create_solution(tmp_path: Path) -> Path:
     )
     _write_json(
         model / ".properties.json",
-        {"id": 101, "name": "Sales", "properties": []},
+        {
+            "type": "folders",
+            "folders": [{"id": 101, "name": "Sales", "properties": []}],
+        },
     )
     _write_json(
         tmp_path / "TestSolution.dm8s",
@@ -102,15 +105,14 @@ def test_solution_info_and_validate_aliases(tmp_path: Path, api_client) -> None:
             params={"path": str(solution_path)},
             headers={"Authorization": f"Bearer {token}"},
         )
-        assert full_validate.status_code == 400
+        assert full_validate.status_code == 200
         full_validate_payload = full_validate.json()
 
     assert info_payload["solutionPath"].endswith("TestSolution.dm8s")
     assert info_payload["solution"]["schemaVersion"] == "2.0.0"
     assert validate_payload["status"] == "ok"
     assert validate_payload["solutionPath"].endswith("TestSolution.dm8s")
-    error_code = full_validate_payload.get("code") or full_validate_payload.get("error", {}).get("code")
-    assert error_code == "validation_error"
+    assert full_validate_payload["status"] == "ok"
 
 
 def test_base_entity_alias_get_set_patch(tmp_path: Path, api_client) -> None:
@@ -277,6 +279,9 @@ def test_model_entity_aliases_and_folder_metadata_aliases(tmp_path: Path, api_cl
             },
         )
         folder_save.raise_for_status()
+        written_folder_payload = json.loads((tmp_path / "Model/010-Stage/Sales/.properties.json").read_text(encoding="utf-8"))
+        assert written_folder_payload["type"] == "folders"
+        assert written_folder_payload["folders"][0]["id"] == 999
 
         folder_delete = client.request(
             "DELETE",

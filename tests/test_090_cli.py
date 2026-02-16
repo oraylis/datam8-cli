@@ -123,7 +123,10 @@ def _create_solution_with_folder_metadata(root: Path, *, folder_name: str = "Sal
     )
     _write_json(
         folder_path / ".properties.json",
-        {"id": 101, "name": folder_name, "properties": []},
+        {
+            "type": "folders",
+            "folders": [{"id": 101, "name": folder_name, "properties": []}],
+        },
     )
 
     solution = {

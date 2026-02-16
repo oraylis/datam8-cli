@@ -65,11 +65,16 @@ def _create_solution(
     _write_json(
         tmp_path / Path(old_folder_rel) / ".properties.json",
         {
-            "id": 10,
-            "name": "Old",
-            "dataProduct": "Sales",
-            "dataModule": "Customer",
-            "properties": [],
+            "type": "folders",
+            "folders": [
+                {
+                    "id": 10,
+                    "name": "Old",
+                    "dataProduct": "Sales",
+                    "dataModule": "Customer",
+                    "properties": [],
+                }
+            ],
         },
     )
     _write_json(
