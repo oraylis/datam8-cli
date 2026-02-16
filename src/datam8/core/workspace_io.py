@@ -213,6 +213,15 @@ def _coerce_folder_metadata(payload: Any, *, path: str) -> folder_model.Folder:
         )
 
 
+def _dump_sparse_json(model: BaseModel) -> Any:
+    """Serialize pydantic models without materializing schema defaults."""
+    return model.model_dump(
+        mode="json",
+        exclude_unset=True,
+        exclude_none=True,
+    )
+
+
 class PathMutationResult(BaseModel):
     """Typed path mutation result for move/rename/duplicate operations."""
 
@@ -350,7 +359,7 @@ def write_model_entity(rel_path: str, content: Any, solution_path: str | None) -
     validated: model_model.ModelEntity | None = None
     if not is_folder_metadata:
         validated = _validate_model_entity(content, path=rel_path)
-        serialized: Any = validated.model_dump(mode="json")
+        serialized = _dump_sparse_json(validated)
         prev_entity_name = legacy_function_sources.read_model_entity_name(abs_path) if abs_path.exists() else ""
         next_entity_name = validated.name
         legacy_function_sources.ensure_function_source_folder_name(
@@ -361,7 +370,7 @@ def write_model_entity(rel_path: str, content: Any, solution_path: str | None) -
         )
     else:
         validated_folder = _coerce_folder_metadata(content, path=rel_path)
-        serialized = validated_folder.model_dump(mode="json")
+        serialized = _dump_sparse_json(validated_folder)
     atomic_write_json(abs_path, serialized, indent=4)
     if validated is not None:
         legacy_function_sources.migrate_legacy_function_sources(root=root, rel_path=rel_path, content=validated)
@@ -417,7 +426,7 @@ def create_model_entity(rel_path: str, *, name: str | None, solution_path: str |
         transformations=[],
         relationships=[],
     )
-    atomic_write_json(abs_path, template.model_dump(mode="json"), indent=4)
+    atomic_write_json(abs_path, _dump_sparse_json(template), indent=4)
     return str(abs_path)
 
 
@@ -559,7 +568,7 @@ def duplicate_model_entity(
     if new_id is not None:
         content.id = new_id
     to_abs.parent.mkdir(parents=True, exist_ok=True)
-    atomic_write_json(to_abs, content.model_dump(mode="json"), indent=4)
+    atomic_write_json(to_abs, _dump_sparse_json(content), indent=4)
 
     entity_name = legacy_function_sources.read_model_entity_name(from_abs)
     from_folder = legacy_function_sources.derive_function_source_folder_name(from_rel_path, entity_name)
@@ -595,7 +604,7 @@ def write_base_entity(rel_path: str, content: Any, solution_path: str | None) ->
     root = resolved.root_dir
     abs_path = safe_join(root, rel_path)
     validated = _validate_base_entities(content, path=rel_path)
-    atomic_write_json(abs_path, validated.model_dump(mode="json"), indent=4)
+    atomic_write_json(abs_path, _dump_sparse_json(validated), indent=4)
     return str(abs_path)
 
 

@@ -67,6 +67,15 @@ from .response_models import (
 router = APIRouter()
 
 
+def _dump_sparse_json(model: BaseModel) -> Any:
+    return model.model_dump(
+        mode="json",
+        exclude_unset=True,
+        exclude_defaults=True,
+        exclude_none=True,
+    )
+
+
 class SaveEntityBody(BaseModel):
     """Request body for saving model/base entities."""
 
@@ -269,7 +278,7 @@ async def model_entity_get(
     """Read a model entity by selector."""
     entity = resolve_model_entity(selector, solution_path=solutionPath, by=by)
     content = model_model.ModelEntity.model_validate(workspace_io.read_workspace_json(entity.rel_path, solutionPath))
-    return ModelDocumentResponse(entity=entity.rel_path, content=content)
+    return ModelDocumentResponse(entity=entity.rel_path, content=_dump_sparse_json(content))
 
 
 @router.post("/model/entity/create")
@@ -349,11 +358,22 @@ async def model_entity_duplicate(body: DuplicateEntityBody) -> MoveEntityRespons
     )
 
 
-@router.get("/model/entities")
+@router.get(
+    "/model/entities",
+    response_model_exclude_unset=True,
+    response_model_exclude_defaults=True,
+    response_model_exclude_none=True,
+)
 async def model_entities(path: str | None = Query(None)) -> ModelEntitiesResponse:
     """List model entities for the active solution."""
     entities = [
-        ModelEntityResponse.model_validate(entity.model_dump())
+        ModelEntityResponse(
+            locator=entity.locator,
+            name=entity.name,
+            absPath=entity.absPath,
+            relPath=entity.relPath,
+            content=entity.content,
+        )
         for entity in workspace_service.list_model_entities(path)
     ]
     return ModelEntitiesResponse(count=len(entities), entities=entities)
@@ -400,7 +420,12 @@ async def model_entities_move(body: MoveEntityBody) -> MoveEntityResponse:
     )
 
 
-@router.post("/model/folder/rename")
+@router.post(
+    "/model/folder/rename",
+    response_model_exclude_unset=True,
+    response_model_exclude_defaults=True,
+    response_model_exclude_none=True,
+)
 async def model_folder_rename(body: RenameFolderBody) -> RenameFolderResponse:
     """Rename a model folder and regenerate index."""
     result = workspace_service.rename_model_folder(
@@ -411,7 +436,13 @@ async def model_folder_rename(body: RenameFolderBody) -> RenameFolderResponse:
         lock_timeout=lock_timeout_seconds(body.model_dump()),
     )
     entities = [
-        ModelEntityResponse.model_validate(entity.model_dump())
+        ModelEntityResponse(
+            locator=entity.locator,
+            name=entity.name,
+            absPath=entity.absPath,
+            relPath=entity.relPath,
+            content=entity.content,
+        )
         for entity in result.entities
     ]
     return RenameFolderResponse(
@@ -428,7 +459,7 @@ async def model_folder_metadata_get(
 ) -> JsonDocumentResponse:
     """Read folder metadata from a `.properties.json` file."""
     content = workspace_service.read_folder_metadata(rel_path=relPath, solution_path=solutionPath)
-    return JsonDocumentResponse(relPath=relPath, content=content)
+    return JsonDocumentResponse(relPath=relPath, content=_dump_sparse_json(content))
 
 
 @router.post("/model/folder-metadata")
@@ -521,11 +552,21 @@ async def generator_run(body: GenerateBody) -> GenerateResult:
     )
 
 
-@router.get("/base/entities")
+@router.get(
+    "/base/entities",
+    response_model_exclude_unset=True,
+    response_model_exclude_defaults=True,
+    response_model_exclude_none=True,
+)
 async def base_entities(path: str | None = Query(None)) -> BaseEntitiesResponse:
     """List base entities for the active solution."""
     entities = [
-        BaseEntityResponse.model_validate(entity.model_dump())
+        BaseEntityResponse(
+            name=entity.name,
+            absPath=entity.absPath,
+            relPath=entity.relPath,
+            content=entity.content,
+        )
         for entity in workspace_service.list_base_entities(path)
     ]
     return BaseEntitiesResponse(count=len(entities), entities=entities)
@@ -538,7 +579,7 @@ async def base_entity_get(
 ) -> JsonDocumentResponse:
     """Read a base entity JSON document."""
     content = workspace_io.read_base_entity(relPath, solutionPath)
-    return JsonDocumentResponse(relPath=relPath, content=content)
+    return JsonDocumentResponse(relPath=relPath, content=_dump_sparse_json(content))
 
 
 @router.post("/base/entities")
