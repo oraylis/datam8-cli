@@ -36,7 +36,6 @@ from datam8.parser import parse_full_solution_async
 
 solution_file_path_key = pytest.StashKey[pathlib.Path | None]()
 log_level_key = pytest.StashKey[str]()
-strict_solution_tests_key = pytest.StashKey[bool]()
 
 
 # Set Input Parameter für test
@@ -63,13 +62,11 @@ def pytest_configure(config: pytest.Config):
 
     solution_file_path = __get_variable(config, "solution-path", None)
     log_level = __get_variable(config, "log-level", "info")
-    strict_solution_tests = _is_truthy(os.environ.get("DATAM8_REQUIRE_SOLUTION_TESTS", ""))
 
     config.stash[solution_file_path_key] = (
         pathlib.Path(solution_file_path.replace("\\", "/")) if solution_file_path else None
     )
     config.stash[log_level_key] = log_level
-    config.stash[strict_solution_tests_key] = strict_solution_tests
 
 
 @dataclasses.dataclass
@@ -82,14 +79,10 @@ class TestConfig:
 @fixture
 def solution_file_path(request: pytest.FixtureRequest) -> pathlib.Path:
     configured_path = request.config.stash[solution_file_path_key]
-    strict = request.config.stash[strict_solution_tests_key]
 
     if configured_path is None:
-        _skip_or_fail(
-            strict=strict,
-            message=(
-                "Set --solution-path (or DATAM8_SOLUTION_PATH) to run solution-dependent tests."
-            ),
+        pytest.skip(
+            "Set --solution-path (or DATAM8_SOLUTION_PATH) to run solution-dependent tests."
         )
 
     if configured_path.is_file() and configured_path.suffix.lower() == ".dm8s":
@@ -99,18 +92,12 @@ def solution_file_path(request: pytest.FixtureRequest) -> pathlib.Path:
         dm8s_files = sorted(configured_path.glob("*.dm8s"))
         if len(dm8s_files) == 1:
             return dm8s_files[0]
-        _skip_or_fail(
-            strict=strict,
-            message=(
-                f"Expected exactly one .dm8s file in {configured_path}, found {len(dm8s_files)}."
-            ),
+        pytest.fail(
+            f"Expected exactly one .dm8s file in {configured_path}, found {len(dm8s_files)}."
         )
 
-    _skip_or_fail(
-        strict=strict,
-        message=(
-            f"DATAM8_SOLUTION_PATH/--solution-path points to a missing or invalid path: {configured_path}"
-        ),
+    pytest.fail(
+        f"DATAM8_SOLUTION_PATH/--solution-path points to a missing or invalid path: {configured_path}"
     )
     raise AssertionError("unreachable")
 
@@ -267,11 +254,3 @@ def __get_variable_from_cli(config: pytest.Config, var: str) -> str | None:
     return config.getoption(f"--{var}")
 
 
-def _is_truthy(value: str) -> bool:
-    return value.strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _skip_or_fail(*, strict: bool, message: str) -> None:
-    if strict:
-        pytest.fail(message)
-    pytest.skip(message)

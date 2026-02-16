@@ -48,6 +48,31 @@ uv run datam8 validate --help
 uv run datam8 generate --help
 ```
 
+### CLI arguments (quick reference)
+
+The legacy `dm8gen --action ...` argument model is no longer used.
+The current CLI uses command groups under `datam8`.
+
+`datam8 serve`:
+- `--token` (required): bearer token for non-health endpoints.
+- `--host` (default `127.0.0.1`), `--port` (default `0`).
+- `--solution-path` / `--solution` / `-s` (optional).
+- `--openapi` (optional), `--log-level` (optional).
+
+`datam8 validate`:
+- `--solution-path` / `--solution` / `-s` (required for execution).
+- `--log-level` / `-l` (optional).
+
+`datam8 generate`:
+- `TARGET` argument (optional, defaults from solution/config).
+- `--solution-path` / `--solution` / `-s` (required for execution).
+- `--clean-output` / `-c` (optional).
+- `--payload` / `-p` (optional, repeatable).
+- `--all` (optional), `--lazy` (optional), `--log-level` / `-l` (optional).
+
+For additional command groups (`solution`, `model`, `index`, `plugin`, `secret`, ...),
+use `uv run datam8 <group> --help`.
+
 ### Build wheel
 
 ```sh
@@ -56,8 +81,9 @@ uv build
 
 ### Tests
 
-Tests require a DataM8 solution via `--solution-path` or `DATAM8_SOLUTION_PATH`.
-In CI, the sample solution (`feature/v2`) is checked out and used.
+Testing requires a path to a DataM8 solution.
+You can pass it via `--solution-path` or environment variable (`DATAM8_SOLUTION_PATH`).
+See `tests/README.md` for details.
 
 ```sh
 uv sync

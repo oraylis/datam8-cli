@@ -61,14 +61,11 @@ Or per invocation with `--solution-path`:
 uv run pytest --solution-path="/absolute/path/to/ORAYLISDatabricksSample.dm8s"
 ```
 
-## CI strict mode
+## CI behavior
 
-CI uses strict mode for solution-dependent tests:
-
-- `DATAM8_SOLUTION_PATH` must point to a valid `.dm8s` solution
-- `DATAM8_REQUIRE_SOLUTION_TESTS=1` turns missing/invalid solution setup into a hard failure
-
-Locally (without strict mode), solution-dependent tests are skipped when no solution path is configured.
+CI configures `DATAM8_SOLUTION_PATH` to the sample solution path.
+If the configured path is invalid (missing/wrong), solution-dependent tests fail.
+If no solution path is configured, solution-dependent tests are skipped.
 
 ## How to add a new test (recommended flow)
 
@@ -84,5 +81,5 @@ Locally (without strict mode), solution-dependent tests are skipped when no solu
 ## Reading skips/failures
 
 - Local runs without solution path: solution-dependent tests are expected to be skipped.
-- CI runs with strict mode: missing/invalid solution path is treated as a hard failure.
+- Runs with an invalid configured solution path: treated as a hard failure.
 - Use `uv run pytest -rs` to see skip reasons in detail.
