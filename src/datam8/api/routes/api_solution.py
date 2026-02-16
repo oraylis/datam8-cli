@@ -121,7 +121,6 @@ async def solution_info(path: str | None = Query(None)) -> SolutionInfoResponse:
 @router.get(
     "/solution/full",
     response_model_exclude_unset=True,
-    response_model_exclude_defaults=True,
     response_model_exclude_none=True,
 )
 async def solution_full(path: str | None = Query(None)) -> SolutionFullResponse:
