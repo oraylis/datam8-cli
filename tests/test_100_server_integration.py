@@ -147,3 +147,44 @@ def test_serve_readiness_auth_and_generate_sync(
     assert any(p.is_file() for p in output_dir.rglob("*")), (
         f"Expected generated files in {output_dir}"
     )
+
+
+def test_generate_sync_can_run_twice_in_same_server_process(
+    fixture_job_solution_dir: Path,
+    tmp_path: Path,
+    api_client,
+) -> None:
+    token = "test-token"
+    source_solution_path = fixture_job_solution_dir / "TestSolution.dm8s"
+    target, _output_path = _select_target(source_solution_path)
+
+    work = tmp_path / "solution"
+    copied_solution_path = _copy_solution_subset(
+        source_solution_path=source_solution_path,
+        destination_root=work,
+        target_name=target,
+    )
+
+    request_body = {
+        "solutionPath": str(copied_solution_path),
+        "target": target,
+        "logLevel": "info",
+        "cleanOutput": True,
+    }
+
+    with api_client(token=token, solution_path=copied_solution_path) as client:
+        response1 = client.post(
+            "/generate",
+            headers={"Authorization": f"Bearer {token}"},
+            json=request_body,
+        )
+        response1.raise_for_status()
+        assert response1.json().get("status") == "succeeded"
+
+        response2 = client.post(
+            "/generate",
+            headers={"Authorization": f"Bearer {token}"},
+            json=request_body,
+        )
+        response2.raise_for_status()
+        assert response2.json().get("status") == "succeeded"

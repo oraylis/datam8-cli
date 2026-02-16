@@ -59,6 +59,10 @@ def run_generation(
     lazy: bool,
 ) -> GenerateResult:
     """Execute the generator synchronously and return metadata about the run."""
+    # The API server is long-lived; decorators in target modules would otherwise
+    # re-register payloads on subsequent runs and fail with "already registered".
+    payload_functions.clear()
+
     if isinstance(log_level, str):
         try:
             log_level = opts.LogLevels(log_level.strip().lower())
