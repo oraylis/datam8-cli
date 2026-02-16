@@ -55,7 +55,10 @@ def _create_solution(tmp_path: Path) -> Path:
     )
     _write_json(
         model / ".properties.json",
-        {"id": 101, "name": "Sales", "properties": []},
+        {
+            "type": "folders",
+            "folders": [{"id": 101, "name": "Sales", "properties": []}],
+        },
     )
     _write_json(
         tmp_path / "TestSolution.dm8s",
