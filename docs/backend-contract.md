@@ -107,13 +107,6 @@ All non-readiness logs are written to stderr.
 - Route implementation is split by domain (`api_solution.py`, `api_workspace.py`, `api_connectors.py`) and composed in `api.py`.
 - This split does not change endpoint URLs; it is a maintainability refactor only.
 
-## Removed surface
-
-The following endpoints are intentionally removed:
-
-- `/jobs` + `/jobs/{id}` + `/jobs/{id}/cancel` + `/jobs/{id}/events`
-- Legacy `/api/*` namespace
-
 ## Change policy
 
 Contract changes must include:

@@ -1,10 +1,10 @@
-# DataM8 Generator
+# ORAYLIS DataM8 Generator
 
 `datam8-generator` is the canonical DataM8 v2 backend:
 
 - `datam8` CLI
 - `datam8 serve` FastAPI server
-- synchronous HTTP execution (no Jobs/SSE layer)
+- synchronous HTTP execution
 
 Neon launches the backend over embedded Python (`python -m datam8 serve`) and communicates via localhost HTTP.
 
@@ -21,7 +21,6 @@ Issues are tracked centrally in the DataM8 repository:
 - Connector plugin details: `docs/connectors.md`
 - Agent guidance: `AGENTS.md`
 - Central DataM8 docs: https://github.com/oraylis/datam8/tree/main/docs
-- Legacy generator docs location: https://github.com/oraylis/datam8/tree/main/docs/generator
 
 ## Local development
 
