@@ -93,3 +93,44 @@ def test_solution_full_includes_folder_entities(tmp_path: Path, api_client) -> N
     assert len(payload["folderEntities"]) == 1
     assert payload["folderEntities"][0]["folderPath"] == "010-Stage/Sales"
     assert payload["folderEntities"][0]["content"]["name"] == "Sales"
+
+
+def test_solution_full_and_save_keep_model_entity_sparse(tmp_path: Path, api_client) -> None:
+    token = "solution-sparse-token"
+    solution_path = _create_solution(tmp_path)
+    entity_rel = "Model/010-Stage/Sales/Customer.json"
+    entity_path = tmp_path / entity_rel
+
+    with api_client(token=token, solution_path=solution_path) as client:
+        full_response = client.get(
+            "/solution/full",
+            params={"path": str(solution_path)},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        full_response.raise_for_status()
+        full_payload = full_response.json()
+        model_entity = next(e for e in full_payload["modelEntities"] if e["relPath"] == entity_rel)
+        first_attribute = model_entity["content"]["attributes"][0]
+
+        assert "history" not in first_attribute
+        assert "expressionLanguage" not in first_attribute
+        assert "isBusinessKey" not in first_attribute
+
+        save_response = client.post(
+            "/model/entities",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "relPath": entity_rel,
+                "content": {**model_entity["content"], "description": "Updated by UI"},
+                "solutionPath": str(solution_path),
+                "noLock": True,
+            },
+        )
+        save_response.raise_for_status()
+
+    written = json.loads(entity_path.read_text(encoding="utf-8"))
+    written_attr = written["attributes"][0]
+    assert written.get("description") == "Updated by UI"
+    assert "history" not in written_attr
+    assert "expressionLanguage" not in written_attr
+    assert "isBusinessKey" not in written_attr
