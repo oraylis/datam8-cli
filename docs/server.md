@@ -67,13 +67,6 @@ Generation is synchronous:
 - Request body: `{"solutionPath":"...","target":"...","logLevel":"info","cleanOutput":true}`
 - Response body: `{"status":"succeeded","target":"...","outputPath":"..."}`
 
-## Removed APIs
-
-The following surfaces are intentionally removed:
-
-- `/jobs` and `/jobs/*`
-- legacy `/api/*` routes
-
 ## Error envelope
 
 Errors are returned as a consistent envelope for both validation and server failures.

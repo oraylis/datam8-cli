@@ -1,8 +1,8 @@
-# Connectors (Option 3: Connector-driven UI)
+# Connectors
 
 DataM8 v2 uses Python connector plugins only. There are no built-in connectors.
 
-## Binding (Variant A)
+## Binding
 
 Connector binding is stored only on `DataSourceType.connectionProperties` using reserved meta property names:
 
