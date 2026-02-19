@@ -102,7 +102,7 @@ def test_solution_info_and_validate_aliases(tmp_path: Path, api_client) -> None:
 
         full_validate = client.post(
             "/validate",
-            params={"path": str(solution_path)},
+            params={"path": str(solution_path), "logLevel": "info"},
             headers={"Authorization": f"Bearer {token}"},
         )
         assert full_validate.status_code == 200
@@ -112,7 +112,12 @@ def test_solution_info_and_validate_aliases(tmp_path: Path, api_client) -> None:
     assert info_payload["solution"]["schemaVersion"] == "2.0.0"
     assert validate_payload["status"] == "ok"
     assert validate_payload["solutionPath"].endswith("TestSolution.dm8s")
+    assert validate_payload["messages"] == []
     assert full_validate_payload["status"] == "ok"
+    assert isinstance(full_validate_payload["messages"], list)
+    assert full_validate_payload["messages"]
+    assert full_validate_payload["messages"][0].startswith("[")
+    assert "datam8" in full_validate_payload["messages"][0]
 
 
 def test_base_entity_alias_get_set_patch(tmp_path: Path, api_client) -> None:

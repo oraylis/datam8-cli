@@ -120,6 +120,7 @@ class SolutionValidateResponse(BaseModel):
 
     status: str
     solutionPath: str
+    messages: list[str] = Field(default_factory=list)
 
 
 class ModelEntitiesResponse(BaseModel):

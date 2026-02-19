@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from functools import partial
 from typing import Any
@@ -51,6 +52,45 @@ from .response_models import (
 )
 
 router = APIRouter()
+
+
+class _ValidationWithMessagesError(Exception):
+    def __init__(self, original: Exception, messages: list[str]) -> None:
+        super().__init__(str(original))
+        self.original = original
+        self.messages = messages
+
+
+class _ThreadLogCaptureHandler(logging.Handler):
+    def __init__(self, *, sink: list[str]) -> None:
+        super().__init__(level=logging.NOTSET)
+        self._sink = sink
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if not (record.name.startswith("datam8") or record.name.startswith("datam8_model")):
+            return
+        msg = record.getMessage()
+        if msg:
+            level = (record.levelname or "INFO").upper()
+            source = record.name
+            self._sink.append(f"[{level}] {source} | {msg}")
+
+
+def _validate_solution_model_with_messages(*, solution_path: str, log_level: str | None) -> tuple[str, list[str]]:
+    messages: list[str] = []
+    handler = _ThreadLogCaptureHandler(sink=messages)
+    root_logger = logging.getLogger()
+    root_logger.addHandler(handler)
+    try:
+        resolved_solution = factory.validate_solution_model(
+            solution_path=solution_path,
+            log_level=log_level,
+        )
+        return str(resolved_solution), messages
+    except Exception as err:
+        raise _ValidationWithMessagesError(err, messages) from err
+    finally:
+        root_logger.removeHandler(handler)
 
 
 class MigrateV1ToV2Body(BaseModel):
@@ -168,7 +208,7 @@ async def solution_full(path: str | None = Query(None)) -> SolutionFullResponse:
 async def solution_validate(path: str | None = Query(None)) -> SolutionValidateResponse:
     """Validate that a solution can be resolved and parsed."""
     resolved, _sol = workspace_io.read_solution(path)
-    return SolutionValidateResponse(status="ok", solutionPath=str(resolved.solution_file))
+    return SolutionValidateResponse(status="ok", solutionPath=str(resolved.solution_file), messages=[])
 
 
 @router.post("/validate")
@@ -182,27 +222,33 @@ async def validate(path: str | None = Query(None), logLevel: str | None = Query(
         )
 
     try:
-        resolved_solution = await run_in_threadpool(
+        resolved_solution, messages = await run_in_threadpool(
             partial(
-                factory.validate_solution_model,
+                _validate_solution_model_with_messages,
                 solution_path=candidate,
                 log_level=logLevel,
             )
         )
-    except (
-        RecursionError,
-        ValidationError,
-        parser_exceptions.ModelParseException,
-        parser_exceptions.NotSupportedModelVersion,
-        model_exceptions.EntityNotFoundError,
-        model_exceptions.PropertiesNotResolvedError,
-    ) as err:
-        raise Datam8ValidationError(
-            message="Solution model validation failed.",
-            details={"error": str(err)},
-        )
+    except _ValidationWithMessagesError as wrapper:
+        err = wrapper.original
+        if isinstance(
+            err,
+            (
+                RecursionError,
+                ValidationError,
+                parser_exceptions.ModelParseException,
+                parser_exceptions.NotSupportedModelVersion,
+                model_exceptions.EntityNotFoundError,
+                model_exceptions.PropertiesNotResolvedError,
+            ),
+        ):
+            raise Datam8ValidationError(
+                message="Solution model validation failed.",
+                details={"error": str(err), "messages": wrapper.messages},
+            )
+        raise err
 
-    return SolutionValidateResponse(status="ok", solutionPath=str(resolved_solution))
+    return SolutionValidateResponse(status="ok", solutionPath=str(resolved_solution), messages=messages)
 
 
 @router.post("/solution/new-project")

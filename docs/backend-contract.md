@@ -36,6 +36,7 @@ All non-readiness logs are written to stderr.
 - Filesystem: `GET /fs/list`
 - Solution: `GET /solution`, `GET /solution/full`, `GET /solution/inspect`, `POST /solution/new-project`
   - Full model validate parity: `POST /validate`
+    - Response includes `messages` (validation log lines captured during run, formatted as `[LEVEL] logger | message`)
 - Migration: `POST /migration/v1-to-v2`
 - Model entities: `GET|POST|DELETE /model/entities`, `POST /model/entities/move`, `POST /model/folder/rename`
   - Parity aliases: `GET /model/entity`, `POST /model/entity/create`, `POST /model/entity/validate`, `POST /model/entity/set`, `POST /model/entity/patch`, `POST /model/entity/duplicate`
@@ -44,6 +45,7 @@ All non-readiness logs are written to stderr.
 - Base entities: `GET|POST|DELETE /base/entities`
   - Parity aliases: `GET /base/entity`, `POST /base/entity/set`, `POST /base/entity/patch`
 - Solution parity aliases: `GET /solution/info`, `POST /solution/validate`
+  - `POST /solution/validate` returns `messages: []` (no full-parse validation logs)
 - Index/refactor: `POST /index/regenerate`, `GET /index/show`, `GET /index/validate`, `POST /refactor/properties`, `POST /refactor/keys`, `POST /refactor/values`, `POST /refactor/entity-id`
 - Search: `GET /search/entities`, `GET /search/text`
 - Connectors/plugins/secrets under `/connectors/*`, `/plugins/*`, `/datasources/*`, `/http/datasources/*`, `/secrets/*`
