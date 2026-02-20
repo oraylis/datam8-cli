@@ -26,6 +26,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from datam8.core import parser_v1
 from datam8.core.errors import Datam8ValidationError
 from datam8.core.workspace_io import regenerate_index
 
@@ -104,6 +105,14 @@ def _stringify_value(value: Any, warnings: list[str], context: str) -> str | Non
         return None
 
 
+def _compose_description(primary: Any, secondary: Any) -> str:
+    first = primary.strip() if isinstance(primary, str) and primary.strip() else ""
+    second = secondary.strip() if isinstance(secondary, str) and secondary.strip() else ""
+    if first and second:
+        return f"{first}\n{second}"
+    return first or second or ""
+
+
 def _normalize_internal_type(v1_type: Any) -> str:
     t = v1_type.lower().strip() if isinstance(v1_type, str) else ""
     if not t:
@@ -128,8 +137,42 @@ def _normalize_internal_type(v1_type: Any) -> str:
 def _normalize_v2_history(value: Any) -> str | None:
     if not isinstance(value, str):
         return None
-    v = value.strip()
+    v = value.strip().upper()
+    if v == "BK":
+        return "SCD0"
+    if v == "SK":
+        return "SCD0"
     return v if v in {"SCD0", "SCD1", "SCD2", "SCD3", "SCD4"} else None
+
+
+def _normalize_has_unit(value: Any, is_unit: Any, warnings: list[str], context: str) -> str | None:
+    candidate = value
+    if not isinstance(candidate, str) or not candidate.strip():
+        candidate = is_unit
+
+    if candidate is None:
+        return None
+    if not isinstance(candidate, str):
+        warnings.append(f"{context}: invalid hasUnit value {candidate!r}; omitted.")
+        return None
+
+    raw = candidate.strip()
+    if not raw:
+        return None
+
+    if raw in {"NoUnit", "Physical", "Currency"}:
+        return raw
+
+    normalized = re.sub(r"[^a-z0-9]+", "", raw.lower())
+    if normalized in {"nounit", "unitfree", "none", "null", "na"}:
+        return "NoUnit"
+    if normalized in {"physical"}:
+        return "Physical"
+    if normalized in {"currency"}:
+        return "Currency"
+
+    warnings.append(f"{context}: unsupported hasUnit value '{raw}'; omitted.")
+    return None
 
 
 def _to_datetime_iso(value: Any) -> str | None:
@@ -170,6 +213,34 @@ def _v2_zone_folder(zone: str) -> str:
 def _read_json(path: Path) -> Any:
     raw = path.read_text(encoding="utf-8")
     return json.loads(raw)
+
+
+def _extract_source_computations(v1_function: Any) -> dict[str, str]:
+    function = v1_function if isinstance(v1_function, dict) else {}
+    out: dict[str, str] = {}
+    for source in function.get("source", []) if isinstance(function.get("source"), list) else []:
+        if not isinstance(source, dict):
+            continue
+        dm8l_raw = source.get("dm8l")
+        dm8l = dm8l_raw.strip() if isinstance(dm8l_raw, str) else ""
+        if dm8l != "#":
+            continue
+        mappings = source.get("mapping", []) if isinstance(source.get("mapping"), list) else []
+        for mapping in mappings:
+            if not isinstance(mapping, dict):
+                continue
+            expression_raw = mapping.get("sourceComputation")
+            expression = expression_raw.strip() if isinstance(expression_raw, str) else ""
+            if not expression or expression.lower() == "default":
+                continue
+            key_raw = mapping.get("name")
+            key = key_raw.strip() if isinstance(key_raw, str) and key_raw.strip() else ""
+            if not key:
+                key_raw = mapping.get("sourceName")
+                key = key_raw.strip() if isinstance(key_raw, str) and key_raw.strip() else ""
+            if key:
+                out[key] = expression
+    return out
 
 
 def _write_json(path: Path, content: Any) -> None:
@@ -262,19 +333,17 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
         raise Datam8ValidationError(message="V1 solution file not found.", details={"path": str(src_solution_file)})
 
     try:
-        v1_solution_raw = _read_json(src_solution_file)
+        v1_solution_model = parser_v1.parse_solution_file(src_solution_file)
     except Exception as e:
         raise Datam8ValidationError(message="Failed to read V1 solution file.", details={"error": str(e)})
-
-    if not isinstance(v1_solution_raw, dict):
-        raise Datam8ValidationError(message="sourceSolutionPath does not look like a V1 solution (.dm8s).", details=None)
+    v1_solution_raw = v1_solution_model.model_dump(by_alias=True, exclude_none=True)
 
     # V1 requires basePath + at least one of rawPath/stagingPath/corePath/curatedPath.
-    base_path = v1_solution_raw.get("basePath")
-    raw_path = v1_solution_raw.get("rawPath")
-    staging_path = v1_solution_raw.get("stagingPath")
-    core_path = v1_solution_raw.get("corePath")
-    curated_path = v1_solution_raw.get("curatedPath")
+    base_path = v1_solution_model.basePath
+    raw_path = v1_solution_model.rawPath
+    staging_path = v1_solution_model.stagingPath
+    core_path = v1_solution_model.corePath
+    curated_path = v1_solution_model.curatedPath
     if not isinstance(base_path, str) or not base_path.strip() or not any(
         isinstance(p, str) and p.strip() for p in (raw_path, staging_path, core_path, curated_path)
     ):
@@ -302,9 +371,9 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
     def read_v1_base(filename: str) -> Any:
         abs_path = v1_base_dir / filename
         try:
-            return _read_json(abs_path)
-        except Exception:
-            warnings.append(f"Base/{filename}: missing or unreadable; generated fallback.")
+            return parser_v1.parse_base_file(abs_path, filename).model_dump(exclude_none=True)
+        except Exception as e:
+            warnings.append(f"Base/{filename}: missing, invalid or unreadable ({e}); generated fallback.")
             return None
 
     v1_attribute_types = read_v1_base("AttributeTypes.json")
@@ -409,12 +478,17 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
             {
                 "name": name,
                 "displayName": a.get("displayName") if isinstance(a.get("displayName"), str) else name,
-                "description": a.get("purpose") if isinstance(a.get("purpose"), str) else (a.get("description") if isinstance(a.get("description"), str) else ""),
+                "description": _compose_description(a.get("purpose"), a.get("explanation") or a.get("description")),
                 "defaultType": a.get("defaultType"),
                 "defaultLength": a.get("defaultLength"),
                 "defaultPrecision": a.get("defaultPrecision"),
                 "defaultScale": a.get("defaultScale"),
-                "hasUnit": a.get("hasUnit"),
+                "hasUnit": _normalize_has_unit(
+                    a.get("hasUnit"),
+                    a.get("isUnit"),
+                    warnings,
+                    f"Base/AttributeTypes.json:{name}",
+                ),
                 "canBeInRelation": a.get("canBeInRelation"),
                 "isDefaultProperty": a.get("isDefaultProperty"),
             }
@@ -439,14 +513,14 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
                 {
                     "name": mname,
                     "displayName": m.get("displayName") if isinstance(m.get("displayName"), str) else mname,
-                    "description": m.get("purpose") if isinstance(m.get("purpose"), str) else "",
+                    "description": _compose_description(m.get("purpose"), m.get("explanation")),
                 }
             )
         out_data_products["dataProducts"].append(
             {
                 "name": name,
                 "displayName": p.get("displayName") if isinstance(p.get("displayName"), str) else name,
-                "description": p.get("purpose") if isinstance(p.get("purpose"), str) else "",
+                "description": _compose_description(p.get("purpose"), p.get("explanation")),
                 "dataModules": modules,
             }
         )
@@ -462,11 +536,15 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
             {
                 "name": name,
                 "displayName": s.get("displayName") if isinstance(s.get("displayName"), str) else name,
-                "description": s.get("purpose") if isinstance(s.get("purpose"), str) else "",
+                "description": _compose_description(s.get("purpose"), s.get("explanation")),
                 "type": s.get("type"),
                 "connectionString": s.get("connectionString"),
                 "dataTypeMapping": s.get("dataTypeMapping") if isinstance(s.get("dataTypeMapping"), list) else None,
-                "extendedProperties": s.get("ExtendedProperties") if isinstance(s.get("ExtendedProperties"), dict) else None,
+                "extendedProperties": (
+                    s.get("extendedProperties")
+                    if isinstance(s.get("extendedProperties"), dict)
+                    else (s.get("ExtendedProperties") if isinstance(s.get("ExtendedProperties"), dict) else None)
+                ),
             }
         )
 
@@ -491,7 +569,7 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
             {
                 "name": name,
                 "displayName": t.get("displayName") if isinstance(t.get("displayName"), str) else name,
-                "description": t.get("purpose") if isinstance(t.get("purpose"), str) else (t.get("description") if isinstance(t.get("description"), str) else ""),
+                "description": _compose_description(t.get("purpose"), t.get("explanation") or t.get("description")),
                 "hasCharLen": bool(t.get("hasCharLen", False)),
                 "hasPrecision": bool(t.get("hasPrecision", False)),
                 "hasScale": bool(t.get("hasScale", False)),
@@ -542,9 +620,13 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
             if not abs_path.is_file():
                 continue
             try:
-                j = _read_json(abs_path)
+                model = parser_v1.parse_model_file(abs_path)
+                j = model.model_dump(exclude_none=True)
             except Exception as e:
                 warnings.append(f"Raw: failed to parse '{abs_path.relative_to(src_root).as_posix()}' ({e}); skipped.")
+                continue
+            if j.get("type") != "raw":
+                warnings.append(f"Raw: skipped '{abs_path.relative_to(src_root).as_posix()}' (type is not 'raw').")
                 continue
             ent = j.get("entity") if isinstance(j, dict) else {}
             ent = ent if isinstance(ent, dict) else {}
@@ -618,9 +700,17 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
             if not abs_path.is_file():
                 continue
             try:
-                j = _read_json(abs_path)
+                model = parser_v1.parse_model_file(abs_path)
+                j = model.model_dump(exclude_none=True)
             except Exception as e:
                 warnings.append(f"Model: failed to parse '{abs_path.relative_to(src_root).as_posix()}' ({e}); skipped.")
+                continue
+            expected_type = zone
+            actual_type = j.get("type")
+            if actual_type != expected_type:
+                warnings.append(
+                    f"Model: skipped '{abs_path.relative_to(src_root).as_posix()}' (expected '{expected_type}', got '{actual_type}')."
+                )
                 continue
             ent = j.get("entity") if isinstance(j, dict) else {}
             ent = ent if isinstance(ent, dict) else {}
@@ -794,6 +884,7 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
         entity_properties: list[dict[str, str]] = []
         build_property_refs_from_tags(ent.get("tags"), entity_properties)
         build_property_refs_from_parameters(ent.get("parameters"), entity_properties, meta.v2_rel_path)
+        source_computations = _extract_source_computations(meta.v1.get("function"))
 
         v1_attrs_raw = ent.get("attribute")
         v1_attrs = v1_attrs_raw if isinstance(v1_attrs_raw, list) else []
@@ -840,6 +931,14 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
                 attribute_properties: list[dict[str, str]] = []
                 build_property_refs_from_tags(a.get("tags"), attribute_properties)
                 build_property_refs_from_parameters(a.get("parameter"), attribute_properties, f"{meta.v2_rel_path}:{name}")
+                history_raw = a.get("history")
+                history_norm = _normalize_v2_history(history_raw)
+                history_token = history_raw.strip().upper() if isinstance(history_raw, str) else ""
+                if history_token == "SK":
+                    prop_display_names.setdefault("column_type", "Column Type")
+                    attribute_properties.append({"property": "column_type", "value": "SK"})
+                    add_property_value("column_type", "SK")
+                expression = source_computations.get(name)
 
                 date_modified = _to_datetime_iso(a.get("dateModified"))
                 attrs_out.append(
@@ -847,11 +946,15 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
                         "ordinalNumber": idx + 1,
                         "name": name,
                         "displayName": a.get("displayName") if isinstance(a.get("displayName"), str) else None,
-                        "description": a.get("purpose") if isinstance(a.get("purpose"), str) else (a.get("explanation") if isinstance(a.get("explanation"), str) else ""),
+                        "description": _compose_description(a.get("purpose"), a.get("explanation")),
                         "attributeType": attribute_type,
                         "dataType": dt,
-                        "isBusinessKey": bool(a.get("businessKeyNo")) if isinstance(a.get("businessKeyNo"), (int, float)) else False,
-                        "history": _normalize_v2_history(a.get("history")),
+                        "isBusinessKey": (
+                            bool(a.get("businessKeyNo")) if isinstance(a.get("businessKeyNo"), (int, float)) else False
+                        )
+                        or history_token == "BK",
+                        "history": history_norm,
+                        "expression": expression,
                         "refactorNames": a.get("refactorNames") if isinstance(a.get("refactorNames"), list) else None,
                         "dateModified": date_modified,
                         "dateAdded": _to_iso_now(),
@@ -976,7 +1079,7 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
                     continue
                 dm8l = dm8l.strip()
                 if dm8l == "#":
-                    warnings.append(f"{meta.v2_rel_path}: dropped external source '#'; no V2 mapping without dataSource.")
+                    # Source '#'-mappings are consumed via attribute expressions.
                     continue
                 if not dm8l.startswith("/"):
                     warnings.append(f"{meta.v2_rel_path}: dropped unrecognized source '{dm8l}'.")
@@ -1027,7 +1130,7 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
             "id": meta.entity_id,
             "name": meta.name,
             "displayName": meta.display_name or meta.name,
-            "description": ent.get("purpose") if isinstance(ent.get("purpose"), str) else (ent.get("explanation") if isinstance(ent.get("explanation"), str) else ""),
+            "description": _compose_description(ent.get("purpose"), ent.get("explanation")),
             "parameters": [],
             "properties": _dedupe_property_refs(entity_properties) if entity_properties else None,
             "attributes": attrs_out,
