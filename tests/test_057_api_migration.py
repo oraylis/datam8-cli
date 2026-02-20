@@ -318,3 +318,113 @@ def test_migration_route_maps_sk_bk_and_source_computation(tmp_path: Path, api_c
             pv["property"] == "column_type" and pv["name"] == "SK"
             for pv in property_values_base["propertyValues"]
         )
+
+
+def _create_v1_solution_for_folder_and_source_priority(tmp_path: Path) -> Path:
+    source_root = tmp_path / "legacy_solution_priority"
+    (source_root / "Raw" / "Sales" / "Customer").mkdir(parents=True, exist_ok=True)
+    (source_root / "Staging" / "Sales" / "Customer").mkdir(parents=True, exist_ok=True)
+
+    _write_json(source_root / "Base" / "AttributeTypes.json", {"items": [{"name": "ID", "defaultType": "int"}]})
+    _write_json(source_root / "Base" / "DataProducts.json", {"items": []})
+    _write_json(
+        source_root / "Base" / "DataSources.json",
+        {"items": [{"name": "AdventureWorks", "type": "SqlServer", "dataTypeMapping": [{"sourceType": "int", "targetType": "int"}]}]},
+    )
+    _write_json(
+        source_root / "Base" / "DataTypes.json",
+        {"items": [{"name": "int", "displayName": "Integer", "parquetType": "int", "sqlType": "int"}]},
+    )
+
+    _write_json(
+        source_root / "Raw" / "Sales" / "Customer" / "Customer_DE.json",
+        {
+            "type": "raw",
+            "entity": {
+                "dataProduct": "WrongProduct",
+                "dataModule": "WrongModule",
+                "name": "Customer_DE",
+                "attribute": [{"name": "CustomerID", "type": "int", "nullable": False}],
+            },
+            "function": {
+                "dataSource": "AdventureWorks",
+                "sourceLocation": "[SalesLT].[Customer_DE]",
+            },
+        },
+    )
+    _write_json(
+        source_root / "Staging" / "Sales" / "Customer" / "Customer_DE.json",
+        {
+            "type": "stage",
+            "entity": {
+                "dataProduct": "AlsoWrong",
+                "dataModule": "StillWrong",
+                "name": "Customer_DE",
+                "attribute": [{"name": "CustomerID", "type": "int", "nullable": False}],
+            },
+            "function": {
+                "dataSource": "__meta__",
+                "sourceLocation": "raw/Sales/Customer/Customer_DE",
+                "attributeMapping": [{"source": "CustomerID", "target": "CustomerID"}],
+            },
+        },
+    )
+
+    _write_json(
+        source_root / "LegacyPriority.dm8s",
+        {
+            "basePath": "Base",
+            "rawPath": "Raw",
+            "stagingPath": "Staging",
+            "generatePath": "Generate",
+            "diagramPath": "Diagram",
+        },
+    )
+    return source_root / "LegacyPriority.dm8s"
+
+
+def test_migration_route_prefers_raw_external_source_and_derives_folder_products(tmp_path: Path, api_client) -> None:
+    token = "migration-priority-token"
+    headers = {"Authorization": f"Bearer {token}"}
+    source_solution_path = _create_v1_solution_for_folder_and_source_priority(tmp_path)
+    target_dir = tmp_path / "migrated_priority"
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    with api_client(token=token) as client:
+        response = client.post(
+            "/migration/v1-to-v2",
+            headers=headers,
+            json={
+                "sourceSolutionPath": str(source_solution_path),
+                "targetDir": str(target_dir),
+                "options": {"copyGenerate": False, "copyDiagram": False, "copyOutput": False},
+            },
+        )
+        response.raise_for_status()
+        payload = response.json()
+        migrated_solution_path = Path(payload["targetSolutionPath"])
+
+        stage_entity_path = (
+            migrated_solution_path.parent
+            / "Model"
+            / "010-Stage"
+            / "Sales"
+            / "Customer"
+            / "Customer_DE.json"
+        )
+        stage_entity = json.loads(stage_entity_path.read_text(encoding="utf-8"))
+        assert stage_entity["sources"][0]["dataSource"] == "AdventureWorks"
+        assert stage_entity["sources"][0]["sourceLocation"] == "[SalesLT].[Customer_DE]"
+
+        zones = json.loads((migrated_solution_path.parent / "Base" / "Zones.json").read_text(encoding="utf-8"))
+        zone_names = [z["name"] for z in zones["zones"]]
+        assert "raw" in zone_names
+        assert "stage" in zone_names
+        assert "consumer" not in zone_names
+        assert "core" not in zone_names
+        assert "curated" not in zone_names
+
+        data_products = json.loads((migrated_solution_path.parent / "Base" / "DataProducts.json").read_text(encoding="utf-8"))
+        sales = next((dp for dp in data_products["dataProducts"] if dp["name"] == "Sales"), None)
+        assert sales is not None
+        assert any(dm["name"] == "Customer" for dm in sales["dataModules"])

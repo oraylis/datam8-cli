@@ -210,6 +210,111 @@ def _v2_zone_folder(zone: str) -> str:
     return "040-Consumer"
 
 
+def _clean_name(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    txt = value.strip()
+    return txt if txt else None
+
+
+def _infer_product_module_from_path(abs_path: Path, zone_root: Path) -> tuple[str | None, str | None]:
+    try:
+        rel = abs_path.relative_to(zone_root)
+    except Exception:
+        return (None, None)
+
+    parts = list(rel.parts)
+    if len(parts) < 3:
+        return (None, None)
+    return (_clean_name(parts[0]), _clean_name(parts[1]))
+
+
+def _resolve_product_module(
+    *,
+    abs_path: Path,
+    zone_root: Path,
+    entity_product: Any,
+    entity_module: Any,
+    warnings: list[str],
+    context: str,
+) -> tuple[str, str]:
+    folder_product, folder_module = _infer_product_module_from_path(abs_path, zone_root)
+    model_product = _clean_name(entity_product)
+    model_module = _clean_name(entity_module)
+
+    if folder_product and model_product and folder_product != model_product:
+        warnings.append(
+            f"{context}: dataProduct '{model_product}' overridden by folder '{folder_product}'."
+        )
+    if folder_module and model_module and folder_module != model_module:
+        warnings.append(
+            f"{context}: dataModule '{model_module}' overridden by folder '{folder_module}'."
+        )
+
+    product = folder_product or model_product or "UnknownProduct"
+    module = folder_module or model_module or "UnknownModule"
+    if not folder_product or not folder_module:
+        warnings.append(
+            f"{context}: could not fully infer dataProduct/dataModule from folder; using '{product}/{module}'."
+        )
+    return (product, module)
+
+
+def _is_external_source_pair(data_source: str | None, source_location: str | None) -> bool:
+    if not data_source or not source_location:
+        return False
+    if data_source == "__meta__":
+        return False
+    if source_location.lower().startswith("raw/"):
+        return False
+    return True
+
+
+def _build_zone_entries(present_zones: set[str]) -> dict[str, Any]:
+    out: list[dict[str, str]] = []
+    if "raw" in present_zones:
+        out.append({"name": "raw", "targetName": "raw", "displayName": "Raw"})
+    if "stage" in present_zones:
+        out.append(
+            {
+                "name": "stage",
+                "targetName": "010-Stage",
+                "displayName": "Stage",
+                "localFolderName": "010-Stage",
+            }
+        )
+    if "core" in present_zones:
+        out.append(
+            {
+                "name": "core",
+                "targetName": "020-Core",
+                "displayName": "Core",
+                "localFolderName": "020-Core",
+            }
+        )
+    if "curated" in present_zones:
+        out.append(
+            {
+                "name": "curated",
+                "targetName": "030-Curated",
+                "displayName": "Curated",
+                "localFolderName": "030-Curated",
+            }
+        )
+    if "consumer" in present_zones:
+        out.append(
+            {
+                "name": "consumer",
+                "targetName": "040-Consumer",
+                "displayName": "Consumer",
+                "localFolderName": "040-Consumer",
+            }
+        )
+    if not out:
+        out = [{"name": "stage", "targetName": "010-Stage", "displayName": "Stage", "localFolderName": "010-Stage"}]
+    return {"type": "zones", "zones": out}
+
+
 def _read_json(path: Path) -> Any:
     raw = path.read_text(encoding="utf-8")
     return json.loads(raw)
@@ -601,21 +706,21 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
             {"name": type_name, "displayName": type_name, "description": "", "dataTypeMapping": data_type_mapping}
         )
 
-    out_zones = {
-        "type": "zones",
-        "zones": [
-            {"name": "raw", "targetName": "raw", "displayName": "Raw"},
-            {"name": "stage", "targetName": "010-Stage", "displayName": "Stage", "localFolderName": "010-Stage"},
-            {"name": "core", "targetName": "020-Core", "displayName": "Core", "localFolderName": "020-Core"},
-            {"name": "curated", "targetName": "030-Curated", "displayName": "Curated", "localFolderName": "030-Curated"},
-            {"name": "consumer", "targetName": "040-Consumer", "displayName": "Consumer", "localFolderName": "040-Consumer"},
-        ],
-    }
-
+    out_zones: dict[str, Any] = {"type": "zones", "zones": []}
+    present_zones: set[str] = set()
+    discovered_product_modules: dict[str, set[str]] = {}
     raw_by_key: dict[str, _V1RawEntityInfo] = {}
     used_raw_keys: set[str] = set()
 
+    def register_product_module(product: str, module: str) -> None:
+        if not product or not module:
+            return
+        if product == "UnknownProduct" or module == "UnknownModule":
+            return
+        discovered_product_modules.setdefault(product, set()).add(module)
+
     if isinstance(raw_path, str) and raw_path.strip():
+        raw_zone_root = (src_root / raw_path).resolve()
         for abs_path in sorted((src_root / raw_path).rglob("*.json")):
             if not abs_path.is_file():
                 continue
@@ -630,15 +735,21 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
                 continue
             ent = j.get("entity") if isinstance(j, dict) else {}
             ent = ent if isinstance(ent, dict) else {}
-            dp_raw = ent.get("dataProduct")
-            dm_raw = ent.get("dataModule")
+            data_product, data_module = _resolve_product_module(
+                abs_path=abs_path,
+                zone_root=raw_zone_root,
+                entity_product=ent.get("dataProduct"),
+                entity_module=ent.get("dataModule"),
+                warnings=warnings,
+                context=f"Raw/{abs_path.relative_to(src_root).as_posix()}",
+            )
             name_raw = ent.get("name")
             dn_raw = ent.get("displayName")
-            data_product = dp_raw.strip() if isinstance(dp_raw, str) and dp_raw.strip() else "UnknownProduct"
-            data_module = dm_raw.strip() if isinstance(dm_raw, str) and dm_raw.strip() else "UnknownModule"
             name = name_raw.strip() if isinstance(name_raw, str) and name_raw.strip() else abs_path.stem
             display_name = dn_raw.strip() if isinstance(dn_raw, str) and dn_raw.strip() else None
             key = f"{data_product}::{data_module}::{name}"
+            present_zones.add("raw")
+            register_product_module(data_product, data_module)
 
             attrs_raw = ent.get("attribute")
             attrs = attrs_raw if isinstance(attrs_raw, list) else []
@@ -696,6 +807,7 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
     def scan_zone(zone: str, rel_dir: Any) -> None:
         if not isinstance(rel_dir, str) or not rel_dir.strip():
             return
+        zone_root = (src_root / rel_dir).resolve()
         for abs_path in sorted((src_root / rel_dir).rglob("*.json")):
             if not abs_path.is_file():
                 continue
@@ -714,14 +826,20 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
                 continue
             ent = j.get("entity") if isinstance(j, dict) else {}
             ent = ent if isinstance(ent, dict) else {}
-            dp_raw = ent.get("dataProduct")
-            dm_raw = ent.get("dataModule")
+            data_product, data_module = _resolve_product_module(
+                abs_path=abs_path,
+                zone_root=zone_root,
+                entity_product=ent.get("dataProduct"),
+                entity_module=ent.get("dataModule"),
+                warnings=warnings,
+                context=f"{zone.capitalize()}/{abs_path.relative_to(src_root).as_posix()}",
+            )
             name_raw = ent.get("name")
             dn_raw = ent.get("displayName")
-            data_product = dp_raw.strip() if isinstance(dp_raw, str) and dp_raw.strip() else "UnknownProduct"
-            data_module = dm_raw.strip() if isinstance(dm_raw, str) and dm_raw.strip() else "UnknownModule"
             name = name_raw.strip() if isinstance(name_raw, str) and name_raw.strip() else abs_path.stem
             display_name = dn_raw.strip() if isinstance(dn_raw, str) and dn_raw.strip() else None
+            present_zones.add(zone)
+            register_product_module(data_product, data_module)
 
             zone_folder = _v2_zone_folder(zone)
             v2_rel_path = "/".join(["Model", zone_folder, data_product, data_module, f"{name}.json"])
@@ -760,6 +878,8 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
             continue
         used_raw_keys.add(key)
         warnings.append(f"Raw entity {key} had no Stage counterpart; created synthetic Stage entity.")
+        present_zones.add("stage")
+        register_product_module(raw.data_product, raw.data_module)
         zone_folder = _v2_zone_folder("stage")
         v2_rel_path = "/".join(["Model", zone_folder, raw.data_product, raw.data_module, f"{raw.name}.json"])
         v1_entities.append(
@@ -780,6 +900,53 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
                 v1={"type": "stage", "entity": raw.v1.get("entity"), "function": raw.v1.get("function")},
             )
         )
+
+    existing_products: dict[str, dict[str, Any]] = {}
+    for row in out_data_products.get("dataProducts", []) if isinstance(out_data_products, dict) else []:
+        if not isinstance(row, dict):
+            continue
+        name_raw = row.get("name")
+        name = name_raw.strip() if isinstance(name_raw, str) and name_raw.strip() else ""
+        if not name:
+            continue
+        copy_row = dict(row)
+        modules: list[dict[str, Any]] = []
+        for module in row.get("dataModules", []) if isinstance(row.get("dataModules"), list) else []:
+            if not isinstance(module, dict):
+                continue
+            mname_raw = module.get("name")
+            mname = mname_raw.strip() if isinstance(mname_raw, str) and mname_raw.strip() else ""
+            if not mname:
+                continue
+            modules.append(
+                {
+                    "name": mname,
+                    "displayName": module.get("displayName") if isinstance(module.get("displayName"), str) else mname,
+                    "description": module.get("description") if isinstance(module.get("description"), str) else "",
+                }
+            )
+        copy_row["dataModules"] = modules
+        copy_row["displayName"] = copy_row.get("displayName") if isinstance(copy_row.get("displayName"), str) else name
+        copy_row["description"] = copy_row.get("description") if isinstance(copy_row.get("description"), str) else ""
+        existing_products[name] = copy_row
+
+    for product, modules in discovered_product_modules.items():
+        row = existing_products.get(product)
+        if row is None:
+            row = {"name": product, "displayName": product, "description": "", "dataModules": []}
+            existing_products[product] = row
+        existing_modules = {m.get("name"): m for m in row.get("dataModules", []) if isinstance(m, dict)}
+        for module in sorted(modules):
+            if module in existing_modules:
+                continue
+            row["dataModules"].append({"name": module, "displayName": module, "description": ""})
+        row["dataModules"] = sorted(
+            [m for m in row.get("dataModules", []) if isinstance(m, dict) and isinstance(m.get("name"), str)],
+            key=lambda m: m["name"],
+        )
+
+    out_data_products["dataProducts"] = sorted(existing_products.values(), key=lambda p: p["name"])
+    out_zones = _build_zone_entries(present_zones)
 
     zone_base = {"stage": 1000, "core": 2000, "curated": 3000, "consumer": 4000}
     for zone in ["stage", "core", "curated", "consumer"]:
@@ -969,17 +1136,41 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
             stage_fn_raw = meta.v1.get("function")
             stage_fn = stage_fn_raw if isinstance(stage_fn_raw, dict) else {}
             raw = raw_by_key.get(meta.raw_key) if meta.raw_key else None
+            raw_data_source = None
+            raw_source_location = None
+            if raw and raw.function:
+                raw_data_source = raw.function.get("dataSource") or None
+                raw_source_location = raw.function.get("sourceLocation") or None
+            stage_ds_raw = stage_fn.get("dataSource")
+            stage_data_source = None
+            if isinstance(stage_ds_raw, str) and stage_ds_raw.strip():
+                stage_data_source = stage_ds_raw.strip()
+            stage_sl_raw = stage_fn.get("sourceLocation")
+            stage_source_location = None
+            if isinstance(stage_sl_raw, str) and stage_sl_raw.strip():
+                stage_source_location = stage_sl_raw.strip()
+
             data_source = None
             source_location = None
-            if raw and raw.function:
-                data_source = raw.function.get("dataSource") or data_source
-                source_location = raw.function.get("sourceLocation") or source_location
-            stage_ds_raw = stage_fn.get("dataSource")
-            if isinstance(stage_ds_raw, str) and stage_ds_raw.strip():
-                data_source = stage_ds_raw.strip()
-            stage_sl_raw = stage_fn.get("sourceLocation")
-            if isinstance(stage_sl_raw, str) and stage_sl_raw.strip():
-                source_location = stage_sl_raw.strip()
+            if _is_external_source_pair(raw_data_source, raw_source_location):
+                data_source = raw_data_source
+                source_location = raw_source_location
+                if (
+                    (stage_data_source or stage_source_location)
+                    and (
+                        stage_data_source != raw_data_source
+                        or stage_source_location != raw_source_location
+                    )
+                ):
+                    warnings.append(
+                        f"{meta.v2_rel_path}: conflicting stage/raw external sources; using raw source."
+                    )
+            elif stage_data_source or stage_source_location:
+                data_source = stage_data_source
+                source_location = stage_source_location
+            elif raw_data_source or raw_source_location:
+                data_source = raw_data_source
+                source_location = raw_source_location
 
             raw_attr_by_name: dict[str, dict[str, Any]] = {}
             if raw and raw.attributes:
