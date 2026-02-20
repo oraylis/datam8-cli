@@ -156,3 +156,28 @@ def test_model_folder_rename_uses_single_model_entity_scan(case_data, monkeypatc
     assert payload["message"] == "renamed"
     assert payload["to"].replace("\\", "/").endswith(new_folder_rel)
     assert len(payload["entities"]) == expected_entity_count
+
+
+def test_create_new_project_writes_data_types_targets_for_target(tmp_path: Path) -> None:
+    solution_path = workspace_io.create_new_project(
+        solution_name="MySolution",
+        project_root=str(tmp_path),
+        base_path="Base2",
+        model_path="Model",
+        target="sqlserver",
+    )
+
+    assert Path(solution_path).exists()
+    data_types_path = tmp_path / "MySolution" / "Base2" / "DataTypes.json"
+    payload = json.loads(data_types_path.read_text(encoding="utf-8"))
+
+    assert payload["type"] == "dataTypes"
+    rows = payload["dataTypes"]
+    assert rows
+    for row in rows:
+        assert isinstance(row.get("targets"), dict)
+        assert row["targets"].get("sqlserver")
+
+    by_name = {row["name"]: row for row in rows}
+    assert by_name["datetime"]["targets"]["sqlserver"] == "datetime2"
+    assert by_name["boolean"]["targets"]["sqlserver"] == "bit"
