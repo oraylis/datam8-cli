@@ -1080,14 +1080,77 @@ def create_new_project(
         {"name": "Flag", "displayName": "Flag", "defaultType": "boolean", "canBeInRelation": False, "isDefaultProperty": False},
     ]
 
+    target_defaults = {
+        "string": {"databricks": "string", "sqlserver": "nvarchar"},
+        "int": {"databricks": "int", "sqlserver": "int"},
+        "long": {"databricks": "bigint", "sqlserver": "bigint"},
+        "double": {"databricks": "double", "sqlserver": "float"},
+        "decimal": {"databricks": "decimal", "sqlserver": "decimal"},
+        "datetime": {"databricks": "timestamp", "sqlserver": "datetime2"},
+        "boolean": {"databricks": "boolean", "sqlserver": "bit"},
+    }
+
+    def _target_value(type_name: str) -> str:
+        type_defaults = target_defaults.get(type_name, {})
+        return type_defaults.get(target, type_defaults.get("databricks", type_name))
+
     default_data_types = [
-        {"name": "string", "displayName": "Unicode String", "hasCharLen": True, "hasPrecision": False, "hasScale": False},
-        {"name": "int", "displayName": "Integer (32 bit)", "hasCharLen": False, "hasPrecision": False, "hasScale": False},
-        {"name": "long", "displayName": "Integer (64 bit)", "hasCharLen": False, "hasPrecision": False, "hasScale": False},
-        {"name": "double", "displayName": "Double", "hasCharLen": False, "hasPrecision": False, "hasScale": False},
-        {"name": "decimal", "displayName": "Decimal", "hasCharLen": False, "hasPrecision": True, "hasScale": True},
-        {"name": "datetime", "displayName": "DateTime", "hasCharLen": False, "hasPrecision": False, "hasScale": False},
-        {"name": "boolean", "displayName": "Boolean", "hasCharLen": False, "hasPrecision": False, "hasScale": False},
+        {
+            "name": "string",
+            "displayName": "Unicode String",
+            "hasCharLen": True,
+            "hasPrecision": False,
+            "hasScale": False,
+            "targets": {target: _target_value("string")},
+        },
+        {
+            "name": "int",
+            "displayName": "Integer (32 bit)",
+            "hasCharLen": False,
+            "hasPrecision": False,
+            "hasScale": False,
+            "targets": {target: _target_value("int")},
+        },
+        {
+            "name": "long",
+            "displayName": "Integer (64 bit)",
+            "hasCharLen": False,
+            "hasPrecision": False,
+            "hasScale": False,
+            "targets": {target: _target_value("long")},
+        },
+        {
+            "name": "double",
+            "displayName": "Double",
+            "hasCharLen": False,
+            "hasPrecision": False,
+            "hasScale": False,
+            "targets": {target: _target_value("double")},
+        },
+        {
+            "name": "decimal",
+            "displayName": "Decimal",
+            "hasCharLen": False,
+            "hasPrecision": True,
+            "hasScale": True,
+            "targets": {target: _target_value("decimal")},
+        },
+        {
+            "name": "datetime",
+            "displayName": "DateTime",
+            "hasCharLen": False,
+            "hasPrecision": False,
+            "hasScale": False,
+            "targets": {target: _target_value("datetime")},
+        },
+        {
+            "name": "boolean",
+            "displayName": "Boolean",
+            "hasCharLen": False,
+            "hasPrecision": False,
+            "hasScale": False,
+            "targets": {target: _target_value("boolean")},
+        },
     ]
 
     base_files: dict[str, Any] = {
