@@ -30,6 +30,7 @@ from datam8.core.connectors.binding import (
     encode_connector_binding,
 )
 from datam8.core.errors import Datam8ValidationError
+from datam8_model import data_source as data_source_model
 
 
 @parametrize_with_cases(
@@ -73,3 +74,22 @@ def test_encode_overwrites_reserved_entries_preserving_others(case_data) -> None
     names = {p["name"] for p in out}
     assert expected_names.issubset(names)
     assert "__connector.id=old" not in names
+
+
+def test_decode_binding_accepts_model_connection_properties() -> None:
+    connection_properties = [
+        data_source_model.ConnectionProperty(
+            name="__connector.id=sqlserver",
+            required=True,
+            description="Reserved: connector binding (do not render).",
+        ),
+        data_source_model.ConnectionProperty(
+            name="__connector.version=0.1.0",
+            required=False,
+            description="Reserved: connector version (do not render).",
+        ),
+    ]
+    binding = decode_connector_binding(connection_properties)
+    assert binding is not None
+    assert binding.connector_id == "sqlserver"
+    assert binding.connector_version == "0.1.0"

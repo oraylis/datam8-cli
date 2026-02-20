@@ -49,6 +49,16 @@ def is_reserved_connection_property(name: str) -> bool:
     return n.startswith(CONNECTOR_ID_PREFIX) or n.startswith(CONNECTOR_VERSION_PREFIX)
 
 
+def _connection_property_name(prop: Any) -> str | None:
+    if isinstance(prop, dict):
+        name = prop.get("name")
+    else:
+        name = getattr(prop, "name", None)
+    if not isinstance(name, str) or not name.strip():
+        return None
+    return name.strip()
+
+
 def decode_connector_binding(connection_properties: Any) -> ConnectorBinding | None:
     """
     Variant A encoding stored in DataSourceType.connectionProperties:
@@ -60,12 +70,9 @@ def decode_connector_binding(connection_properties: Any) -> ConnectorBinding | N
     connector_versions: list[str] = []
 
     for p in props:
-        if not isinstance(p, dict):
+        n = _connection_property_name(p)
+        if not n:
             continue
-        name = p.get("name")
-        if not isinstance(name, str) or not name.strip():
-            continue
-        n = name.strip()
         if n.startswith(CONNECTOR_ID_PREFIX):
             connector_ids.append(n[len(CONNECTOR_ID_PREFIX) :].strip())
         elif n.startswith(CONNECTOR_VERSION_PREFIX):
