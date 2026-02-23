@@ -16,13 +16,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-import sys
-from pathlib import Path
-
 import rich
 import typer
 
-from .. import factory, opts, utils
+from datam8 import config, factory, opts
+
+from . import common
 
 app = typer.Typer(
     name="validate",
@@ -31,43 +30,18 @@ app = typer.Typer(
     help="Validate solution model.",
 )
 
-logger = utils.start_logger(__name__)
-sys.tracebacklimit = 0
-
 
 @app.callback(invoke_without_command=True)
-def command(
-    solution_path: Path | None = typer.Option(
-        None,
-        "--solution",
-        "-s",
-        "--solution-path",
-        help="Path to .dm8s solution file (or folder containing exactly one .dm8s file).",
-        envvar="DATAM8_SOLUTION_PATH",
-    ),
-    log_level: str | None = typer.Option(
-        None,
-        "--log-level",
-        "-l",
-        help="Set log level (defaults to global --log-level or DATAM8_LOG_LEVEL).",
-        envvar="DATAM8_LOG_LEVEL",
-    ),
+def main(
+    solution_path: opts.SolutionPath,
+    log_level: opts.LogLevel = opts.LogLevels.WARNING,
+    version: opts.Version = False,
 ):
     """Validate solution model."""
-    if solution_path is None:
-        raise typer.BadParameter("No solution specified. Use --solution/-s (or set DATAM8_SOLUTION_PATH).")
+    common.main_callback(solution_path, log_level, version)
 
-    effective_log_level = log_level
-    if not isinstance(effective_log_level, str) or not effective_log_level.strip():
-        effective_log_level = opts.LogLevels.WARNING.value
-
-    try:
-        _ = factory.validate_solution_model(
-            solution_path=solution_path,
-            log_level=effective_log_level,
-        )
-    except Exception as err:
-        logger.error(err)
-        sys.exit(1)
+    factory.create_model_or_exit(
+        solution_path=config.solution_path,
+    )
 
     rich.print("Validation successfull")

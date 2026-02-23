@@ -32,7 +32,12 @@ class SourceDataTypeMapping(BaseModel):
     A mapping of datatypes name in the source to datam8 internal datatype names.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     sourceType: str
     """
     Source system data type
@@ -46,7 +51,7 @@ class SourceDataTypeMapping(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> SourceDataTypeMapping:
+    def from_dict(obj: Any) -> SourceDataTypeMapping:
         return SourceDataTypeMapping.model_validate(obj, from_attributes=False)
 
     @staticmethod
@@ -87,7 +92,7 @@ class ConnectionProperty(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> ConnectionProperty:
+    def from_dict(obj: Any) -> ConnectionProperty:
         return ConnectionProperty.model_validate(obj, from_attributes=False)
 
     @staticmethod
@@ -120,7 +125,12 @@ class DataSourceType(BaseModel):
     Defines groups of data sources that base on their technology, e.g. `SqlServer` or `Oracle`
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     name: str
     """
     Name of the data source type (e.g., SqlDataSource, LakeSource)
@@ -146,7 +156,7 @@ class DataSourceType(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> DataSourceType:
+    def from_dict(obj: Any) -> DataSourceType:
         return DataSourceType.model_validate(obj, from_attributes=False)
 
     @staticmethod
@@ -179,7 +189,12 @@ class DataSource(BaseModel):
     Defines an external source of data to be loaded with datam8.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     name: str
     displayName: str | None = None
     description: str | None = None
@@ -199,7 +214,7 @@ class DataSource(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> DataSource:
+    def from_dict(obj: Any) -> DataSource:
         return DataSource.model_validate(obj, from_attributes=False)
 
     @staticmethod

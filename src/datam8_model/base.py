@@ -25,16 +25,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel
 
-from . import (
-    attribute,
-    data_product,
-    data_source,
-    data_type,
-    folder,
-    model,
-    property,
-    zone,
-)
+from . import attribute, data_product, data_source, data_type, folder, model, property, zone
 
 
 class EntityType(Enum):
@@ -56,7 +47,12 @@ class AttributeTypes(BaseModel):
     Defines the layout of entity files within the `Base` folder.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     type: Annotated[Literal["attributeTypes"], Field(title="EntityType")]
     properties: Any | None = None
     propertyValues: Any | None = None
@@ -74,7 +70,7 @@ class AttributeTypes(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> AttributeTypes:
+    def from_dict(obj: Any) -> AttributeTypes:
         return AttributeTypes.model_validate(obj, from_attributes=False)
 
     @staticmethod
@@ -107,7 +103,12 @@ class PropertyValues(BaseModel):
     Defines the layout of entity files within the `Base` folder.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     type: Annotated[Literal["propertyValues"], Field(title="EntityType")]
     properties: Any | None = None
     propertyValues: Sequence[property.PropertyValue]
@@ -125,7 +126,7 @@ class PropertyValues(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> PropertyValues:
+    def from_dict(obj: Any) -> PropertyValues:
         return PropertyValues.model_validate(obj, from_attributes=False)
 
     @staticmethod
@@ -158,7 +159,12 @@ class Zones(BaseModel):
     Defines the layout of entity files within the `Base` folder.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     type: Annotated[Literal["zones"], Field(title="EntityType")]
     properties: Any | None = None
     propertyValues: Any | None = None
@@ -176,7 +182,7 @@ class Zones(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> Zones:
+    def from_dict(obj: Any) -> Zones:
         return Zones.model_validate(obj, from_attributes=False)
 
     @staticmethod
@@ -209,7 +215,12 @@ class DataTypes(BaseModel):
     Defines the layout of entity files within the `Base` folder.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     type: Annotated[Literal["dataTypes"], Field(title="EntityType")]
     properties: Any | None = None
     propertyValues: Any | None = None
@@ -227,7 +238,7 @@ class DataTypes(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> DataTypes:
+    def from_dict(obj: Any) -> DataTypes:
         return DataTypes.model_validate(obj, from_attributes=False)
 
     @staticmethod
@@ -260,7 +271,12 @@ class DataSourceTypes(BaseModel):
     Defines the layout of entity files within the `Base` folder.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     type: Annotated[Literal["dataSourceTypes"], Field(title="EntityType")]
     properties: Any | None = None
     propertyValues: Any | None = None
@@ -278,7 +294,7 @@ class DataSourceTypes(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> DataSourceTypes:
+    def from_dict(obj: Any) -> DataSourceTypes:
         return DataSourceTypes.model_validate(obj, from_attributes=False)
 
     @staticmethod
@@ -311,7 +327,12 @@ class Folders(BaseModel):
     Defines the layout of entity files within the `Base` folder.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     type: Annotated[Literal["folders"], Field(title="EntityType")]
     properties: Any | None = None
     propertyValues: Any | None = None
@@ -329,7 +350,7 @@ class Folders(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> Folders:
+    def from_dict(obj: Any) -> Folders:
         return Folders.model_validate(obj, from_attributes=False)
 
     @staticmethod
@@ -362,7 +383,12 @@ class Properties(BaseModel):
     Defines the layout of entity files within the `Base` folder.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     type: Annotated[Literal["properties"], Field(title="EntityType")]
     properties: Sequence[property.Property]
     propertyValues: Any | None = None
@@ -380,7 +406,7 @@ class Properties(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> Properties:
+    def from_dict(obj: Any) -> Properties:
         return Properties.model_validate(obj, from_attributes=False)
 
     @staticmethod
@@ -413,7 +439,12 @@ class DataModules(BaseModel):
     Defines the layout of entity files within the `Base` folder.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     type: Annotated[Literal["dataModules"], Field(title="EntityType")]
     properties: Any | None = None
     propertyValues: Any | None = None
@@ -431,7 +462,7 @@ class DataModules(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> DataModules:
+    def from_dict(obj: Any) -> DataModules:
         return DataModules.model_validate(obj, from_attributes=False)
 
     @staticmethod
@@ -464,7 +495,12 @@ class DataSources(BaseModel):
     Defines the layout of entity files within the `Base` folder.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     type: Annotated[Literal["dataSources"], Field(title="EntityType")]
     properties: Any | None = None
     propertyValues: Any | None = None
@@ -482,7 +518,7 @@ class DataSources(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> DataSources:
+    def from_dict(obj: Any) -> DataSources:
         return DataSources.model_validate(obj, from_attributes=False)
 
     @staticmethod
@@ -515,7 +551,12 @@ class DataProducts(BaseModel):
     Defines the layout of entity files within the `Base` folder.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     type: Annotated[Literal["dataProducts"], Field(title="EntityType")]
     properties: Any | None = None
     propertyValues: Any | None = None
@@ -533,7 +574,7 @@ class DataProducts(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> DataProducts:
+    def from_dict(obj: Any) -> DataProducts:
         return DataProducts.model_validate(obj, from_attributes=False)
 
     @staticmethod
@@ -566,7 +607,12 @@ class ModelEntities(BaseModel):
     Defines the layout of entity files within the `Base` folder.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     type: Annotated[Literal["modelEntities"], Field(title="EntityType")]
     properties: Any | None = None
     propertyValues: Any | None = None
@@ -584,7 +630,7 @@ class ModelEntities(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> ModelEntities:
+    def from_dict(obj: Any) -> ModelEntities:
         return ModelEntities.model_validate(obj, from_attributes=False)
 
     @staticmethod

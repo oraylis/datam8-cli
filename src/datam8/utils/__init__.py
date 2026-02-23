@@ -36,15 +36,47 @@ Utility Module to make working with datam8 models more comfortable in jinja2 tem
 """
 
 import functools
-import logging
 import os
 from collections.abc import Callable
+from logging import FileHandler, StreamHandler
 from pathlib import Path
 from typing import Any
 
+import fastapi
+import rich
+from pydantic import BaseModel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from .. import config, opts
+from datam8 import config, logging, opts
+
+logger = logging.getLogger(__name__)
+
+
+def create_error(err: Exception | str, code: int = 500) -> Exception:
+    if config.run_as_api:
+        return fastapi.HTTPException(status_code=code, detail=str(err).splitlines())
+
+    if isinstance(err, str):
+        err = Exception(err)
+
+    return err
+
+
+def emit_result(
+    *messages: Any,
+    models: list[BaseModel] | None = None,
+    json: bool = False,
+    pretty: bool = False,
+) -> None:
+    if json and models:
+        print(*[model.model_dump_json(indent=4) for model in models], sep="\n")
+        return
+
+    for msg in messages:
+        if pretty:
+            rich.print(msg)
+        else:
+            print(msg)
 
 
 def none_if[T](input: T | None, value: T) -> T | None:
@@ -220,50 +252,17 @@ def start_logger(
         if os.path.exists(log_path):
             os.remove(log_path)
 
-        formatter = logging.Formatter(
-            "%(asctime)s - %(levelname)s - %(name)s: %(message)s"
-        )
-        file_handler = logging.FileHandler(log_path)
+        formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(name)s: %(message)s")
+        file_handler = FileHandler(log_path)
         file_handler.setFormatter(formatter)
 
         logger.addHandler(file_handler)
 
     # Adding Stream handler to print out logs additionally to the console
-    stream_handler = logging.StreamHandler()
-    stream_handler.setFormatter(ColorFormatter())
+    stream_handler = StreamHandler()
+    stream_handler.setFormatter(logging.ColorFormatter())
 
     if not logger.hasHandlers():
         logger.addHandler(stream_handler)
 
     return logger
-
-
-class ColorFormatter(logging.Formatter):
-    """Logging Formatter to add colors and count warning/errors"""
-
-    grey = "\x1b[90m"
-    green = "\x1b[92m"
-    yellow = "\x1b[93m"
-    red = "\x1b[91m"
-    reset = "\x1b[0m"
-    _time = grey + "%(asctime)s "
-    _level = "[%(levelname)-5s] "
-    _scope = grey + "%(name)s | "
-    _msg = "%(message)s" + reset
-
-    # fmt: off
-    FORMATS = {
-        logging.DEBUG:    _time          + _level + _scope + reset + _msg,
-        logging.INFO:     _time + green  + _level + _scope + reset + _msg,
-        logging.WARNING:  _time + yellow + _level + _scope + reset + _msg,
-        logging.ERROR:    _time + red    + _level + _scope + red   + _msg,
-        logging.CRITICAL: _time + red    + _level + _scope + red   + _msg,
-    }
-    # fmt: on
-
-    def format(self, record) -> str:
-        record.levelname = "WARN" if record.levelname == "WARNING" else record.levelname
-        record.levelname = "ERROR" if record.levelname == "CRITICAL" else record.levelname
-        log_fmt = self.FORMATS.get(record.levelno)
-        formatter = logging.Formatter(log_fmt)
-        return formatter.format(record)

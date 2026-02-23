@@ -32,7 +32,12 @@ class DataModule(BaseModel):
     Defines ...
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     name: str
     displayName: str | None = None
     description: str | None = None
@@ -42,7 +47,7 @@ class DataModule(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> DataModule:
+    def from_dict(obj: Any) -> DataModule:
         return DataModule.model_validate(obj, from_attributes=False)
 
     @staticmethod
@@ -75,7 +80,12 @@ class DataProduct(BaseModel):
     Defines ...
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     name: str
     displayName: str | None = None
     description: str | None = None
@@ -86,7 +96,7 @@ class DataProduct(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> DataProduct:
+    def from_dict(obj: Any) -> DataProduct:
         return DataProduct.model_validate(obj, from_attributes=False)
 
     @staticmethod

@@ -28,7 +28,12 @@ class Zone(BaseModel):
     Defines a high-level layer or zone, typically used to clearly seperate different states of data processing, e.g. bronze, silver, gold, semantic.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     name: str
     """
     Logical name of the zone (e.g., Raw, Core, Curated)
@@ -50,7 +55,7 @@ class Zone(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> Zone:
+    def from_dict(obj: Any) -> Zone:
         return Zone.model_validate(obj, from_attributes=False)
 
     @staticmethod

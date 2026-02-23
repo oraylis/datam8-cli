@@ -22,80 +22,32 @@ import sys
 
 from pydantic_core import ValidationError
 
+from datam8 import config, logging, model, model_exceptions, parser, parser_exceptions
 from datam8_model import folder as f
 from datam8_model.property import PropertyReference, PropertyValue
 
-from . import config, model, model_exceptions, opts, parser, parser_exceptions, utils
-from .core.paths import resolve_solution
+logger = logging.getLogger(__name__)
 
-logger = utils.start_logger(__name__)
-
-_model: model.Model
+_model: model.Model | None = None
 
 
-def _normalize_log_level(
-    log_level: opts.LogLevels | str | None,
-    *,
-    default: opts.LogLevels = opts.LogLevels.WARNING,
-) -> opts.LogLevels:
-    if isinstance(log_level, opts.LogLevels):
-        return log_level
-    if isinstance(log_level, str):
-        try:
-            return opts.LogLevels(log_level.strip().lower())
-        except Exception:
-            return default
-    return default
-
-
-def configure_runtime(
-    *,
-    solution_path: pathlib.Path | str,
-    log_level: opts.LogLevels | str | None = None,
-    lazy: bool = False,
-) -> pathlib.Path:
-    """Resolve and apply runtime configuration for parser/model operations."""
-    resolved = resolve_solution(str(solution_path))
-    config.log_level = _normalize_log_level(log_level)
-    config.lazy = lazy
-    config.solution_path = resolved.solution_file
-    config.solution_folder_path = resolved.root_dir
-    return resolved.solution_file
-
-
-def create_model_or_raise(solution_path: pathlib.Path | None = None) -> model.Model:
-    """Create model and raise parser/model exceptions instead of exiting."""
+def get_model() -> model.Model:
+    """
+    Get the currently loaded model. In case no model was loaded yet, it will create it
+    based on the current configuration.
+    """
     global _model
 
-    path = solution_path or config.solution_path
-    if not path.exists():
-        raise FileNotFoundError(path)
+    if _model is None:
+        _model = create_model()
 
-    _model = asyncio.run(parser.parse_full_solution_async(path))
-    create_undefined_folders(_model)
-    if not config.lazy:
-        _model.resolve()
     return _model
 
 
-def validate_solution_model(
-    *,
-    solution_path: pathlib.Path | str,
-    log_level: opts.LogLevels | str | None = None,
-) -> pathlib.Path:
-    """Validate full solution model parsing/resolution and return resolved path."""
-    resolved_solution_path = configure_runtime(
-        solution_path=solution_path,
-        log_level=log_level,
-        lazy=False,
-    )
-    _ = create_model_or_raise(solution_path=resolved_solution_path)
-    return resolved_solution_path
-
-
-@utils.get_logger
 def create_model(solution_path: pathlib.Path | None = None) -> model.Model:
-    """Create model.
+    """
+    Create model from a provided solution path. If no path is provided it will fall back to the
+    global configuration.
 
     Parameters
     ----------
@@ -105,9 +57,48 @@ def create_model(solution_path: pathlib.Path | None = None) -> model.Model:
     Returns
     -------
     model.Model
-        Computed return value."""
+        Computed return value.
+    """
+    global _model
+
+    path = solution_path or config.solution_path
+    if not path.exists():
+        raise FileNotFoundError(path)
+
+    _model = asyncio.run(load_model(path))
+
+    return _model
+
+
+async def load_model(solution_path: pathlib.Path) -> model.Model:
+    _model = await parser.parse_full_solution_async(solution_path)
+    create_undefined_folders(_model)
+    _model.init_file_references()
+
+    if not config.lazy:
+        _model.resolve()
+
+    return _model
+
+
+def create_model_or_exit(solution_path: pathlib.Path | None = None) -> model.Model:
+    """
+    Create model and exit the program in case of a known error. This function is mainly provided
+    to be used in the context of a CLI.
+
+    Parameters
+    ----------
+    solution_path : pathlib.Path | None
+        solution_path parameter value.
+
+    Returns
+    -------
+    model.Model
+        Computed return value.
+    """
+
     try:
-        return create_model_or_raise(solution_path=solution_path)
+        return create_model(solution_path=solution_path)
     except FileNotFoundError as err:
         logger.error(f"Solution file does not exist: {err}")
         sys.exit(1)
@@ -136,9 +127,7 @@ def create_model(solution_path: pathlib.Path | None = None) -> model.Model:
         sys.exit(1)
 
 
-def resolve_property(
-    model: model.Model, reference: PropertyReference
-) -> list[PropertyValue]:
+def resolve_property(model: model.Model, reference: PropertyReference) -> list[PropertyValue]:
     """
     Lookup and Resolve a single PropertyReference. Useful to resolve properties that are not
     set directly on the entity, e.g. a property on an attribute.
@@ -197,7 +186,17 @@ def create_undefined_folders(_model: model.Model):
             if ploc in _model.folders or ploc.entityName is None:
                 continue
 
+            source_file_path = pathlib.Path(
+                config.solution_folder_path,
+                _model.solution.modelPath,
+                *ploc.folders,
+                ploc.entityName,
+                ".properties.json",
+            )
+
+            # file will not be created, only when a change is applied/saved
             undefined_folders[ploc] = model.EntityWrapper(
+                source_file=source_file_path.absolute(),
                 locator=ploc,
                 entity=f.Folder(
                     id=next_id,

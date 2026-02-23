@@ -61,7 +61,12 @@ class AttributeType(BaseModel):
     Defines abstract business orientated attribute definitions, e.g. an email address
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     name: str
     displayName: str
     description: str | None = None
@@ -80,7 +85,7 @@ class AttributeType(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> AttributeType:
+    def from_dict(obj: Any) -> AttributeType:
         return AttributeType.model_validate(obj, from_attributes=False)
 
     @staticmethod
@@ -113,7 +118,12 @@ class Attribute(BaseModel):
     An attribute of a model entity.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     ordinalNumber: Annotated[int, Field(gt=0)]
     name: str
     displayName: str | None = None
@@ -138,7 +148,7 @@ class Attribute(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> Attribute:
+    def from_dict(obj: Any) -> Attribute:
         return Attribute.model_validate(obj, from_attributes=False)
 
     @staticmethod

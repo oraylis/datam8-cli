@@ -18,8 +18,12 @@
 
 import typer
 
+from datam8 import opts
+from datam8.core.runtime_meta import get_version
+
 from .cmd import (
     base,
+    common,
     config_cmd,
     connector,
     datasource,
@@ -37,7 +41,6 @@ from .cmd import (
     solution,
     validate,
 )
-from .cmd.common import version_callback
 
 app = typer.Typer(
     add_completion=False,
@@ -46,6 +49,18 @@ app = typer.Typer(
     pretty_exceptions_show_locals=True,
     pretty_exceptions_short=False,
 )
+
+
+@app.callback(invoke_without_command=True)
+def _callback(
+    solution_path: opts.SolutionPath,
+    log_level: opts.LogLevel = opts.LogLevels.WARNING,
+    version: opts.Version = False,
+):
+    if version:
+        typer.echo(get_version())
+        raise typer.Exit(code=0)
+
 
 app.add_typer(solution.app)
 app.add_typer(base.app)
@@ -66,18 +81,5 @@ app.add_typer(validate.app)
 app.add_typer(serve.app)
 
 
-@app.callback()
-def main_callback(
-    version: bool = typer.Option(False, "--version", callback=version_callback, is_eager=True),
-) -> None:
-    """CLI root callback."""
-    _ = version
-
-
-def main() -> None:
-    """Run the DataM8 CLI."""
-    app()
-
-
 if __name__ == "__main__":
-    main()
+    app()

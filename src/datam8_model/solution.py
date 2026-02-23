@@ -30,7 +30,12 @@ class GeneratorTarget(BaseModel):
     Defines a target that can be selected when using the generator.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     name: str
     isDefault: bool | None = False
     sourcePath: Path
@@ -46,7 +51,7 @@ class GeneratorTarget(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> GeneratorTarget:
+    def from_dict(obj: Any) -> GeneratorTarget:
         return GeneratorTarget.model_validate(obj, from_attributes=False)
 
     @staticmethod
@@ -79,7 +84,12 @@ class Solution(BaseModel):
     A definition to hold various settings for use in the frontend or the generator.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     schemaVersion: str
     """
     Version of the schema for validation and migration support.
@@ -105,7 +115,7 @@ class Solution(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> Solution:
+    def from_dict(obj: Any) -> Solution:
         return Solution.model_validate(obj, from_attributes=False)
 
     @staticmethod

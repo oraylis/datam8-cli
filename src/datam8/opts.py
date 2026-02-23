@@ -22,6 +22,8 @@ from typing import Annotated
 
 import typer
 
+default_target = "none"
+
 
 class LogLevels(Enum):
     DEBUG = "debug"
@@ -29,6 +31,14 @@ class LogLevels(Enum):
     WARNING = "warning"
     ERROR = "error"
     CRITICAL = "critical"
+
+
+class Selectors(Enum):
+    AUTO = "auto"
+    RELATIVE = "relPath"
+    LOCATOR = "locator"
+    ID = "id"
+    NAME = "name"
 
 
 Lazy = Annotated[
@@ -57,25 +67,19 @@ LogLevel = Annotated[
 SolutionPath = Annotated[
     Path,
     typer.Option(
-        ...,
         "--solution",
         "-s",
         "--solution-path",
-        help="Path to .dm8s solution file (or folder containing exactly one .dm8s file)",
+        help=(
+            "Path to .dm8s solution file (or folder containing exactly one .dm8s file). Falls back to"
+            " the current dir if not provided."
+        ),
         envvar="DATAM8_SOLUTION_PATH",
+        default_factory=Path().cwd,
     ),
 ]
 
-SolutionPathOptional = Annotated[
-    Path | None,
-    typer.Option(
-        "--solution",
-        "-s",
-        "--solution-path",
-        help="Path to .dm8s solution file (or folder containing exactly one .dm8s file)",
-        envvar="DATAM8_SOLUTION_PATH",
-    ),
-]
+SolutionPathOptional = Annotated[Path | None, typer.Option()]
 
 JsonOutput = Annotated[
     bool,
@@ -167,4 +171,58 @@ MigrationOutputDir = Annotated[
         "--output-dir",
         help="Directory where the migrated model will be written to",
     ),
+]
+
+OpenApi = Annotated[
+    bool,
+    typer.Option(
+        "-o",
+        "--openapi",
+        help="When enabled an open api documentation page will be hosted alongside the api",
+    ),
+]
+
+Selector = Annotated[
+    str,
+    typer.Argument(help="Entity selector"),
+]
+
+SelectBy = Annotated[
+    Selectors,
+    typer.Option(
+        "--by",
+        help="Selector type",
+    ),
+]
+
+ApiPort = Annotated[
+    int,
+    typer.Option(
+        "-p", "--port", min=0, max=65535, help="Port where the fastapi app will listen on"
+    ),
+]
+
+ApiHost = Annotated[
+    str,
+    typer.Option("-h", "--host", help="Host where the fastapi will listen on"),
+]
+
+ApiToken = Annotated[
+    str | None,
+    typer.Option("-t", "--token", help="Token to restrict access to the api"),
+]
+
+Version = Annotated[
+    bool,
+    typer.Option("--version", is_eager=True),
+]
+
+DataSource = Annotated[
+    str,
+    typer.Argument(help="Name or locator of a data source"),
+]
+
+Locator = Annotated[
+    str,
+    typer.Argument(help="A search locator"),
 ]

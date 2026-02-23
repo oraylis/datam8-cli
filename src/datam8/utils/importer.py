@@ -15,30 +15,37 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
-import logging
 import pathlib
 import sys
 from importlib import machinery, util
 from types import ModuleType
 
-from .. import config, generate, utils
+from datam8 import config, generate, logging
 
 logger = logging.getLogger(__name__)
 
 
-def enable_target_modules() -> None:
+def enable_target_modules(module_path: pathlib.Path) -> None:
     """Enable target modules.
 
     Returns
     -------
     None
         Computed return value."""
-    logger.info("Enable importing from target __modules")
+    logger.info(
+        "Enable importing from target %s",
+        module_path.absolute().relative_to(config.solution_folder_path),
+    )
+
+    if module_path not in TargetModuleFinder._path:
+        TargetModuleFinder._path.append(module_path.absolute().as_posix())
+
     if TargetModuleFinder not in sys.meta_path:
         sys.meta_path.append(TargetModuleFinder)
 
+    logger.debug("Configured module paths: %s", TargetModuleFinder._path)
 
-@utils.get_logger
+
 def load_modules(module_path: pathlib.Path) -> dict[str, ModuleType]:
     """Load modules.
 
@@ -132,6 +139,4 @@ class TargetModuleFinder(machinery.PathFinder):
 
     @classmethod
     def find_spec(cls, fullname: str, path=None, target=None):
-        _path = [config.module_path.as_posix()]
-
-        return super().find_spec(fullname, _path, target)
+        return super().find_spec(fullname, cls._path, target)

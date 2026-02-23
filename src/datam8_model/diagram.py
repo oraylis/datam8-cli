@@ -25,7 +25,12 @@ from pydantic import BaseModel, ConfigDict
 
 
 class DiagramOption(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     name: str
     value: str
 
@@ -33,7 +38,7 @@ class DiagramOption(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> DiagramOption:
+    def from_dict(obj: Any) -> DiagramOption:
         return DiagramOption.model_validate(obj, from_attributes=False)
 
     @staticmethod
@@ -62,7 +67,12 @@ class DiagramOption(BaseModel):
 
 
 class Diagram(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     diagramType: str | None = None
     coreEntities: Sequence[str] | None = None
     diagramOptions: Sequence[DiagramOption] | None = None
@@ -71,7 +81,7 @@ class Diagram(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> Diagram:
+    def from_dict(obj: Any) -> Diagram:
         return Diagram.model_validate(obj, from_attributes=False)
 
     @staticmethod

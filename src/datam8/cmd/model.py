@@ -23,6 +23,7 @@ import json
 import typer
 from pydantic import ValidationError
 
+from datam8 import config, factory, model, utils
 from datam8 import opts as cli_opts
 from datam8.core import workspace_service
 from datam8.core.entity_resolution import resolve_model_entity
@@ -31,6 +32,7 @@ from datam8.core.jsonops import merge_patch, set_by_pointer
 from datam8.core.workspace_io import read_workspace_json
 from datam8_model import model as model_model
 
+from . import common
 from .common import (
     emit_result,
     make_global_options,
@@ -55,34 +57,70 @@ folder_metadata_app = typer.Typer(
 app.add_typer(folder_metadata_app, name="folder-metadata")
 
 
-@app.command("list")
-def list_entities(
-    solution_path: cli_opts.SolutionPathOptional = None,
+def __setup_model_for_cli(
+    solution_path: cli_opts.SolutionPath,
+    log_level: cli_opts.LogLevel,
+    version: cli_opts.Version,
+) -> model.Model:
+    config.lazy = True
+    common.main_callback(solution_path, log_level, version)
+
+    return factory.create_model_or_exit()
+
+
+@app.command()
+def list(
+    solution_path: cli_opts.SolutionPath,
+    locator: cli_opts.Locator = "modelEntities",
+    log_level: cli_opts.LogLevel = cli_opts.LogLevels.WARNING,
+    version: cli_opts.Version = False,
     json_output: cli_opts.JsonOutput = False,
-    quiet: cli_opts.Quiet = False,
 ) -> None:
     """List model entities."""
-    opts = make_global_options(solution=solution_path, json_output=json_output, quiet=quiet)
-    entities = workspace_service.list_model_entities(resolve_solution_path(opts))
-    payload = {"count": len(entities), "entities": [e.model_dump(mode="json") for e in entities]}
-    emit_result(opts, payload, human_lines=[e.relPath for e in entities])
+
+    model = __setup_model_for_cli(solution_path, log_level, version)
+    wrappers = model.get_entities(locator)
+
+    if len(wrappers) == 0:
+        utils.emit_result("No entities found for search locator")
+        raise typer.Exit(1)
+
+    utils.emit_result(
+        f"{len(wrappers)} entities in total",
+        *[str(wrapper.locator) for wrapper in wrappers],
+        models=[wrapper.entity for wrapper in wrappers],
+        json=json_output,
+    )
 
 
-@app.command("get")
-def get_entity(
-    selector: str = typer.Argument(..., help="Entity selector (relPath, locator, id, or name)."),
-    by: str = typer.Option("auto", "--by", help="Selector type: auto|relPath|locator|id|name."),
-    solution_path: cli_opts.SolutionPathOptional = None,
+@app.command()
+def show(
+    selector: cli_opts.Selector,
+    solution_path: cli_opts.SolutionPath,
+    by: cli_opts.SelectBy = cli_opts.Selectors.LOCATOR,
     json_output: cli_opts.JsonOutput = False,
-    quiet: cli_opts.Quiet = False,
+    version: cli_opts.Version = False,
+    log_level: cli_opts.LogLevel = cli_opts.LogLevels.WARNING,
 ) -> None:
-    """Read a model entity JSON document."""
-    opts = make_global_options(solution=solution_path, json_output=json_output, quiet=quiet)
-    active_solution_path = resolve_solution_path(opts)
-    entity = resolve_model_entity(selector, solution_path=active_solution_path, by=by)
-    content = read_workspace_json(entity.rel_path, active_solution_path)
-    payload = {"entity": entity.rel_path, "content": content}
-    emit_result(opts, payload, human_lines=[json.dumps(content, indent=2, ensure_ascii=False)])
+    """Get and display a model entity."""
+    model = __setup_model_for_cli(solution_path, log_level, version)
+    entity_wrapper = model.get_entity_by_selector(selector, by)
+
+    utils.emit_result(
+        f"File: {entity_wrapper.source_file}",
+        "\nProperties:",
+        *entity_wrapper.properties.values(),
+        "\nRaw JSON:",
+        entity_wrapper.entity,
+        models=[entity_wrapper.entity],
+        json=json_output,
+        pretty=True,
+    )
+
+
+# TODO: everything below should get adapted in some way, because nobody wants to type json in the cli
+# and commands like move are not necessary for the cli, as the whole model is simply dependent on the
+# directories. would only be interesting to move a whole branch of the model tree
 
 
 @app.command("create")
@@ -117,7 +155,9 @@ def create_entity(
 
 @app.command("save")
 def save_entity(
-    selector: str = typer.Argument(..., help="Entity selector (relPath, locator, id, or name)."),
+    selector: str = typer.Argument(
+        ..., help="Entity selector (relPath, locator, id, or name)."
+    ),
     content: str = typer.Argument(..., help="JSON string, @file, or '-' for stdin."),
     by: str = typer.Option("auto", "--by"),
     solution_path: cli_opts.SolutionPathOptional = None,
@@ -157,7 +197,9 @@ def validate_entity(
     quiet: cli_opts.Quiet = False,
 ) -> None:
     """Validate that a model entity matches the schema."""
-    opts = make_global_options(solution=solution_path, json_output=json_output, quiet=quiet)
+    opts = make_global_options(
+        solution=solution_path, json_output=json_output, quiet=quiet
+    )
     active_solution_path = resolve_solution_path(opts)
     entity = resolve_model_entity(selector, solution_path=active_solution_path, by=by)
     content = read_workspace_json(entity.rel_path, active_solution_path)
@@ -168,7 +210,11 @@ def validate_entity(
             message="Model entity validation failed.",
             details={"relPath": entity.rel_path, "errors": e.errors()},
         )
-    emit_result(opts, {"status": "ok", "relPath": entity.rel_path}, human_lines=[f"ok: {entity.rel_path}"])
+    emit_result(
+        opts,
+        {"status": "ok", "relPath": entity.rel_path},
+        human_lines=[f"ok: {entity.rel_path}"],
+    )
 
 
 @app.command("set")
@@ -386,13 +432,17 @@ def rename_model_folder(
 
 @folder_metadata_app.command("get")
 def get_folder_metadata(
-    rel_path: str = typer.Argument(..., help="Folder metadata relPath (*.properties.json)."),
+    rel_path: str = typer.Argument(
+        ..., help="Folder metadata relPath (*.properties.json)."
+    ),
     solution_path: cli_opts.SolutionPathOptional = None,
     json_output: cli_opts.JsonOutput = False,
     quiet: cli_opts.Quiet = False,
 ) -> None:
     """Read a folder metadata JSON document."""
-    opts = make_global_options(solution=solution_path, json_output=json_output, quiet=quiet)
+    opts = make_global_options(
+        solution=solution_path, json_output=json_output, quiet=quiet
+    )
     active_solution_path = resolve_solution_path(opts)
     content = workspace_service.read_folder_metadata(
         rel_path=rel_path,
@@ -400,12 +450,18 @@ def get_folder_metadata(
     )
     content_payload = content.model_dump(mode="json")
     payload = {"relPath": rel_path, "content": content_payload}
-    emit_result(opts, payload, human_lines=[json.dumps(content_payload, indent=2, ensure_ascii=False)])
+    emit_result(
+        opts,
+        payload,
+        human_lines=[json.dumps(content_payload, indent=2, ensure_ascii=False)],
+    )
 
 
 @folder_metadata_app.command("save")
 def save_folder_metadata_cmd(
-    rel_path: str = typer.Argument(..., help="Folder metadata relPath (*.properties.json)."),
+    rel_path: str = typer.Argument(
+        ..., help="Folder metadata relPath (*.properties.json)."
+    ),
     content: str = typer.Argument(..., help="JSON string, @file, or '-' for stdin."),
     solution_path: cli_opts.SolutionPathOptional = None,
     json_output: cli_opts.JsonOutput = False,
@@ -436,7 +492,9 @@ def save_folder_metadata_cmd(
 
 @folder_metadata_app.command("delete")
 def delete_folder_metadata_cmd(
-    rel_path: str = typer.Argument(..., help="Folder metadata relPath (*.properties.json)."),
+    rel_path: str = typer.Argument(
+        ..., help="Folder metadata relPath (*.properties.json)."
+    ),
     solution_path: cli_opts.SolutionPathOptional = None,
     json_output: cli_opts.JsonOutput = False,
     quiet: cli_opts.Quiet = False,
@@ -483,7 +541,10 @@ def edit_entity(
     active_solution_path = resolve_solution_path(opts)
     entity = resolve_model_entity(selector, solution_path=active_solution_path, by=by)
     current = read_workspace_json(entity.rel_path, active_solution_path)
-    edited_raw = open_in_editor(suffix=".json", initial_text=json.dumps(current, indent=4, ensure_ascii=False) + "\n")
+    edited_raw = open_in_editor(
+        suffix=".json",
+        initial_text=json.dumps(current, indent=4, ensure_ascii=False) + "\n",
+    )
     next_doc = json.loads(edited_raw)
     abs_path = workspace_service.save_model_entity(
         rel_path=entity.rel_path,

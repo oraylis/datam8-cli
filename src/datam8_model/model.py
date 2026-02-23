@@ -33,7 +33,12 @@ class Locator(BaseModel):
     Describes an abstract way to point to and find entities with datam8.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     entityType: str
     folders: Sequence[str]
     """
@@ -48,7 +53,7 @@ class Locator(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> Locator:
+    def from_dict(obj: Any) -> Locator:
         return Locator.model_validate(obj, from_attributes=False)
 
     @staticmethod
@@ -81,7 +86,12 @@ class ModelParameter(BaseModel):
     Key-Value pair parameters for customization of and entity-level attributes.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     name: str
     value: str | Mapping[str, Any] | float | bool
 
@@ -89,7 +99,7 @@ class ModelParameter(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> ModelParameter:
+    def from_dict(obj: Any) -> ModelParameter:
         return ModelParameter.model_validate(obj, from_attributes=False)
 
     @staticmethod
@@ -131,14 +141,19 @@ class TransformationFunction(BaseModel):
     A transformation function defined in the scope of the current solution.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     source: str
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> TransformationFunction:
+    def from_dict(obj: Any) -> TransformationFunction:
         return TransformationFunction.model_validate(obj, from_attributes=False)
 
     @staticmethod
@@ -171,7 +186,12 @@ class ModelAttributeMapping(BaseModel):
     Single attribute mapping.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     sourceName: Annotated[str, Field(min_length=1)]
     targetName: Annotated[str, Field(min_length=1)]
 
@@ -179,7 +199,7 @@ class ModelAttributeMapping(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> ModelAttributeMapping:
+    def from_dict(obj: Any) -> ModelAttributeMapping:
         return ModelAttributeMapping.model_validate(obj, from_attributes=False)
 
     @staticmethod
@@ -212,7 +232,12 @@ class SourceAttributeMapping(ModelAttributeMapping):
     Map an attribute in the source to one in the current entity. May optionally contain an explicit source data type.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     sourceDataType: data_type.DataType | None = None
     properties: Sequence[property.PropertyReference] | None = None
 
@@ -220,7 +245,7 @@ class SourceAttributeMapping(ModelAttributeMapping):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> SourceAttributeMapping:
+    def from_dict(obj: Any) -> SourceAttributeMapping:
         return SourceAttributeMapping.model_validate(obj, from_attributes=False)
 
     @staticmethod
@@ -253,7 +278,12 @@ class ModelTransformation(BaseModel):
     Describes a single transformation, either builtin or defined within the solution.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     stepNo: Annotated[int, Field(ge=1)]
     kind: Annotated[TransformationKind, Field(title="TransformationKind")]
     """
@@ -261,9 +291,7 @@ class ModelTransformation(BaseModel):
     """
     name: str
     properties: Sequence[property.PropertyReference] | None = None
-    function: Annotated[
-        TransformationFunction | None, Field(title="TransformationFunction")
-    ] = None
+    function: Annotated[TransformationFunction | None, Field(title="TransformationFunction")] = None
     """
     A transformation function defined in the scope of the current solution.
     """
@@ -272,7 +300,7 @@ class ModelTransformation(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> ModelTransformation:
+    def from_dict(obj: Any) -> ModelTransformation:
         return ModelTransformation.model_validate(obj, from_attributes=False)
 
     @staticmethod
@@ -305,7 +333,12 @@ class ModelRelationship(BaseModel):
     Maps attributes to a target location.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     targetLocation: int
     alias: str | None = None
     attributes: Annotated[Sequence[ModelAttributeMapping], Field(min_length=1)]
@@ -314,7 +347,7 @@ class ModelRelationship(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> ModelRelationship:
+    def from_dict(obj: Any) -> ModelRelationship:
         return ModelRelationship.model_validate(obj, from_attributes=False)
 
     @staticmethod
@@ -347,7 +380,12 @@ class InternalModelSource(BaseModel):
     Internal source definition to reference other entities within datam8.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     sourceLocation: int
     properties: Sequence[property.PropertyReference] | None = None
     mapping: Sequence[SourceAttributeMapping] | None = None
@@ -356,7 +394,7 @@ class InternalModelSource(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> InternalModelSource:
+    def from_dict(obj: Any) -> InternalModelSource:
         return InternalModelSource.model_validate(obj, from_attributes=False)
 
     @staticmethod
@@ -389,7 +427,12 @@ class ExternalModelSource(BaseModel):
     Sources that point to external systems outside of datam8.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     dataSource: str
     sourceAlias: str | None = None
     sourceLocation: str
@@ -400,7 +443,7 @@ class ExternalModelSource(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> ExternalModelSource:
+    def from_dict(obj: Any) -> ExternalModelSource:
         return ExternalModelSource.model_validate(obj, from_attributes=False)
 
     @staticmethod
@@ -433,7 +476,12 @@ class ModelEntity(BaseModel):
     Describes a single entity within datam8. Most commonly a database table.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     id: Annotated[int, Field(gt=0)]
     """
     Internal id of an entity.
@@ -458,7 +506,7 @@ class ModelEntity(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> ModelEntity:
+    def from_dict(obj: Any) -> ModelEntity:
         return ModelEntity.model_validate(obj, from_attributes=False)
 
     @staticmethod
