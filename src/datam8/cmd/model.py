@@ -23,6 +23,7 @@ import json
 import typer
 from pydantic import ValidationError
 
+from datam8 import config, factory, logging, model, model_exceptions, utils
 from datam8 import opts as cli_opts
 from datam8.core import workspace_service
 from datam8.core.entity_resolution import resolve_model_entity
@@ -68,21 +69,35 @@ def list_entities(
     emit_result(opts, payload, human_lines=[e.relPath for e in entities])
 
 
+def __setup_model_for_cli(
+        solution_path: cli_opts.SolutionPath, log_level: cli_opts.LogLevel, lazy: cli_opts.Lazy
+) -> model.Model:
+    config.log_level = log_level
+    config.lazy = lazy
+    config.set_solution(solution_path)
+    logging.setup_logger()
+
+    return factory.create_model_or_exit()
+
 @app.command("get")
 def get_entity(
-    selector: str = typer.Argument(..., help="Entity selector (relPath, locator, id, or name)."),
-    by: str = typer.Option("auto", "--by", help="Selector type: auto|relPath|locator|id|name."),
-    solution_path: cli_opts.SolutionPathOptional = None,
+    selector: cli_opts.Selector,
+    solution_path: cli_opts.SolutionPath,
+    by: cli_opts.SelectBy = cli_opts.Selectors.LOCATOR,
     json_output: cli_opts.JsonOutput = False,
-    quiet: cli_opts.Quiet = False,
+    lazy: cli_opts.Lazy = True,
+    log_level: cli_opts.LogLevel = cli_opts.LogLevels.WARNING,
 ) -> None:
-    """Read a model entity JSON document."""
-    opts = make_global_options(solution=solution_path, json_output=json_output, quiet=quiet)
-    active_solution_path = resolve_solution_path(opts)
-    entity = resolve_model_entity(selector, solution_path=active_solution_path, by=by)
-    content = read_workspace_json(entity.rel_path, active_solution_path)
-    payload = {"entity": entity.rel_path, "content": content}
-    emit_result(opts, payload, human_lines=[json.dumps(content, indent=2, ensure_ascii=False)])
+    """Get and display a model entity."""
+    model = __setup_model_for_cli(solution_path, log_level, lazy)
+    entity_wrapper = model.get_entity_by_selector(selector, by)
+
+    utils.emit_result(
+        f"Name: {entity_wrapper.entity.name}",
+        f"File: {entity_wrapper.source_file}",
+        model=entity_wrapper.entity,
+        json=json_output
+    )
 
 
 @app.command("create")

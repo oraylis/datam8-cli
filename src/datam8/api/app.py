@@ -53,7 +53,7 @@ def _is_exempt_path(path: str) -> bool:
     return path in {"/health", "/version"}
 
 
-def create_app(*, token: str, enable_openapi: bool = False) -> FastAPI:
+def create_app(*, token: str | None = None, enable_openapi: bool = False) -> FastAPI:
     """Create and configure the HTTP API application."""
     if enable_openapi:
         app = FastAPI(title="DataM8 API", version=get_version())
@@ -85,31 +85,39 @@ def create_app(*, token: str, enable_openapi: bool = False) -> FastAPI:
         request.state.trace_id = new_trace_id()
         return await call_next(request)
 
-    @app.middleware("http")
-    async def auth_middleware(request: Request, call_next):
-        if _is_exempt_path(request.url.path):
+    if token is not None:
+
+        @app.middleware("http")
+        async def auth_middleware(request: Request, call_next):
+            if _is_exempt_path(request.url.path):
+                return await call_next(request)
+
+            auth = (request.headers.get("authorization") or "").strip()
+            if not auth.lower().startswith("bearer "):
+                exc = Datam8Error(
+                    code="auth",
+                    message="Missing Authorization header.",
+                    details=None,
+                    hint="Use: Authorization: Bearer <token>.",
+                    exit_code=7,
+                )
+                trace_id = getattr(request.state, "trace_id", None)
+                env = exc.to_envelope(trace_id=trace_id)
+                return JSONResponse(status_code=401, content=env.model_dump())
+            got = auth.split(" ", 1)[1].strip()
+            if not got or got != token:
+                exc = Datam8Error(
+                    code="auth",
+                    message="Invalid token.",
+                    details=None,
+                    hint=None,
+                    exit_code=7,
+                )
+                trace_id = getattr(request.state, "trace_id", None)
+                env = exc.to_envelope(trace_id=trace_id)
+                return JSONResponse(status_code=401, content=env.model_dump())
+
             return await call_next(request)
-
-        auth = (request.headers.get("authorization") or "").strip()
-        if not auth.lower().startswith("bearer "):
-            exc = Datam8Error(
-                code="auth",
-                message="Missing Authorization header.",
-                details=None,
-                hint="Use: Authorization: Bearer <token>.",
-                exit_code=7,
-            )
-            trace_id = getattr(request.state, "trace_id", None)
-            env = exc.to_envelope(trace_id=trace_id)
-            return JSONResponse(status_code=401, content=env.model_dump())
-        got = auth.split(" ", 1)[1].strip()
-        if not got or got != token:
-            exc = Datam8Error(code="auth", message="Invalid token.", details=None, hint=None, exit_code=7)
-            trace_id = getattr(request.state, "trace_id", None)
-            env = exc.to_envelope(trace_id=trace_id)
-            return JSONResponse(status_code=401, content=env.model_dump())
-
-        return await call_next(request)
 
     # Add CORS outermost so preflight OPTIONS are handled before auth and
     # CORS headers are present on all responses (including errors).
@@ -129,18 +137,26 @@ def create_app(*, token: str, enable_openapi: bool = False) -> FastAPI:
         return JSONResponse(status_code=_status_for_error(exc), content=env.model_dump())
 
     @app.exception_handler(RequestValidationError)
-    async def request_validation_error_handler(request: Request, exc: RequestValidationError):
+    async def request_validation_error_handler(
+        request: Request, exc: RequestValidationError
+    ):
         trace_id = getattr(request.state, "trace_id", None)
-        err = Datam8ValidationError(message="Invalid request.", details={"errors": exc.errors()})
+        err = Datam8ValidationError(
+            message="Invalid request.", details={"errors": exc.errors()}
+        )
         env = err.to_envelope(trace_id=trace_id)
         return JSONResponse(status_code=400, content=env.model_dump())
 
     @app.exception_handler(Exception)
     async def unexpected_error_handler(request: Request, exc: Exception):
         trace_id = getattr(request.state, "trace_id", None)
-        env = Datam8Error(code="unexpected", message="Unexpected error.", details=None, hint=None, exit_code=10).to_envelope(
-            trace_id=trace_id
-        )
+        env = Datam8Error(
+            code="unexpected",
+            message="Unexpected error.",
+            details=None,
+            hint=None,
+            exit_code=10,
+        ).to_envelope(trace_id=trace_id)
         return JSONResponse(status_code=500, content=env.model_dump())
 
     app.include_router(system_router)

@@ -68,7 +68,9 @@ app.add_typer(serve.app)
 
 @app.callback()
 def main_callback(
-    version: bool = typer.Option(False, "--version", callback=version_callback, is_eager=True),
+    version: bool = typer.Option(
+        False, "--version", callback=version_callback, is_eager=True
+    ),
 ) -> None:
     """CLI root callback."""
     _ = version

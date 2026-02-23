@@ -21,10 +21,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field, ValidationError
 
+from datam8 import factory, generate, logging, model_exceptions, opts
 from datam8.core import refactor as refactor_core
 from datam8.core import search as search_core
 from datam8.core import workspace_io, workspace_service
@@ -34,7 +35,6 @@ from datam8.core.jsonops import merge_patch, set_by_pointer
 from datam8.core.lock import SolutionLock
 from datam8.core.parse_utils import parse_duration_seconds
 from datam8.core.solution_index import read_index, validate_index
-from datam8.generate import GenerateResult, run_generation
 from datam8_model import model as model_model
 
 from .common import lock_timeout_seconds
@@ -63,6 +63,8 @@ from .response_models import (
     SearchTextResponse,
     ValidationStatusResponse,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -129,8 +131,7 @@ class RefactorPropertiesBody(BaseModel):
 class GenerateBody(BaseModel):
     """Request body for synchronous generation."""
 
-    solutionPath: str
-    target: str
+    target: str | None = None
     logLevel: str | None = None
     cleanOutput: bool | None = None
     payloads: list[str] | None = None
@@ -276,8 +277,12 @@ async def model_entity_get(
 ) -> ModelDocumentResponse:
     """Read a model entity by selector."""
     entity = resolve_model_entity(selector, solution_path=solutionPath, by=by)
-    content = model_model.ModelEntity.model_validate(workspace_io.read_workspace_json(entity.rel_path, solutionPath))
-    return ModelDocumentResponse(entity=entity.rel_path, content=_dump_sparse_json(content))
+    content = model_model.ModelEntity.model_validate(
+        workspace_io.read_workspace_json(entity.rel_path, solutionPath)
+    )
+    return ModelDocumentResponse(
+        entity=entity.rel_path, content=_dump_sparse_json(content)
+    )
 
 
 @router.post("/model/entity/create")
@@ -294,11 +299,17 @@ async def model_entity_create(body: ModelEntityCreateBody) -> MessageWithPathRes
 
 
 @router.post("/model/entity/validate")
-async def model_entity_validate(body: ModelEntitySelectorBody) -> ValidationStatusResponse:
+async def model_entity_validate(
+    body: ModelEntitySelectorBody,
+) -> ValidationStatusResponse:
     """Validate that a model entity matches the schema."""
-    entity = resolve_model_entity(body.selector, solution_path=body.solutionPath, by=body.by)
+    entity = resolve_model_entity(
+        body.selector, solution_path=body.solutionPath, by=body.by
+    )
     try:
-        model_model.ModelEntity.model_validate(workspace_io.read_workspace_json(entity.rel_path, body.solutionPath))
+        model_model.ModelEntity.model_validate(
+            workspace_io.read_workspace_json(entity.rel_path, body.solutionPath)
+        )
     except ValidationError as e:
         raise Datam8ValidationError(
             message="Model entity validation failed.",
@@ -310,9 +321,13 @@ async def model_entity_validate(body: ModelEntitySelectorBody) -> ValidationStat
 @router.post("/model/entity/set")
 async def model_entity_set(body: ModelEntitySetBody) -> MessageWithPathResponse:
     """Set a JSON pointer value in a model entity."""
-    entity = resolve_model_entity(body.selector, solution_path=body.solutionPath, by=body.by)
+    entity = resolve_model_entity(
+        body.selector, solution_path=body.solutionPath, by=body.by
+    )
     current = workspace_io.read_workspace_json(entity.rel_path, body.solutionPath)
-    next_doc = set_by_pointer(current, body.pointer, body.value, create_missing=body.createMissing)
+    next_doc = set_by_pointer(
+        current, body.pointer, body.value, create_missing=body.createMissing
+    )
     abs_path = workspace_service.save_model_entity(
         rel_path=entity.rel_path,
         content=next_doc,
@@ -326,7 +341,9 @@ async def model_entity_set(body: ModelEntitySetBody) -> MessageWithPathResponse:
 @router.post("/model/entity/patch")
 async def model_entity_patch(body: ModelEntityPatchBody) -> MessageWithPathResponse:
     """Apply a JSON merge patch to a model entity."""
-    entity = resolve_model_entity(body.selector, solution_path=body.solutionPath, by=body.by)
+    entity = resolve_model_entity(
+        body.selector, solution_path=body.solutionPath, by=body.by
+    )
     current = workspace_io.read_workspace_json(entity.rel_path, body.solutionPath)
     next_doc = merge_patch(current, body.patch)
     abs_path = workspace_service.save_model_entity(
@@ -455,7 +472,9 @@ async def model_folder_metadata_get(
     solutionPath: str | None = Query(None),
 ) -> JsonDocumentResponse:
     """Read folder metadata from a `.properties.json` file."""
-    content = workspace_service.read_folder_metadata(rel_path=relPath, solution_path=solutionPath)
+    content = workspace_service.read_folder_metadata(
+        rel_path=relPath, solution_path=solutionPath
+    )
     return JsonDocumentResponse(relPath=relPath, content=_dump_sparse_json(content))
 
 
@@ -485,7 +504,9 @@ async def model_folder_metadata_delete(body: DeleteEntityBody) -> MessageWithPat
 
 
 @router.post("/refactor/properties")
-async def refactor_properties_route(body: RefactorPropertiesBody) -> RefactorPropertiesResponse:
+async def refactor_properties_route(
+    body: RefactorPropertiesBody,
+) -> RefactorPropertiesResponse:
     """Refactor properties and values across model entities."""
     resolved, _sol = workspace_io.read_solution(body.solutionPath)
     if body.noLock:
@@ -508,7 +529,9 @@ async def refactor_properties_route(body: RefactorPropertiesBody) -> RefactorPro
                 deleted_properties=body.deletedProperties,
                 deleted_values=body.deletedValues,
             )
-    return RefactorPropertiesResponse(message="refactored", updatedFiles=result.updatedFiles)
+    return RefactorPropertiesResponse(
+        message="refactored", updatedFiles=result.updatedFiles
+    )
 
 
 @router.post("/index/regenerate")
@@ -534,19 +557,27 @@ async def index_validate_route(path: str | None = Query(None)) -> IndexValidateR
     return IndexValidateResponse(report=validate_index(path))
 
 
-@router.post("/generate", response_model=GenerateResult)
-async def generator_run(body: GenerateBody) -> GenerateResult:
+@router.post("/generate", response_model=generate.GenerateResult)
+async def generator_run(body: GenerateBody) -> generate.GenerateResult:
     """Execute generator synchronously."""
-    return await run_in_threadpool(
-        run_generation,
-        solution_path=Path(body.solutionPath),
-        target=body.target,
-        log_level=body.logLevel or "info",
-        clean_output=bool(body.cleanOutput),
-        payloads=body.payloads or [],
-        generate_all=False,
-        lazy=bool(body.lazy),
+
+    # The API server is long-lived; decorators in target modules would otherwise
+    # re-register payloads on subsequent runs and fail with "already registered".
+    generate.payload_functions.clear()
+
+    model = factory.get_model()  # currently loaded model
+
+    result = generate.generate_output(
+        model,
+        generate.GeneratorConfig(
+            target=model.get_generator_target(body.target or opts.default_target),
+            clean_output=body.cleanOutput or False,
+            payloads=body.payloads or [],
+            generate_all=False,
+        ),
     )
+
+    return result
 
 
 @router.get(
@@ -574,6 +605,9 @@ async def base_entity_get(
     solutionPath: str | None = Query(None),
 ) -> JsonDocumentResponse:
     """Read a base entity JSON document."""
+
+    logger.info("input: %s", relPath)
+
     content = workspace_io.read_base_entity(relPath, solutionPath)
     return JsonDocumentResponse(relPath=relPath, content=_dump_sparse_json(content))
 
@@ -641,7 +675,10 @@ async def base_entity_patch(body: PatchEntityBody) -> MessageWithPathResponse:
 @router.get("/fs/list")
 async def fs_list(path: str | None = Query(None)) -> EntriesResponse:
     """List directory entries inside the active workspace."""
-    entries = [DirectoryEntryResponse.model_validate(entry.model_dump()) for entry in workspace_io.list_directory(path)]
+    entries = [
+        DirectoryEntryResponse.model_validate(entry.model_dump())
+        for entry in workspace_io.list_directory(path)
+    ]
     return EntriesResponse(entries=entries)
 
 
@@ -658,7 +695,9 @@ async def model_function_source_get(
 
 
 @router.post("/model/function/source")
-async def model_function_source_save(body: FunctionSourceSaveBody) -> MessageWithPathResponse:
+async def model_function_source_save(
+    body: FunctionSourceSaveBody,
+) -> MessageWithPathResponse:
     """Save model function source content."""
     resolved, _sol = workspace_io.read_solution(body.solutionPath)
     with SolutionLock(
@@ -676,7 +715,9 @@ async def model_function_source_save(body: FunctionSourceSaveBody) -> MessageWit
 
 
 @router.post("/model/function/rename")
-async def model_function_source_rename(body: FunctionSourceRenameBody) -> FunctionSourceRenameResponse:
+async def model_function_source_rename(
+    body: FunctionSourceRenameBody,
+) -> FunctionSourceRenameResponse:
     """Rename model function source key."""
     resolved, _sol = workspace_io.read_solution(body.solutionPath)
     with SolutionLock(
@@ -699,7 +740,9 @@ async def model_function_source_rename(body: FunctionSourceRenameBody) -> Functi
 
 
 @router.get("/script/list")
-async def script_list(path: str = Query(...), solutionPath: str | None = Query(None)) -> ScriptListResponse:
+async def script_list(
+    path: str = Query(...), solutionPath: str | None = Query(None)
+) -> ScriptListResponse:
     """List script/function source names for an entity."""
     scripts = workspace_io.list_function_sources(
         path,
@@ -727,14 +770,18 @@ async def script_delete(
 
 
 @router.get("/search/entities")
-async def search_entities_route(q: str = Query(...), path: str | None = Query(None)) -> SearchEntitiesResponse:
+async def search_entities_route(
+    q: str = Query(...), path: str | None = Query(None)
+) -> SearchEntitiesResponse:
     """Search entities by metadata fields."""
     result = search_core.search_entities(solution_path=path, query=q)
     return SearchEntitiesResponse(count=result["count"], entities=result["entities"])
 
 
 @router.get("/search/text")
-async def search_text_route(q: str = Query(...), path: str | None = Query(None)) -> SearchTextResponse:
+async def search_text_route(
+    q: str = Query(...), path: str | None = Query(None)
+) -> SearchTextResponse:
     """Search raw text across solution files."""
     result = search_core.search_text(solution_path=path, pattern=q)
     return SearchTextResponse(

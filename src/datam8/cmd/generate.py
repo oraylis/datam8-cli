@@ -16,15 +16,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-import sys
-from pathlib import Path
-
 import rich
 import typer
 
-from .. import config, opts, utils
-from ..generate import run_generation
+from datam8 import config, factory, generate, logging, opts
 
+logger = logging.getLogger(__name__)
 app = typer.Typer(
     name="generate",
     add_completion=False,
@@ -32,52 +29,35 @@ app = typer.Typer(
     help="Generate a jinja2 template configured in the solution file.",
 )
 
-logger = utils.start_logger(__name__)
-sys.tracebacklimit = 0
-
 
 @app.callback(invoke_without_command=True)
 def command(
-    solution_path: Path | None = typer.Option(
-        None,
-        "--solution",
-        "-s",
-        "--solution-path",
-        help="Path to .dm8s solution file (or folder containing exactly one .dm8s file).",
-        envvar="DATAM8_SOLUTION_PATH",
-    ),
-    target: opts.GeneratorTarget = config.target,
-    log_level: str | None = typer.Option(
-        None,
-        "--log-level",
-        "-l",
-        help="Set log level (defaults to global --log-level or DATAM8_LOG_LEVEL).",
-        envvar="DATAM8_LOG_LEVEL",
-    ),
+    solution_path: opts.SolutionPath,
+    target: opts.GeneratorTarget = opts.default_target,
+    log_level: opts.LogLevel = opts.LogLevels.WARNING,
     clean_output: opts.CleanOutput = False,
     payloads: opts.Payload = [],
     generate_all: opts.AllTargets = False,
     lazy: opts.Lazy = False,
 ):
     """Generate a jinja2 template configured in the solution file."""
-    if solution_path is None:
-        raise typer.BadParameter("No solution specified. Use --solution/-s (or set DATAM8_SOLUTION_PATH).")
 
-    effective_log_level = log_level
-    if not isinstance(effective_log_level, str) or not effective_log_level.strip():
-        effective_log_level = opts.LogLevels.WARNING.value
+    config.log_level = log_level
+    config.lazy = lazy
 
-    try:
-        _ = run_generation(
-            solution_path=solution_path,
-            target=target,
-            log_level=effective_log_level,
-            clean_output=clean_output,
-            payloads=payloads,
-            generate_all=generate_all,
-            lazy=lazy,
-        )
-    except Exception:
-        sys.exit(1)
+    config.set_solution(solution_path)
+    logging.setup_logger()
+
+    if generate_all:
+        logger.warning("The --all option is set, but is currently ignored.")
+
+    model = factory.create_model_or_exit(config.solution_path)
+    _ = generate.generate_output(
+        model,
+        target=target,
+        payloads=payloads,
+        generate_all=generate_all,
+        clean_output=clean_output,
+    )
 
     rich.print("Generation successfull")

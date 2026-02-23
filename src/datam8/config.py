@@ -18,7 +18,8 @@
 
 from pathlib import Path
 
-from . import opts
+from datam8 import opts
+from datam8.core import errors
 
 supported_model_versions = ("2.0.0",)
 
@@ -27,12 +28,49 @@ log_level: opts.LogLevels = opts.LogLevels.WARNING
 solution_folder_path: Path
 solution_path: Path
 
-module_path: Path
-template_path: Path
-output_path: Path
-target: str = "none"
+run_as_api: bool = False
+"""
+Flag to indicate weither datam8 runs in api mode. Some parts of the code will emit different
+errors.
+"""
 
 lazy: bool = False
 """
 If set to true only resolves references when entity is looked up
 """
+
+
+def set_solution(path: str | Path) -> None:
+    global solution_path, solution_folder_path
+    search_path = Path(path).expanduser()
+
+    if search_path.is_file():
+        solution_path = search_path.resolve(strict=True)
+        solution_folder_path = solution_path.parent
+
+    if search_path.is_dir():
+        solution_folder_path = search_path
+        dm8s_files = list(search_path.glob("*.dm8s"))
+
+        match len(dm8s_files):
+            case 1:
+                solution_path = dm8s_files[0]
+            case 0:
+                raise errors.Datam8NotFoundError(
+                    message="No .dm8s file found in the provided directory.",
+                    details={"dir": search_path.as_posix()},
+                )
+            case _:
+                raise errors.Datam8ValidationError(
+                    message="Multiple .dm8s files found; provide an explicit .dm8s path.",
+                    details={
+                        "dir": {search_path.as_posix()},
+                        "candidates": map(str, dm8s_files),
+                    },
+                )
+
+    if not solution_path.exists():
+        raise errors.Datam8NotFoundError(
+            message="Solution file not found.",
+            details={"solution": search_path.as_posix()},
+        )

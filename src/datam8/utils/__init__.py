@@ -36,15 +36,34 @@ Utility Module to make working with datam8 models more comfortable in jinja2 tem
 """
 
 import functools
-import logging
 import os
 from collections.abc import Callable
+from logging import FileHandler, StreamHandler
 from pathlib import Path
 from typing import Any
 
+import fastapi
+from pydantic import BaseModel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from .. import config, opts
+from datam8 import config, logging, opts
+
+logger = logging.getLogger(__name__)
+
+
+def create_error(err: Exception) -> Exception:
+    if config.run_as_api:
+        return fastapi.HTTPException(status_code=500, detail=str(err))
+
+    return err
+
+
+def emit_result(*messages: str, model: BaseModel, json: bool = False) -> None:
+    if json:
+        print(model.model_dump_json(indent=4))
+    else:
+        for msg in messages:
+            print(msg)
 
 
 def delete_path(path: Path, recursive: bool = False) -> None:
@@ -190,47 +209,16 @@ def start_logger(
         formatter = logging.Formatter(
             "%(asctime)s - %(levelname)s - %(name)s: %(message)s"
         )
-        file_handler = logging.FileHandler(log_path)
+        file_handler = FileHandler(log_path)
         file_handler.setFormatter(formatter)
 
         logger.addHandler(file_handler)
 
     # Adding Stream handler to print out logs additionally to the console
-    stream_handler = logging.StreamHandler()
-    stream_handler.setFormatter(ColorFormatter())
+    stream_handler = StreamHandler()
+    stream_handler.setFormatter(logging.ColorFormatter())
 
     if not logger.hasHandlers():
         logger.addHandler(stream_handler)
 
     return logger
-
-
-class ColorFormatter(logging.Formatter):
-    """Logging Formatter to add colors and count warning/errors"""
-
-    grey = "\x1b[90m"
-    green = "\x1b[92m"
-    yellow = "\x1b[93m"
-    red = "\x1b[91m"
-    reset = "\x1b[0m"
-    _time = grey + "%(asctime)s "
-    _level = "[%(levelname)-5s] "
-    _scope = grey + "%(name)s | "
-    _msg = "%(message)s" + reset
-
-    # fmt: off
-    FORMATS = {
-        logging.DEBUG:    _time          + _level + _scope + reset + _msg,
-        logging.INFO:     _time + green  + _level + _scope + reset + _msg,
-        logging.WARNING:  _time + yellow + _level + _scope + reset + _msg,
-        logging.ERROR:    _time + red    + _level + _scope + red   + _msg,
-        logging.CRITICAL: _time + red    + _level + _scope + red   + _msg,
-    }
-    # fmt: on
-
-    def format(self, record) -> str:
-        record.levelname = "WARN" if record.levelname == "WARNING" else record.levelname
-        record.levelname = "ERROR" if record.levelname == "CRITICAL" else record.levelname
-        log_fmt = self.FORMATS.get(record.levelno)
-        formatter = logging.Formatter(log_fmt)
-        return formatter.format(record)

@@ -30,7 +30,7 @@ from datam8_model import base as b
 from datam8_model import model as m
 from datam8_model import solution as s
 
-from . import config, utils
+from . import config, logging, utils
 from . import parser_exceptions as errors
 from .model import (
     EntityDict,
@@ -41,11 +41,10 @@ from .model import (
     wrap_base_entity,
 )
 
-logger = utils.start_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @utils.print_progress_async("Parsing files...")
-@utils.get_logger
 async def parse_full_solution_async(solution_path: pathlib.Path) -> Model:
     """Load and parses all json files in a solution into generator internal objects.
 
@@ -141,6 +140,7 @@ def __parse_model_entities(
         clean_path = rel_path.as_posix().removeprefix(path.as_posix())
         locator = Locator.from_path(f"{b.EntityType.MODEL_ENTITIES.value}{clean_path}")
         model_entities[locator] = EntityWrapper[m.ModelEntity](
+            source_file=config.solution_folder_path / rel_path,
             locator=locator,
             entity=model_entity_or_err,
         )
@@ -219,7 +219,12 @@ def __parse_base_entities(
                     locator_path = rel_path.parents[1] / locator_path
 
             base_entities[entity_type].append(
-                wrap_base_entity(entity_type, locator_path, entity)
+                wrap_base_entity(
+                    entity_type=entity_type,
+                    locator_path=locator_path,
+                    entity=entity,
+                    source_file=config.solution_folder_path / rel_path,
+                )
             )
 
     if executor is None:
@@ -265,7 +270,9 @@ def __parse_base_entity_file(
 def __validate_folder_product_module(
     base_entities: dict[str, EntityDict[Any]],
 ) -> None:
-    data_products: EntityDict[Any] = base_entities.get(b.EntityType.DATA_PRODUCTS.value, {})
+    data_products: EntityDict[Any] = base_entities.get(
+        b.EntityType.DATA_PRODUCTS.value, {}
+    )
     folders: EntityDict[Any] = base_entities.get(b.EntityType.FOLDERS.value, {})
 
     known_products: dict[str, set[str]] = {}
@@ -287,9 +294,7 @@ def __validate_folder_product_module(
         data_module = (getattr(wrapped.entity, "dataModule", "") or "").strip()
 
         if data_module and not data_product:
-            issues.append(
-                f"{locator}: dataModule '{data_module}' requires dataProduct."
-            )
+            issues.append(f"{locator}: dataModule '{data_module}' requires dataProduct.")
             continue
 
         if data_product and data_product not in known_products:

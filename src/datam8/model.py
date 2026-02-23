@@ -33,10 +33,10 @@ from datam8_model import property as p
 from datam8_model import solution as s
 from datam8_model import zone as z
 
+from . import logging, opts, utils
 from . import model_exceptions as errors
-from . import utils
 
-logger = utils.start_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 type BaseEntityDict[T] = dict[b.EntityType, list[T]]
@@ -44,7 +44,7 @@ type EntityDict[T] = dict[Locator, EntityWrapper[T]]
 
 
 def wrap_base_entity[T](
-    entity_type: b.EntityType, path: Path, entity: T
+    entity_type: b.EntityType, locator_path: Path, entity: T, source_file: Path
 ) -> "EntityWrapper[T]":
     """
     Wraps an entity parsed from a json file into an EntityWrapper object.
@@ -63,15 +63,17 @@ def wrap_base_entity[T](
     `EntityWrapper[T]`
         The entity embedded into an EntityWrapper base on the generic type.
     """
+
     locator = Locator(
         entityType=entity_type.value,
-        folders=path.as_posix().split("/")[1:-1],
+        folders=locator_path.as_posix().split("/")[1:-1],
         entityName=getattr(entity, "name"),  # noqa: B009
     )
 
     return EntityWrapper[T](
         locator=locator,
         entity=entity,
+        source_file=source_file,
     )
 
 
@@ -281,6 +283,10 @@ class EntityWrapper[T](BaseModel):
     locator: Locator
     """
     A unique identifier for every entity/object within the solution.
+    """
+    source_file: Path
+    """
+    The path to the model file where this entity is stored in.
     """
     entity: T
     """
@@ -502,11 +508,27 @@ class Model:
                 yield wrapper
 
     def get_generator_target(self, name: str) -> s.GeneratorTarget:
+        if name == opts.default_target:
+            return self.get_generator_default_target()
+
         for target in self.solution.generatorTargets:
             if target.name == name:
                 return target
 
-        raise errors.InvalidGeneratorTargetError(name)
+        raise utils.create_error(errors.InvalidGeneratorTargetError(name))
+
+    def get_generator_default_target(self) -> s.GeneratorTarget:
+        default_targets = list(
+            filter(lambda t: t.isDefault, self.solution.generatorTargets)
+        )
+
+        match len(default_targets):
+            case 0:
+                raise Exception("No default target defined")
+            case 1:
+                return default_targets.pop()
+            case _:
+                raise Exception("Multiple default targets defined")
 
     def _get_entity[T](
         self, entity_dict: EntityDict[T], entity_type: b.EntityType, name: str
@@ -660,6 +682,22 @@ class Model:
             wrapper.resolve(self)
 
         return wrapper
+
+    def get_entity_by_selector(
+        self, selector: str, by: opts.Selectors
+    ) -> EntityWrapper[Any]:
+        match by:
+            case opts.Selectors.NAME:
+                for wrapper in self.modelEntities.values():
+                    if wrapper.entity.name == selector:
+                        return wrapper
+                raise errors.EntityNotFoundError(selector)
+            case opts.Selectors.ID:
+                return self.get_model_entity_by_id(int(selector))
+            case opts.Selectors.LOCATOR:
+                return self.get_entity_by_locator(selector)
+            case _:
+                raise NotImplementedError(f"by {by}")
 
     def get_entities(self, search_locator: str | Locator) -> list[EntityWrapper[Any]]:
         """
