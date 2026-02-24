@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from datam8.core import parser_v1
+from datam8.core.errors import Datam8ValidationError
 from datam8.core.migration_v1_to_v2_config import (
     BASE_DIR_NAME,
     DIAGRAM_DIR_NAME,
@@ -52,7 +53,6 @@ from datam8.core.migration_v1_to_v2_transform import (
     convert_base_data_sources,
     convert_base_data_types,
 )
-from datam8.core.errors import Datam8ValidationError
 from datam8.core.workspace_io import regenerate_index
 
 
