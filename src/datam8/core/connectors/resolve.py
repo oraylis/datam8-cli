@@ -26,6 +26,7 @@ from datam8.core.connectors.binding import decode_connector_binding
 from datam8.core.connectors.plugin_host import (
     SecretResolver,
     get_connector,
+    has_capability,
     load_connector_class,
 )
 from datam8.core.connectors.plugin_host import (
@@ -155,17 +156,18 @@ def resolve_and_validate(
 
     overrides = {k: (v or "").strip() for k, v in (runtime_secrets or {}).items() if isinstance(k, str) and isinstance(v, str) and v.strip()}
 
-    validation = validate_connection_via_plugin(
-        plugin=plugin,
-        solution_path=solution_path,
-        extended_properties=props,
-        runtime_secret_overrides=overrides or None,
-    )
-    if not validation.get("ok"):
-        raise Datam8ValidationError(
-            message=f"Invalid connection config for DataSource '{data_source_id}' ({plugin.id}).",
-            details={"errors": validation.get("errors") or []},
+    if has_capability(plugin, "validateConnection"):
+        validation = validate_connection_via_plugin(
+            plugin=plugin,
+            solution_path=solution_path,
+            extended_properties=props,
+            runtime_secret_overrides=overrides or None,
         )
+        if not validation.get("ok"):
+            raise Datam8ValidationError(
+                message=f"Invalid connection config for DataSource '{data_source_id}' ({plugin.id}).",
+                details={"errors": validation.get("errors") or []},
+            )
 
     resolver = SecretResolver(solution_path=solution_path, overrides=overrides or None)
     return connector_cls, plugin.to_summary(), props, resolver

@@ -28,7 +28,12 @@ class Connector:
             "id": "test-conn",
             "displayName": "Test Connector",
             "version": "0.1.0",
-            "capabilities": ["uiSchema", "validateConnection", "metadata"],
+            "capabilities": {
+                "uiSchema": True,
+                "validateConnection": True,
+                "metadata": {"listTables": True, "getTableMetadata": True},
+                "runtimeQuery": {"sql": False, "dataFrame": False},
+            },
         }
 
     @staticmethod
@@ -74,4 +79,3 @@ class Connector:
     @staticmethod
     def get_table_metadata(extended_properties: dict[str, str], secret_resolver, schema: str, table: str) -> dict[str, Any]:
         return {"schema": schema, "name": table, "type": "BASE TABLE", "columns": [{"name": "id", "dataType": "int"}]}
-

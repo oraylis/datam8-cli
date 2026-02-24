@@ -48,7 +48,12 @@ def test_connectors_list_and_ui_schema(
     with api_client(token=token, plugin_dir=temp_plugin_dir) as client:
         response = client.get("/connectors", headers=headers)
         response.raise_for_status()
-        assert "test-conn" in _connector_ids(response.json())
+        payload = response.json()
+        assert "test-conn" in _connector_ids(payload)
+        connector = next((c for c in (payload.get("connectors") or []) if isinstance(c, dict) and c.get("id") == "test-conn"), None)
+        assert isinstance(connector, dict)
+        assert isinstance(connector.get("capabilities"), dict)
+        assert connector.get("manifestVersion") == 1
 
         response = client.get("/connectors/test-conn/ui-schema", headers=headers)
         response.raise_for_status()

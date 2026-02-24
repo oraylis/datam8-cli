@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -27,12 +28,22 @@ from fastapi.responses import JSONResponse
 
 from datam8.api.routes.api import router as api_router
 from datam8.api.routes.system import router as system_router
+from datam8.core.connectors import plugin_manager
 from datam8.core.errors import Datam8Error, Datam8ValidationError
 from datam8.core.runtime_meta import get_version, new_trace_id
 
 
 def _status_for_error(err: Datam8Error) -> int:
-    if err.code in {"validation_error"}:
+    if err.code in {
+        "validation_error",
+        "connector_capability_missing",
+        "connector_manifest_invalid",
+        "connector_dependency_missing",
+        "connector_runtime_context_missing",
+        "connector_secret_resolution_failed",
+        "connector_distribution_invalid",
+        "connector_distribution_hash_mismatch",
+    }:
         return 400
     if err.code in {"not_found"}:
         return 404
@@ -53,8 +64,29 @@ def _is_exempt_path(path: str) -> bool:
     return path in {"/health", "/version"}
 
 
+def _plugin_dir() -> Path:
+    configured = (os.environ.get("DATAM8_PLUGIN_DIR") or "").strip()
+    if configured:
+        return Path(configured)
+    return plugin_manager.default_plugin_dir()
+
+
+def _sync_bundled_wheels_if_enabled() -> None:
+    auto_flag = (os.environ.get("DATAM8_AUTO_INSTALL_BUNDLED_WHEELS") or "").strip()
+    if auto_flag not in {"1", "true", "True"}:
+        return
+    wheelhouse_raw = (os.environ.get("DATAM8_PLUGIN_WHEELHOUSE") or "").strip()
+    if not wheelhouse_raw:
+        return
+    wheelhouse = Path(wheelhouse_raw)
+    if not wheelhouse.exists() or not wheelhouse.is_dir():
+        return
+    plugin_manager.sync_bundled_wheels(plugin_dir=_plugin_dir(), wheels_dir=wheelhouse)
+
+
 def create_app(*, token: str, enable_openapi: bool = False) -> FastAPI:
     """Create and configure the HTTP API application."""
+    _sync_bundled_wheels_if_enabled()
     if enable_openapi:
         app = FastAPI(title="DataM8 API", version=get_version())
     else:

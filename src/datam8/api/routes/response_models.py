@@ -191,7 +191,41 @@ class ConnectorSummaryResponse(BaseModel):
     id: str
     displayName: str | None = None
     version: str | None = None
-    capabilities: list[str] | None = None
+    manifestVersion: int | None = None
+    capabilities: "ConnectorCapabilitiesResponse | None" = None
+    distribution: "ConnectorDistributionResponse | None" = None
+    installSource: str | None = None
+
+
+class ConnectorCapabilitiesMetadataResponse(BaseModel):
+    """Metadata capability flags."""
+
+    listTables: bool = False
+    getTableMetadata: bool = False
+
+
+class ConnectorCapabilitiesRuntimeQueryResponse(BaseModel):
+    """Runtime query capability flags."""
+
+    sql: bool = False
+    dataFrame: bool = False
+
+
+class ConnectorCapabilitiesResponse(BaseModel):
+    """Normalized capability object."""
+
+    uiSchema: bool = False
+    validateConnection: bool = False
+    metadata: ConnectorCapabilitiesMetadataResponse = Field(default_factory=ConnectorCapabilitiesMetadataResponse)
+    runtimeQuery: ConnectorCapabilitiesRuntimeQueryResponse = Field(default_factory=ConnectorCapabilitiesRuntimeQueryResponse)
+
+
+class ConnectorDistributionResponse(BaseModel):
+    """Connector distribution metadata."""
+
+    type: str = "wheel"
+    filename: str = ""
+    sha256: str = ""
 
 
 class ConnectorsResponse(BaseModel):
@@ -388,7 +422,10 @@ class PluginInfoResponse(BaseModel):
     name: str | None = None
     displayName: str | None = None
     version: str | None = None
-    capabilities: list[str] | None = None
+    manifestVersion: int | None = None
+    capabilities: ConnectorCapabilitiesResponse | None = None
+    distribution: ConnectorDistributionResponse | None = None
+    installSource: str | None = None
 
 
 class PluginStateResponse(BaseModel):

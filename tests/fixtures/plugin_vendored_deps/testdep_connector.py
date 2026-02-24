@@ -28,7 +28,12 @@ class Connector:
             "id": "testdep",
             "displayName": "Testdep",
             "version": vendored_dep.VALUE,
-            "capabilities": ["uiSchema", "validateConnection", "metadata"],
+            "capabilities": {
+                "uiSchema": True,
+                "validateConnection": True,
+                "metadata": {"listTables": True, "getTableMetadata": True},
+                "runtimeQuery": {"sql": False, "dataFrame": False},
+            },
         }
 
     @staticmethod

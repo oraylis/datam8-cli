@@ -89,7 +89,7 @@ Shared sources of truth:
 | Datasource | Refresh apply | `POST /datasources/{dataSourceId}/refresh-external-schemas/apply` | `datam8 datasource refresh-apply` | `schema_refresh.apply_schema_changes` |
 | Plugin | List/reload/install/enable/disable/uninstall | `GET /plugins`, `POST /plugins/reload`, `POST /plugins/install`, `POST /plugins/enable`, `POST /plugins/disable`, `POST /plugins/uninstall` | `datam8 plugin list/reload/install/enable/disable/uninstall` | `plugin_manager.*` |
 | Plugin | Plugin info | `GET /plugins/{pluginId}/info` | `datam8 plugin info` | plugin state lookup |
-| Plugin | Plugin verify | `POST /plugins/{pluginId}/verify`, `POST /plugins/verify` | `datam8 plugin verify` | installed-plugin or ZIP verification |
+| Plugin | Plugin verify | `POST /plugins/{pluginId}/verify`, `POST /plugins/verify` | `datam8 plugin verify` | installed-plugin or wheel verification |
 | Secret | Availability | `GET /secrets/available` | `datam8 secret available` | `secrets.is_keyring_available` |
 | Secret | List keys | `GET /secrets/runtime/list` | `datam8 secret list` | `secrets.list_runtime_secret_keys` |
 | Secret | Secret refs | `GET /secrets/runtime` | `datam8 secret refs` | `secrets.runtime_secret_ref` |

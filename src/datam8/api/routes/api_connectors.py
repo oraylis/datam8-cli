@@ -30,7 +30,6 @@ from datam8.core.connectors import plugin_host, plugin_manager
 from datam8.core.connectors import resolve as connector_resolve
 from datam8.core.errors import (
     Datam8NotFoundError,
-    Datam8NotImplementedError,
     Datam8ValidationError,
 )
 from datam8.core.lock import SolutionLock
@@ -67,6 +66,13 @@ class PluginIdBody(BaseModel):
     """Request body for plugin id commands."""
 
     id: str
+
+
+class PluginInstallFromUrlBody(BaseModel):
+    """Request body for URL-based wheel install."""
+
+    url: str
+    sha256: str
 
 
 class DataSourceAuthBody(BaseModel):
@@ -214,34 +220,33 @@ async def plugins_reload() -> PluginStateResponse:
 
 @router.post("/plugins/install")
 async def plugins_install(req: Request) -> PluginStateResponse:
-    """Install a plugin from zip payload or git URL."""
+    """Install a plugin from wheel upload or URL+sha256."""
     configured_plugin_dir = plugin_dir()
     content_type = (req.headers.get("content-type") or "").lower()
-    if "application/zip" in content_type:
-        zip_bytes = await req.body()
+    if "application/octet-stream" in content_type or "application/x-wheel+zip" in content_type:
+        wheel_bytes = await req.body()
         file_name = req.headers.get("x-file-name")
-        plugin_manager.install_zip(
+        plugin_manager.install_wheel(
             plugin_dir=configured_plugin_dir,
-            zip_bytes=zip_bytes,
+            wheel_bytes=wheel_bytes,
             file_name=file_name,
         )
         return PluginStateResponse.model_validate(
             plugin_manager.reload(configured_plugin_dir)
         )
     if "application/json" in content_type:
-        body = await req.json()
-        git_url = body.get("gitUrl") if isinstance(body, dict) else None
-        if not isinstance(git_url, str) or not git_url.strip():
-            raise Datam8ValidationError(message="gitUrl is required.", details=None)
-        plugin_manager.install_git_url(
+        body = PluginInstallFromUrlBody.model_validate(await req.json())
+        plugin_manager.install_wheel_url(
             plugin_dir=configured_plugin_dir,
-            git_url=git_url,
+            url=body.url,
+            sha256=body.sha256,
         )
         return PluginStateResponse.model_validate(
             plugin_manager.reload(configured_plugin_dir)
         )
-    raise Datam8NotImplementedError(
-        message="Only ZIP or GitHub gitUrl plugin installation is supported."
+    raise Datam8ValidationError(
+        code="connector_distribution_invalid",
+        message="Only wheel uploads or URL+sha256 installs are supported."
     )
 
 
@@ -300,19 +305,28 @@ async def plugin_verify(pluginId: str) -> PluginVerifyResponse:
     )
     if not plugin:
         raise Datam8NotFoundError(message="Plugin not found.", details={"id": pluginId})
-    verified = "sha256" in plugin and "entry" in plugin
+    distribution = plugin.get("distribution") if isinstance(plugin, dict) else None
+    verified = (
+        isinstance(distribution, dict)
+        and distribution.get("type") == "wheel"
+        and isinstance(distribution.get("sha256"), str)
+        and bool(distribution.get("sha256"))
+        and "entry" in plugin
+    )
     return PluginVerifyResponse(verified=verified, plugin=plugin)
 
 
 @router.post("/plugins/verify")
 async def plugins_verify(req: Request) -> PluginVerifyResponse:
-    """Verify plugin metadata or validate a ZIP plugin bundle."""
+    """Verify plugin metadata or validate a wheel bundle."""
     content_type = (req.headers.get("content-type") or "").lower()
-    if "application/zip" in content_type:
-        bundle = plugin_manager.verify_zip_bundle(zip_bytes=await req.body())
+    if "application/octet-stream" in content_type or "application/x-wheel+zip" in content_type:
+        file_name = req.headers.get("x-file-name")
+        bundle = plugin_manager.verify_wheel_bundle(wheel_bytes=await req.body(), file_name=file_name)
         return PluginVerifyResponse(verified=True, bundle=asdict(bundle))
     raise Datam8ValidationError(
-        message="Only ZIP bundle verification is supported.",
+        code="connector_distribution_invalid",
+        message="Only wheel bundle verification is supported.",
         details=None,
     )
 
@@ -334,10 +348,12 @@ async def datasources_list_tables(
         data_source_id=dataSourceId,
         runtime_secrets=merged,
     )
+    plugin_host.require_capability(manifest, "metadata.listTables")
     if not hasattr(connector_cls, "list_tables"):
         raise Datam8ValidationError(
-            message=f"Connector '{manifest.get('id')}' does not support metadata operations.",
-            details=None,
+            code="connector_manifest_invalid",
+            message=f"Connector '{manifest.get('id')}' advertises metadata.listTables but list_tables is missing.",
+            details={"id": manifest.get("id")},
         )
     tables = connector_cls.list_tables(cfg, resolver)  # type: ignore[attr-defined]
     return TablesResponse(tables=tables)
@@ -360,8 +376,15 @@ async def datasources_test(
         data_source_id=dataSourceId,
         runtime_secrets=merged,
     )
+    plugin_host.require_capability(manifest, "validateConnection")
     if hasattr(connector_cls, "test_connection"):
         connector_cls.test_connection(cfg, resolver)  # type: ignore[attr-defined]
+    else:
+        raise Datam8ValidationError(
+            code="connector_manifest_invalid",
+            message=f"Connector '{manifest.get('id')}' advertises validateConnection but test_connection is missing.",
+            details={"id": manifest.get("id")},
+        )
     connector_id = manifest.get("id")
     return StatusResponse(
         status="ok",
@@ -386,10 +409,12 @@ async def datasources_table_metadata(
         data_source_id=dataSourceId,
         runtime_secrets=merged,
     )
+    plugin_host.require_capability(manifest, "metadata.getTableMetadata")
     if not hasattr(connector_cls, "get_table_metadata"):
         raise Datam8ValidationError(
-            message=f"Connector '{manifest.get('id')}' does not support metadata operations.",
-            details=None,
+            code="connector_manifest_invalid",
+            message=f"Connector '{manifest.get('id')}' advertises metadata.getTableMetadata but get_table_metadata is missing.",
+            details={"id": manifest.get("id")},
         )
     metadata = connector_cls.get_table_metadata(
         cfg,
@@ -425,6 +450,7 @@ async def http_virtual_table_metadata(
     source_location = (body.sourceLocation or "").strip()
     if not source_location:
         raise Datam8ValidationError(message="sourceLocation is required.", details=None)
+    plugin_host.require_capability(manifest, "metadata.getTableMetadata")
     if hasattr(connector_cls, "get_virtual_table_metadata"):
         return MetadataResponse(
             metadata=connector_cls.get_virtual_table_metadata(

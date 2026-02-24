@@ -58,7 +58,12 @@ def test_plugin_loader_supports_vendored_site_packages(case_data, tmp_path: Path
                 "displayName": plugin_id,
                 "version": "0.1.0",
                 "entrypoint": f"datam8_plugins.{plugin_id}.connector:Connector",
-                "capabilities": ["uiSchema", "validateConnection", "metadata"],
+                "capabilities": {
+                    "uiSchema": True,
+                    "validateConnection": True,
+                    "metadata": {"listTables": True, "getTableMetadata": True},
+                    "runtimeQuery": {"sql": False, "dataFrame": False},
+                },
             }
         ),
     )
@@ -100,7 +105,12 @@ def test_plugin_methods_support_lazy_vendored_imports(case_data, tmp_path: Path)
                 "displayName": plugin_id,
                 "version": "0.1.0",
                 "entrypoint": f"datam8_plugins.{plugin_id}.connector:Connector",
-                "capabilities": ["uiSchema", "validateConnection", "metadata"],
+                "capabilities": {
+                    "uiSchema": True,
+                    "validateConnection": True,
+                    "metadata": {"listTables": True, "getTableMetadata": True},
+                    "runtimeQuery": {"sql": False, "dataFrame": False},
+                },
             }
         ),
     )

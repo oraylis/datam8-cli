@@ -3,7 +3,13 @@
   "id": "test-conn",
   "displayName": "Test Connector",
   "version": "0.1.0",
+  "manifestVersion": 1,
   "entrypoint": "datam8_plugins.test_conn.connector:Connector",
-  "capabilities": ["uiSchema", "validateConnection", "metadata"]
+  "capabilities": {
+    "uiSchema": true,
+    "validateConnection": true,
+    "metadata": { "listTables": true, "getTableMetadata": true },
+    "runtimeQuery": { "sql": false, "dataFrame": false }
+  }
 }
 

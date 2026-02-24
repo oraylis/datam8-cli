@@ -27,12 +27,12 @@ import typer
 from datam8 import opts as cli_opts
 from datam8.core.connectors.plugin_manager import (
     default_plugin_dir,
-    install_git_url,
-    install_zip,
+    install_wheel,
+    install_wheel_url,
     reload,
     set_enabled,
     uninstall,
-    verify_zip_bundle,
+    verify_wheel_bundle,
 )
 from datam8.core.errors import Datam8NotFoundError, Datam8ValidationError
 
@@ -83,23 +83,26 @@ def reload_plugins(
 
 @app.command("install")
 def install(
-    git_url: str | None = typer.Option(None, "--git-url", help="Git URL to install from."),
-    zip_file: str | None = typer.Option(None, "--zip-file", help="Local plugin ZIP file path."),
+    url: str | None = typer.Option(None, "--url", help="HTTPS wheel URL to install from."),
+    wheel_file: str | None = typer.Option(None, "--wheel-file", help="Local connector wheel path."),
+    sha256: str | None = typer.Option(None, "--sha256", help="Expected wheel sha256 (required for --url)."),
     json_output: cli_opts.JsonOutput = False,
     quiet: cli_opts.Quiet = False,
 ) -> None:
-    """Install a plugin from Git URL or ZIP file."""
+    """Install a plugin from wheel URL+sha256 or local wheel file."""
     opts = make_global_options(json_output=json_output, quiet=quiet)
     plugin_dir = _plugin_dir()
-    if bool(git_url) == bool(zip_file):
-        raise Datam8ValidationError(message="Provide exactly one of --git-url or --zip-file.", details=None)
+    if bool(url) == bool(wheel_file):
+        raise Datam8ValidationError(message="Provide exactly one of --url or --wheel-file.", details=None)
 
-    if zip_file:
-        zip_path = Path(zip_file)
-        data = zip_path.read_bytes()
-        install_zip(plugin_dir=plugin_dir, zip_bytes=data, file_name=zip_path.name)
+    if wheel_file:
+        wheel_path = Path(wheel_file)
+        data = wheel_path.read_bytes()
+        install_wheel(plugin_dir=plugin_dir, wheel_bytes=data, file_name=wheel_path.name)
     else:
-        install_git_url(plugin_dir=plugin_dir, git_url=str(git_url))
+        if not sha256 or not sha256.strip():
+            raise Datam8ValidationError(message="--sha256 is required when using --url.", details=None)
+        install_wheel_url(plugin_dir=plugin_dir, url=str(url), sha256=sha256)
 
     state = reload(plugin_dir)
     emit_result(opts, state, human_lines=["ok"])
@@ -172,15 +175,15 @@ def plugin_info(
 @app.command("verify")
 def verify_plugin(
     plugin_id: str = typer.Argument("", help="Plugin id (omit when using --file)."),
-    file: str | None = typer.Option(None, "--file", help="Plugin ZIP file path."),
+    file: str | None = typer.Option(None, "--file", help="Connector wheel file path."),
     json_output: cli_opts.JsonOutput = False,
     quiet: cli_opts.Quiet = False,
 ) -> None:
-    """Verify plugin metadata or validate a ZIP plugin bundle."""
+    """Verify plugin metadata or validate a connector wheel bundle."""
     opts = make_global_options(json_output=json_output, quiet=quiet)
     if file and file.strip():
         data = Path(file).read_bytes()
-        bundle = verify_zip_bundle(zip_bytes=data)
+        bundle = verify_wheel_bundle(wheel_bytes=data, file_name=Path(file).name)
         emit_result(opts, {"verified": True, "bundle": asdict(bundle)}, human_lines=["ok"])
         return
 
@@ -197,7 +200,14 @@ def verify_plugin(
     )
     if not plugin:
         raise Datam8NotFoundError(message="Plugin not found.", details={"id": plugin_id})
-    verified = "sha256" in plugin and "entry" in plugin
+    distribution = plugin.get("distribution") if isinstance(plugin, dict) else None
+    verified = (
+        isinstance(distribution, dict)
+        and distribution.get("type") == "wheel"
+        and isinstance(distribution.get("sha256"), str)
+        and bool(distribution.get("sha256"))
+        and "entry" in plugin
+    )
     payload = {"verified": verified, "plugin": plugin}
     emit_result(opts, payload, human_lines=["ok" if verified else "invalid"])
     if not verified:
