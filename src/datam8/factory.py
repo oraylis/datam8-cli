@@ -25,31 +25,92 @@ from pydantic_core import ValidationError
 from datam8_model import folder as f
 from datam8_model.property import PropertyReference, PropertyValue
 
-from . import config, model, model_exceptions, parser, parser_exceptions, utils
+from . import config, model, model_exceptions, opts, parser, parser_exceptions, utils
+from .core.paths import resolve_solution
 
 logger = utils.start_logger(__name__)
 
 _model: model.Model
 
 
-@utils.get_logger
-def create_model(solution_path: pathlib.Path | None = None) -> model.Model:
+def _normalize_log_level(
+    log_level: opts.LogLevels | str | None,
+    *,
+    default: opts.LogLevels = opts.LogLevels.WARNING,
+) -> opts.LogLevels:
+    if isinstance(log_level, opts.LogLevels):
+        return log_level
+    if isinstance(log_level, str):
+        try:
+            return opts.LogLevels(log_level.strip().lower())
+        except Exception:
+            return default
+    return default
+
+
+def configure_runtime(
+    *,
+    solution_path: pathlib.Path | str,
+    log_level: opts.LogLevels | str | None = None,
+    lazy: bool = False,
+) -> pathlib.Path:
+    """Resolve and apply runtime configuration for parser/model operations."""
+    resolved = resolve_solution(str(solution_path))
+    config.log_level = _normalize_log_level(log_level)
+    config.lazy = lazy
+    config.solution_path = resolved.solution_file
+    config.solution_folder_path = resolved.root_dir
+    return resolved.solution_file
+
+
+def create_model_or_raise(solution_path: pathlib.Path | None = None) -> model.Model:
+    """Create model and raise parser/model exceptions instead of exiting."""
     global _model
 
     path = solution_path or config.solution_path
-
     if not path.exists():
-        logger.error("Solution file does not exists")
-        sys.exit(1)
+        raise FileNotFoundError(path)
 
+    _model = asyncio.run(parser.parse_full_solution_async(path))
+    create_undefined_folders(_model)
+    if not config.lazy:
+        _model.resolve()
+    return _model
+
+
+def validate_solution_model(
+    *,
+    solution_path: pathlib.Path | str,
+    log_level: opts.LogLevels | str | None = None,
+) -> pathlib.Path:
+    """Validate full solution model parsing/resolution and return resolved path."""
+    resolved_solution_path = configure_runtime(
+        solution_path=solution_path,
+        log_level=log_level,
+        lazy=False,
+    )
+    _ = create_model_or_raise(solution_path=resolved_solution_path)
+    return resolved_solution_path
+
+
+@utils.get_logger
+def create_model(solution_path: pathlib.Path | None = None) -> model.Model:
+    """Create model.
+
+    Parameters
+    ----------
+    solution_path : pathlib.Path | None
+        solution_path parameter value.
+
+    Returns
+    -------
+    model.Model
+        Computed return value."""
     try:
-        _model = asyncio.run(parser.parse_full_solution_async(path))
-
-        create_undefined_folders(_model)
-
-        if not config.lazy:
-            _model.resolve()
-
+        return create_model_or_raise(solution_path=solution_path)
+    except FileNotFoundError as err:
+        logger.error(f"Solution file does not exist: {err}")
+        sys.exit(1)
     except RecursionError as err:
         logger.error(err)
         sys.exit(1)
@@ -69,8 +130,6 @@ def create_model(solution_path: pathlib.Path | None = None) -> model.Model:
     except model_exceptions.PropertiesNotResolvedError as err:
         logger.error(err)
         sys.exit(1)
-
-    return _model
 
 
 def resolve_property(
@@ -123,7 +182,8 @@ def create_undefined_folders(_model: model.Model):
     _model : `model.Model`
         A fully parsed DataM8 folder. Can be run pre or post property resolution.
     """
-    next_id = max(*[w.entity.id for w in _model.folders.values()]) + 1
+    folder_ids = [w.entity.id for w in _model.folders.values()]
+    next_id = (max(folder_ids) + 1) if folder_ids else 1
 
     undefined_folders: model.EntityDict[f.Folder] = {}
 

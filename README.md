@@ -1,117 +1,105 @@
 # ORAYLIS DataM8 Generator
-This repository contains the generator used by DataM8 to generate the solution
-output. It can also be used as a standalone cli in ci/cd processes.
+
+`datam8-generator` is the canonical DataM8 v2 backend:
+
+- `datam8` CLI
+- `datam8 serve` FastAPI server
+- synchronous HTTP execution
+
+Neon launches the backend over embedded Python (`python -m datam8 serve`) and communicates via localhost HTTP.
 
 ## Issues
-Issues are centrally maintained in a different repository
 
-https://github.com/oraylis/datam8
+Issues are tracked centrally in the DataM8 repository:
 
-## Documentation
-The DataM8 documentation is also centrally stored at the following place
+- https://github.com/oraylis/datam8/issues
 
-https://github.com/oraylis/datam8/tree/main/docs
+## Key docs
 
-The specific Generator documentation is located [here](https://github.com/oraylis/datam8/tree/main/docs/generator).
+- Backend contract (canonical): `docs/backend-contract.md`
+- Server startup/auth details: `docs/server.md`
+- Connector plugin details: `docs/connectors.md`
+- Agent guidance: `AGENTS.md`
+- Central DataM8 docs: https://github.com/oraylis/datam8/tree/main/docs
 
 ## Local development
 
 ### Requirements
-- `uv` a project manager for python
-  - https://docs.astral.sh/uv/getting-started/installation/
-  - manages dependencies including build tools
-  - manages different python versions
 
-### Clone repo
-We are using a git submodule to pull in the json schema for generating some
-classes in the `src/dm8gen/Generated` directory. In order to get a functioning
-local copy of this repo you need to also retrieve the submodule which is also
-a git repo.
+- Python 3.12+
+- `uv` (https://docs.astral.sh/uv/getting-started/installation/)
 
-``` sh
-# clone a fresh local copy
+### Clone
+
+The repository uses the `datam8-model` git submodule as schema source during model-code generation.
+
+```sh
 git clone --recurse-submodules https://github.com/oraylis/datam8-generator.git
-
-# initialize submodule in already existing repo
+cd datam8-generator
 git submodule update --init --recursive
 ```
 
-### Execute dm8gen
-``` sh
-uv run dm8gen <args>
+### Run CLI
 
-# e.g.
-uv run dm8gen --help
+```sh
+uv run datam8 --help
+uv run datam8 serve --help
+uv run datam8 validate --help
+uv run datam8 generate --help
 ```
 
-### Build
-``` sh
+### CLI arguments (quick reference)
+
+The legacy `dm8gen --action ...` argument model is no longer used.
+The current CLI uses command groups under `datam8`.
+
+`datam8 serve`:
+- `--token` (required): bearer token for non-health endpoints.
+- `--host` (default `127.0.0.1`), `--port` (default `0`).
+- `--solution-path` / `--solution` / `-s` (optional).
+- `--openapi` (optional), `--log-level` (optional).
+
+`datam8 validate`:
+- `--solution-path` / `--solution` / `-s` (required for execution).
+- `--log-level` / `-l` (optional).
+
+`datam8 generate`:
+- `TARGET` argument (optional, defaults from solution/config).
+- `--solution-path` / `--solution` / `-s` (required for execution).
+- `--clean-output` / `-c` (optional).
+- `--payload` / `-p` (optional, repeatable).
+- `--all` (optional), `--lazy` (optional), `--log-level` / `-l` (optional).
+
+For additional command groups (`solution`, `model`, `index`, `plugin`, `secret`, ...),
+use `uv run datam8 <group> --help`.
+
+### Build wheel
+
+```sh
 uv build
 ```
 
-### Testing
-Testing requires that a path to a datam8 solution is provided. Alternatively
-can be provided via environment vartiables, see `tests/README.md`.
+### Tests
 
-``` sh
-uv run pytest --solution-path <path>
-```
-
-### Linting
-``` sh
-uvx ruff check src
-
-# shorthand for
-uv tool run ruff check src
-```
-
-## Local execution
-When running the generator directly from the repository, e.g. for testing
-purposes, it is not possible to directly run the `cli.py` script as it will
-break relative imports.
-
-In order to run it, it needs to be recognized by the python interpreter as a
-module. To do this run the following from the repository root:
+Testing requires a path to a DataM8 solution.
+You can pass it via `--solution-path` or environment variable (`DATAM8_SOLUTION_PATH`).
+See `tests/README.md` for details.
 
 ```sh
-uv run dm8gen -a refresh_generate # and further options
+uv sync
+uv run pytest --solution-path "<path-to-solution.dm8s>"
 ```
 
-## Arguments
+### Linting / checks
 
-### `--action`, `-a` (Required)
-Specifies the action that the tool should perform. The available choices are:
+```sh
+uv tool run ruff check src
+uv tool run pyright src
+```
 
-- `validate_index`: Validates the index file based on the provided solution path.
-- `generate_template`: Generates templates from the specified source and outputs them to the destination.
-- `refresh_generate`: Refreshes the index and regenerates the templates.
+### License headers
 
-### `--path_solution`, `-s` (Required)
-Path to the solution file, which should be in JSON format. This file is essential for the tool to validate or generate templates.
-
-### `--path_template_source`, `-src` (Optional)
-Specifies the directory or file path where the source templates are located. This argument is required when using the `generate_template` or `refresh_generate` actions.
-
-### `--path_template_destination`, `-dest` (Optional)
-Specifies the directory path where the generated templates should be saved. This is also required for the `generate_template` and `refresh_generate` actions.
-
-### `--full_index_scan`, `-i` (Optional)
-A boolean flag that determines whether to perform a full index scan or just a refresh. This is primarily used with the `validate_index` action.
-
-### `--path_modules`, `-m` (Optional)
-Specifies the directory or file path to the modules that can be registered for use in the template generation process. This is an optional argument, useful for modular template generation.
-
-### `--path_collections`, `-c` (Optional)
-Specifies the directory path to Jinja2 template collections, which include blocks and other reusable components. This argument is optional but can be useful for organizing and managing template resources.
-
-### `--log_level`, `-l` (Optional)
-Sets the logging level for the tool’s execution. The available levels are:
-
-- `NOTSET`
-- `DEBUG`
-- `INFO` (default)
-- `WARN`
-- `ERROR`
-- `CRITICAL`
-
-If an invalid log level is provided, the tool defaults to `INFO` and logs a warning.
+```sh
+uv run python scripts/add_license_headers.py --dry-run
+uv run python scripts/add_license_headers.py
+```

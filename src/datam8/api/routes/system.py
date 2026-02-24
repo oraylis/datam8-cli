@@ -15,18 +15,37 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
-import fastapi
 
-from datam8 import config
+from __future__ import annotations
 
-app = fastapi.FastAPI()
+from fastapi import APIRouter
+from pydantic import BaseModel
+
+from datam8.core.runtime_meta import get_version
+
+router = APIRouter()
 
 
-@app.get("/")
-def read_root():
-    return {"DataM8": "v2"}
+class HealthResponse(BaseModel):
+    """Health endpoint response."""
+
+    status: str
 
 
-@app.get("/config")
-def read_config():
-    return {"solution_path": config.solution_path}
+class VersionResponse(BaseModel):
+    """Version endpoint response."""
+
+    version: str
+
+
+@router.get("/health")
+async def health() -> HealthResponse:
+    """Return service health status."""
+    return HealthResponse(status="ok")
+
+
+@router.get("/version")
+async def version() -> VersionResponse:
+    """Return backend version."""
+    return VersionResponse(version=get_version())
+

@@ -19,7 +19,7 @@ import logging
 import pathlib
 import sys
 from importlib import machinery, util
-from types import CodeType, ModuleType
+from types import ModuleType
 
 from .. import config, generate, utils
 
@@ -27,12 +27,30 @@ logger = logging.getLogger(__name__)
 
 
 def enable_target_modules() -> None:
+    """Enable target modules.
+
+    Returns
+    -------
+    None
+        Computed return value."""
     logger.info("Enable importing from target __modules")
-    sys.meta_path.append(TargetModuleFinder)
+    if TargetModuleFinder not in sys.meta_path:
+        sys.meta_path.append(TargetModuleFinder)
 
 
 @utils.get_logger
 def load_modules(module_path: pathlib.Path) -> dict[str, ModuleType]:
+    """Load modules.
+
+    Parameters
+    ----------
+    module_path : pathlib.Path
+        module_path parameter value.
+
+    Returns
+    -------
+    dict[str, ModuleType]
+        Computed return value."""
     modules: dict[str, ModuleType] = {}
     module_files = list(module_path.glob("**/*.py"))
 
@@ -48,16 +66,16 @@ def load_modules(module_path: pathlib.Path) -> dict[str, ModuleType]:
         except ModuleNotFoundError as err:
             msg = "%s at %s:%s"
             line = -1
-            code: CodeType
+            code_filename = "<unknown>"
 
             tb = err.__traceback__
             while tb is not None:
                 if tb.tb_next is None:
                     line = tb.tb_lineno
-                    code = tb.tb_frame.f_code
+                    code_filename = tb.tb_frame.f_code.co_filename
                 tb = tb.tb_next
 
-            logger.error(msg, err, code.co_filename, line)
+            logger.error(msg, err, code_filename, line)
             sys.exit(1)
 
     logger.info(
@@ -68,6 +86,24 @@ def load_modules(module_path: pathlib.Path) -> dict[str, ModuleType]:
 
 
 def load_module(path: pathlib.Path, module_name: str) -> ModuleType:
+    """Load module.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        path parameter value.
+    module_name : str
+        module_name parameter value.
+
+    Returns
+    -------
+    ModuleType
+        Computed return value.
+
+    Raises
+    ------
+    Exception
+        Raised when validation or runtime execution fails."""
     logger.debug(f"Loaded module {path.relative_to(config.solution_folder_path)}")
 
     spec = util.spec_from_file_location(module_name, path)

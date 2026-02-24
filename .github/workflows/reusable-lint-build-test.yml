@@ -62,7 +62,7 @@ jobs:
         with:
           submodules: true
 
-      - name: Check out solution respoitory
+      - name: Check out solution repository
         uses: actions/checkout@v4
         with:
           repository: oraylis/datam8-sample-solution
@@ -77,7 +77,8 @@ jobs:
           python_version_file: ".python-version"
 
       - name: Set solution environment variable
-        run: echo "DATAM8_SOLUTION_PATH=datam8-sample-solution/ORAYLISDatabricksSample.dm8s" >> $GITHUB_ENV
+        run: |
+          echo "DATAM8_SOLUTION_PATH=datam8-sample-solution/ORAYLISDatabricksSample.dm8s" >> $GITHUB_ENV
 
       - name: Install packages
         run: uv sync

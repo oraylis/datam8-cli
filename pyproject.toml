@@ -11,10 +11,15 @@ dependencies = [
   "Jinja2==3.1.6",
   "jsonschema==4.23.0",
   "pydantic==2.8.2",
+  "rich==13.9.4",
   "sqlparse==0.5.1",
   "typer==0.19.1",
   "fastapi==0.128.0",
   "uvicorn==0.40.0",
+  "httpx==0.28.1",
+  "platformdirs==4.3.6",
+  "keyring==25.6.0",
+  "certifi==2025.1.31",
 ]
 classifiers = [
   "Programming Language :: Python :: 3",
@@ -58,7 +63,7 @@ quote-style = "double"
 ##############
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/datam8", "src/datam8_model"]
+packages = ["src/datam8", "src/datam8_model", "src/datam8_model_v1"]
 
 [tool.hatch.build.hooks.custom]
 path = "hatch_build_datamodel.py"
@@ -70,6 +75,7 @@ dependencies = ["datamodel-code-generator>=0.33.0", "ruff"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
+addopts = "--capture=sys"
 
 [tool.pyright]
 venvPath = ".venv"

@@ -48,6 +48,19 @@ from .. import config, opts
 
 
 def delete_path(path: Path, recursive: bool = False) -> None:
+    """Delete path.
+
+    Parameters
+    ----------
+    path : Path
+        path parameter value.
+    recursive : bool
+        recursive parameter value.
+
+    Returns
+    -------
+    None
+        Computed return value."""
     if path.is_file():
         os.remove(path)
         return
@@ -63,6 +76,19 @@ def delete_path(path: Path, recursive: bool = False) -> None:
 
 
 def mkdir(path: Path, recursive: bool = False) -> None:
+    """Mkdir.
+
+    Parameters
+    ----------
+    path : Path
+        path parameter value.
+    recursive : bool
+        recursive parameter value.
+
+    Returns
+    -------
+    None
+        Computed return value."""
     if not path.parent.exists() and recursive:
         mkdir(path.parent, recursive=recursive)
 

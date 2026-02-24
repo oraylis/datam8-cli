@@ -1,66 +1,85 @@
 # Testing
-The project uses [pytest] as a testing framework. All testing files are located
-in the `tests` folder.
 
-[pytest]: https://pytest.org/
+The project uses `pytest`.
 
-## Usage
-Tests are written for pytest and can simply be executed by running `pytest`.
+## Test architecture
 
-The default for pytest target architecture is "databricks-lake" but you could swith
-the target env for a particular test by calling
+The canonical test layout follows the existing `feature/v2` pattern:
+
+- Domain tests live in numbered modules: `test_0xx_<domain>.py`
+- Parameter data lives in matching case files: `test_0xx_<domain>_cases.py`
+- Cross-test fixtures/helpers live in `tests/conftest.py`
+
+When adding new tests, prefer extending an existing numbered domain and its `*_cases.py`
+before creating a new domain module.
+
+## Domain map (what is tested where)
+
+- `test_010_model.py` + `test_010_model_cases.py`: model access, lookup, locator behavior
+- `test_020_helper.py` + `test_020_helper_cases.py`: helper/hash/uuid behavior
+- `test_030_factory.py` + `test_030_factory_cases.py`: factory/property-value resolution
+- `test_040_connector_binding.py` + `test_040_connector_binding_cases.py`: connector binding encode/decode rules
+- `test_050_api_connectors.py` + `test_050_api_connectors_cases.py`: connectors API endpoints
+- `test_060_api_plugins.py` + `test_060_api_plugins_cases.py`: plugin lifecycle endpoints (install/enable/disable/uninstall)
+- `test_070_plugin_loader.py` + `test_070_plugin_loader_cases.py`: plugin loader + vendored dependencies
+- `test_080_workspace_io.py` + `test_080_workspace_io_cases.py`: workspace/index/rename scan behavior
+- `test_090_cli.py` + `test_090_cli_cases.py`: CLI surface and command behavior
+- `test_100_server_integration.py` + `test_100_server_integration_cases.py`: server integration flow (health/auth/generate)
+
+## Shared fixtures and helpers
+
+`tests/conftest.py` is the single place for cross-test setup. Most important fixtures:
+
+- `solution_file_path`: resolves the active `.dm8s` path from `--solution-path` or `DATAM8_SOLUTION_PATH`
+- `config`, `model_lazy`, `model`: shared model-centric setup for existing v2-style tests
+- `api_client`: context manager fixture to spin up a `TestClient` with optional plugin/solution env wiring
+- `fixture_connector_plugins_dir`, `fixture_job_solution_dir`, `temp_plugin_dir`: canonical fixture paths/temp dirs
+
+Do not duplicate env/path/bootstrap logic inside individual test modules. Extend `conftest.py` instead.
+
+## Run all tests
 
 ```sh
-pytest test_050_generate.py --target=<YourTarget>
+uv sync
+uv run pytest
 ```
 
-To write additional tests refrence the existing tests and refer otherwise to
-https://docs.pytest.org/en/8.0.x/how-to/assert.html.
+## Solution path
 
-If tests need to be executed in a specific order, simply name the test files
-accordingly since pytest simply executes the files in alphabetical order.
+Model-centric and server integration tests require a solution path.
 
-| Argument        | Description | Default
-| :-              | :-          | :-
-| `target`        | Defines which template folder should be used for testing | `databricks-lake`
-| `solution-path` | Absolute path to folder containing the DataM8 solution.  | `None`
+Set it via environment variable:
 
-## Environment variables
-The behaviour of the testing module can also be configured by defining
-variables. This applies to arguments also, which can be set by prefixing
-their name with `DATAM8_` and `-` replaced by `_`.
-
-In case both are defined the cli argument will have priority.
-
-__powershell__
-```pwsh
-$env:DATAM8_SOLUTION_PATH = "C:\Users\.."
-```
-
-__bash__
 ```sh
-export DATAM8_SOLUTION_PATH="/home/..."
+export DATAM8_SOLUTION_PATH="/absolute/path/to/ORAYLISDatabricksSample.dm8s"
+uv run pytest
 ```
 
-## Tests
-Currently only a subset of all generator functionalities have tests defined for them.
+Or per invocation with `--solution-path`:
 
-Tests are always written & defined in two files, one file containing the test
-functions, e.g. `test_10_model.py` and a second file defining the test cases, e.g.
-`test_010_model_cases.py` with an analogue naming schema to the first one.
+```sh
+uv run pytest --solution-path="/absolute/path/to/ORAYLISDatabricksSample.dm8s"
+```
 
-Test cases are defined using [pytest-cases].
+## CI behavior
 
-[pytest-cases]: https://smarie.github.io/python-pytest-cases/
+CI configures `DATAM8_SOLUTION_PATH` to the sample solution path.
+If the configured path is invalid (missing/wrong), solution-dependent tests fail.
+If no solution path is configured, solution-dependent tests are skipped.
 
-The `conftest.py` file defines configurations for all tests, e.g. the location
-of the DataM8 solution to use for testing.
+## How to add a new test (recommended flow)
 
-- `model` module
-  - only validate functions of the `Model` class
-- `helper` module
-  - only the `Hasher` class
-- `jinja2factory` module
-  - generate functions
+1. Find the matching numbered domain (`test_0xx_<domain>.py`).
+2. Add input/expected variants to `test_0xx_<domain>_cases.py`.
+3. Keep setup minimal in tests; use shared fixtures from `conftest.py`.
+4. Add a new domain only if no existing domain fits.
+5. Run:
+   - `uv run pytest`
+   - `uv tool run pyright src`
+   - `uv tool run ruff check src`
 
+## Reading skips/failures
 
+- Local runs without solution path: solution-dependent tests are expected to be skipped.
+- Runs with an invalid configured solution path: treated as a hard failure.
+- Use `uv run pytest -rs` to see skip reasons in detail.
