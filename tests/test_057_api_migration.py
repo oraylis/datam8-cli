@@ -21,6 +21,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 
 def _write_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -326,7 +328,10 @@ def _create_v1_solution_for_folder_and_source_priority(tmp_path: Path) -> Path:
     (source_root / "Staging" / "Sales" / "Customer").mkdir(parents=True, exist_ok=True)
 
     _write_json(source_root / "Base" / "AttributeTypes.json", {"items": [{"name": "ID", "defaultType": "int"}]})
-    _write_json(source_root / "Base" / "DataProducts.json", {"items": []})
+    _write_json(
+        source_root / "Base" / "DataProducts.json",
+        {"items": [{"name": "Legacy", "module": [{"name": "LegacyModule"}]}]},
+    )
     _write_json(
         source_root / "Base" / "DataSources.json",
         {"items": [{"name": "AdventureWorks", "type": "SqlServer", "dataTypeMapping": [{"sourceType": "int", "targetType": "int"}]}]},
@@ -428,3 +433,102 @@ def test_migration_route_prefers_raw_external_source_and_derives_folder_products
         sales = next((dp for dp in data_products["dataProducts"] if dp["name"] == "Sales"), None)
         assert sales is not None
         assert any(dm["name"] == "Customer" for dm in sales["dataModules"])
+
+
+def _create_v1_solution_for_strict_base_checks(tmp_path: Path, folder_name: str) -> Path:
+    source_root = tmp_path / folder_name
+    (source_root / "Staging").mkdir(parents=True, exist_ok=True)
+
+    _write_json(source_root / "Base" / "AttributeTypes.json", {"items": [{"name": "ID", "defaultType": "int"}]})
+    _write_json(
+        source_root / "Base" / "DataProducts.json",
+        {"items": [{"name": "Sales", "module": [{"name": "Customer"}]}]},
+    )
+    _write_json(
+        source_root / "Base" / "DataSources.json",
+        {
+            "items": [
+                {
+                    "name": "AdventureWorks",
+                    "type": "SqlServer",
+                    "dataTypeMapping": [{"sourceType": "int", "targetType": "int"}],
+                }
+            ]
+        },
+    )
+    _write_json(
+        source_root / "Base" / "DataTypes.json",
+        {"items": [{"name": "int", "displayName": "Integer", "parquetType": "int", "sqlType": "int"}]},
+    )
+    _write_json(
+        source_root / "Staging" / "Customer.json",
+        {"type": "stage", "entity": {"name": "Customer", "attribute": [{"name": "Id", "type": "int"}]}, "function": {}},
+    )
+    _write_json(
+        source_root / "LegacyStrict.dm8s",
+        {
+            "basePath": "Base",
+            "stagingPath": "Staging",
+            "generatePath": "Generate",
+            "diagramPath": "Diagram",
+        },
+    )
+    return source_root / "LegacyStrict.dm8s"
+
+
+@pytest.mark.parametrize(
+    "missing_file",
+    ["AttributeTypes.json", "DataProducts.json", "DataSources.json", "DataTypes.json"],
+)
+def test_migration_route_fails_when_required_base_file_is_missing(tmp_path: Path, api_client, missing_file: str) -> None:
+    token = f"migration-strict-missing-{missing_file}"
+    headers = {"Authorization": f"Bearer {token}"}
+    source_solution_path = _create_v1_solution_for_strict_base_checks(tmp_path, f"strict_missing_{missing_file}")
+    (source_solution_path.parent / "Base" / missing_file).unlink()
+    target_dir = tmp_path / f"migrated_strict_missing_{missing_file}"
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    with api_client(token=token) as client:
+        response = client.post(
+            "/migration/v1-to-v2",
+            headers=headers,
+            json={
+                "sourceSolutionPath": str(source_solution_path),
+                "targetDir": str(target_dir),
+                "options": {"copyGenerate": False, "copyDiagram": False, "copyOutput": False},
+            },
+        )
+        assert response.status_code == 400
+        payload = response.json()
+        assert payload["code"] == "validation_error"
+        assert payload["message"] == f"Base/{missing_file} is required and must be valid."
+        assert payload["details"]["path"].endswith(missing_file)
+
+
+@pytest.mark.parametrize(
+    "invalid_file",
+    ["AttributeTypes.json", "DataProducts.json", "DataSources.json", "DataTypes.json"],
+)
+def test_migration_route_fails_when_required_base_file_is_invalid(tmp_path: Path, api_client, invalid_file: str) -> None:
+    token = f"migration-strict-invalid-{invalid_file}"
+    headers = {"Authorization": f"Bearer {token}"}
+    source_solution_path = _create_v1_solution_for_strict_base_checks(tmp_path, f"strict_invalid_{invalid_file}")
+    (source_solution_path.parent / "Base" / invalid_file).write_text("{ invalid", encoding="utf-8")
+    target_dir = tmp_path / f"migrated_strict_invalid_{invalid_file}"
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    with api_client(token=token) as client:
+        response = client.post(
+            "/migration/v1-to-v2",
+            headers=headers,
+            json={
+                "sourceSolutionPath": str(source_solution_path),
+                "targetDir": str(target_dir),
+                "options": {"copyGenerate": False, "copyDiagram": False, "copyOutput": False},
+            },
+        )
+        assert response.status_code == 400
+        payload = response.json()
+        assert payload["code"] == "validation_error"
+        assert payload["message"] == f"Base/{invalid_file} is required and must be valid."
+        assert payload["details"]["path"].endswith(invalid_file)
