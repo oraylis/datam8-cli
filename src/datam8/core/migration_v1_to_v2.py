@@ -640,13 +640,13 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
         copy_row["description"] = copy_row.get("description") if isinstance(copy_row.get("description"), str) else ""
         existing_products[name] = copy_row
 
-    for product, modules in discovered_product_modules.items():
+    for product, module_names in discovered_product_modules.items():
         row = existing_products.get(product)
         if row is None:
             row = {"name": product, "displayName": product, "description": "", "dataModules": []}
             existing_products[product] = row
         existing_modules = {m.get("name"): m for m in row.get("dataModules", []) if isinstance(m, dict)}
-        for module in sorted(modules):
+        for module in sorted(module_names):
             if module in existing_modules:
                 continue
             row["dataModules"].append({"name": module, "displayName": module, "description": ""})
