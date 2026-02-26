@@ -26,7 +26,33 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from datam8.core import parser_v1
 from datam8.core.errors import Datam8ValidationError
+from datam8.core.migration_v1_to_v2_config import (
+    BASE_DIR_NAME,
+    DIAGRAM_DIR_NAME,
+    GENERATE_DIR_NAME,
+    MODEL_DIR_NAME,
+    OUTPUT_DIR_NAME,
+    UNKNOWN_MODULE,
+    UNKNOWN_PRODUCT,
+    UNKNOWN_SOURCE,
+    V2_SCHEMA_VERSION,
+    ZONE_BASE_IDS,
+    ZONE_MODEL_ORDER,
+    zone_v1_label,
+    zone_v2_folder,
+)
+from datam8.core.migration_v1_to_v2_transform import (
+    build_data_source_types,
+    build_generator_targets,
+    build_zone_entries,
+    compose_description,
+    convert_base_attribute_types,
+    convert_base_data_products,
+    convert_base_data_sources,
+    convert_base_data_types,
+)
 from datam8.core.workspace_io import regenerate_index
 
 
@@ -128,7 +154,11 @@ def _normalize_internal_type(v1_type: Any) -> str:
 def _normalize_v2_history(value: Any) -> str | None:
     if not isinstance(value, str):
         return None
-    v = value.strip()
+    v = value.strip().upper()
+    if v == "BK":
+        return "SCD0"
+    if v == "SK":
+        return "SCD0"
     return v if v in {"SCD0", "SCD1", "SCD2", "SCD3", "SCD4"} else None
 
 
@@ -147,29 +177,92 @@ def _to_datetime_iso(value: Any) -> str | None:
         return None
 
 
-def _v1_zone_label(zone: str) -> str:
-    return {
-        "raw": "Raw",
-        "stage": "Stage",
-        "core": "Core",
-        "curated": "Curated",
-        "consumer": "Consumer",
-    }[zone]
+def _clean_name(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    txt = value.strip()
+    return txt if txt else None
 
 
-def _v2_zone_folder(zone: str) -> str:
-    if zone == "stage":
-        return "010-Stage"
-    if zone == "core":
-        return "020-Core"
-    if zone == "curated":
-        return "030-Curated"
-    return "040-Consumer"
+def _infer_product_module_from_path(abs_path: Path, zone_root: Path) -> tuple[str | None, str | None]:
+    try:
+        rel = abs_path.relative_to(zone_root)
+    except Exception:
+        return (None, None)
+
+    parts = list(rel.parts)
+    if len(parts) < 3:
+        return (None, None)
+    return (_clean_name(parts[0]), _clean_name(parts[1]))
 
 
-def _read_json(path: Path) -> Any:
-    raw = path.read_text(encoding="utf-8")
-    return json.loads(raw)
+def _resolve_product_module(
+    *,
+    abs_path: Path,
+    zone_root: Path,
+    entity_product: Any,
+    entity_module: Any,
+    warnings: list[str],
+    context: str,
+) -> tuple[str, str]:
+    folder_product, folder_module = _infer_product_module_from_path(abs_path, zone_root)
+    model_product = _clean_name(entity_product)
+    model_module = _clean_name(entity_module)
+
+    if folder_product and model_product and folder_product != model_product:
+        warnings.append(
+            f"{context}: dataProduct '{model_product}' overridden by folder '{folder_product}'."
+        )
+    if folder_module and model_module and folder_module != model_module:
+        warnings.append(
+            f"{context}: dataModule '{model_module}' overridden by folder '{folder_module}'."
+        )
+
+    product = folder_product or model_product or UNKNOWN_PRODUCT
+    module = folder_module or model_module or UNKNOWN_MODULE
+    if not folder_product or not folder_module:
+        warnings.append(
+            f"{context}: could not fully infer dataProduct/dataModule from folder; using '{product}/{module}'."
+        )
+    return (product, module)
+
+
+def _is_external_source_pair(data_source: str | None, source_location: str | None) -> bool:
+    if not data_source or not source_location:
+        return False
+    if data_source == "__meta__":
+        return False
+    if source_location.lower().startswith("raw/"):
+        return False
+    return True
+
+
+def _extract_source_computations(v1_function: Any) -> dict[str, str]:
+    function = v1_function if isinstance(v1_function, dict) else {}
+    out: dict[str, str] = {}
+    for source in function.get("source", []) if isinstance(function.get("source"), list) else []:
+        if not isinstance(source, dict):
+            continue
+        dm8l_raw = source.get("dm8l")
+        dm8l = dm8l_raw.strip() if isinstance(dm8l_raw, str) else ""
+        if dm8l != "#":
+            continue
+        mappings = source.get("mapping", []) if isinstance(source.get("mapping"), list) else []
+        for mapping in mappings:
+            if not isinstance(mapping, dict):
+                continue
+            expression_raw = mapping.get("sourceComputation")
+            expression = expression_raw.strip() if isinstance(expression_raw, str) else ""
+            if not expression or expression.lower() == "default":
+                continue
+            key_raw = mapping.get("name")
+            key = key_raw.strip() if isinstance(key_raw, str) and key_raw.strip() else ""
+            if not key:
+                key_raw = mapping.get("sourceName")
+                key = key_raw.strip() if isinstance(key_raw, str) and key_raw.strip() else ""
+            if key:
+                out[key] = expression
+    return out
 
 
 def _write_json(path: Path, content: Any) -> None:
@@ -262,19 +355,17 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
         raise Datam8ValidationError(message="V1 solution file not found.", details={"path": str(src_solution_file)})
 
     try:
-        v1_solution_raw = _read_json(src_solution_file)
+        v1_solution_model = parser_v1.parse_solution_file(src_solution_file)
     except Exception as e:
         raise Datam8ValidationError(message="Failed to read V1 solution file.", details={"error": str(e)})
-
-    if not isinstance(v1_solution_raw, dict):
-        raise Datam8ValidationError(message="sourceSolutionPath does not look like a V1 solution (.dm8s).", details=None)
+    v1_solution_raw = v1_solution_model.model_dump(by_alias=True, exclude_none=True)
 
     # V1 requires basePath + at least one of rawPath/stagingPath/corePath/curatedPath.
-    base_path = v1_solution_raw.get("basePath")
-    raw_path = v1_solution_raw.get("rawPath")
-    staging_path = v1_solution_raw.get("stagingPath")
-    core_path = v1_solution_raw.get("corePath")
-    curated_path = v1_solution_raw.get("curatedPath")
+    base_path = v1_solution_model.basePath
+    raw_path = v1_solution_model.rawPath
+    staging_path = v1_solution_model.stagingPath
+    core_path = v1_solution_model.corePath
+    curated_path = v1_solution_model.curatedPath
     if not isinstance(base_path, str) or not base_path.strip() or not any(
         isinstance(p, str) and p.strip() for p in (raw_path, staging_path, core_path, curated_path)
     ):
@@ -294,269 +385,81 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
         out_root = out_target_dir / f"{solution_name}-v2-{stamp}"
         out_root.mkdir(parents=True, exist_ok=True)
 
-    (out_root / "Base").mkdir(parents=True, exist_ok=True)
-    (out_root / "Model").mkdir(parents=True, exist_ok=True)
+    (out_root / BASE_DIR_NAME).mkdir(parents=True, exist_ok=True)
+    (out_root / MODEL_DIR_NAME).mkdir(parents=True, exist_ok=True)
 
     v1_base_dir = (src_root / str(base_path)).resolve()
 
     def read_v1_base(filename: str) -> Any:
         abs_path = v1_base_dir / filename
         try:
-            return _read_json(abs_path)
-        except Exception:
-            warnings.append(f"Base/{filename}: missing or unreadable; generated fallback.")
-            return None
+            payload = parser_v1.parse_base_file(abs_path, filename).model_dump(exclude_none=True)
+        except Exception as e:
+            raise Datam8ValidationError(
+                message=f"Base/{filename} is required and must be valid.",
+                details={"path": str(abs_path), "error": str(e)},
+            )
+        items = payload.get("items")
+        if not isinstance(items, list) or not items:
+            raise Datam8ValidationError(
+                message=f"Base/{filename} is required and must contain at least one item.",
+                details={"path": str(abs_path)},
+            )
+        return payload
 
     v1_attribute_types = read_v1_base("AttributeTypes.json")
     v1_data_products = read_v1_base("DataProducts.json")
     v1_data_sources = read_v1_base("DataSources.json")
     v1_data_types = read_v1_base("DataTypes.json")
 
-    default_attribute_types = [
-        {"name": "ID", "displayName": "ID", "defaultType": "int", "canBeInRelation": True, "isDefaultProperty": False},
-        {
-            "name": "Name",
-            "displayName": "Name",
-            "defaultType": "string",
-            "defaultLength": 256,
-            "canBeInRelation": False,
-            "isDefaultProperty": True,
-        },
-        {
-            "name": "Description",
-            "displayName": "Description",
-            "defaultType": "string",
-            "defaultLength": 512,
-            "canBeInRelation": False,
-            "isDefaultProperty": False,
-        },
-    ]
-
-    default_data_types = [
-        {
-            "name": "string",
-            "displayName": "Unicode String",
-            "description": "",
-            "hasCharLen": True,
-            "hasPrecision": False,
-            "hasScale": False,
-            "targets": {"databricks": "string", "sqlserver": "nvarchar"},
-        },
-        {
-            "name": "int",
-            "displayName": "Integer (32 bit)",
-            "description": "",
-            "hasCharLen": False,
-            "hasPrecision": False,
-            "hasScale": False,
-            "targets": {"databricks": "int", "sqlserver": "int"},
-        },
-        {
-            "name": "long",
-            "displayName": "Integer (64 bit)",
-            "description": "",
-            "hasCharLen": False,
-            "hasPrecision": False,
-            "hasScale": False,
-            "targets": {"databricks": "bigint", "sqlserver": "bigint"},
-        },
-        {
-            "name": "double",
-            "displayName": "Double",
-            "description": "",
-            "hasCharLen": False,
-            "hasPrecision": False,
-            "hasScale": False,
-            "targets": {"databricks": "double", "sqlserver": "float"},
-        },
-        {
-            "name": "decimal",
-            "displayName": "Decimal",
-            "description": "",
-            "hasCharLen": False,
-            "hasPrecision": True,
-            "hasScale": True,
-            "targets": {"databricks": "decimal", "sqlserver": "decimal"},
-        },
-        {
-            "name": "datetime",
-            "displayName": "DateTime",
-            "description": "",
-            "hasCharLen": False,
-            "hasPrecision": False,
-            "hasScale": False,
-            "targets": {"databricks": "timestamp", "sqlserver": "datetime2"},
-        },
-        {
-            "name": "boolean",
-            "displayName": "Boolean",
-            "description": "",
-            "hasCharLen": False,
-            "hasPrecision": False,
-            "hasScale": False,
-            "targets": {"databricks": "boolean", "sqlserver": "bit"},
-        },
-    ]
-
-    converted_attribute_types = []
-    for a in (v1_attribute_types or {}).get("items", []) if isinstance(v1_attribute_types, dict) else []:
-        if not isinstance(a, dict):
-            continue
-        name = a.get("name")
-        if not isinstance(name, str) or not name.strip():
-            continue
-        converted_attribute_types.append(
-            {
-                "name": name,
-                "displayName": a.get("displayName") if isinstance(a.get("displayName"), str) else name,
-                "description": a.get("purpose") if isinstance(a.get("purpose"), str) else (a.get("description") if isinstance(a.get("description"), str) else ""),
-                "defaultType": a.get("defaultType"),
-                "defaultLength": a.get("defaultLength"),
-                "defaultPrecision": a.get("defaultPrecision"),
-                "defaultScale": a.get("defaultScale"),
-                "hasUnit": a.get("hasUnit"),
-                "canBeInRelation": a.get("canBeInRelation"),
-                "isDefaultProperty": a.get("isDefaultProperty"),
-            }
-        )
-    out_attribute_types = {"type": "attributeTypes", "attributeTypes": converted_attribute_types or default_attribute_types}
-
-    out_data_products = {"type": "dataProducts", "dataProducts": []}
-    for p in (v1_data_products or {}).get("items", []) if isinstance(v1_data_products, dict) else []:
-        if not isinstance(p, dict):
-            continue
-        name = p.get("name")
-        if not isinstance(name, str) or not name.strip():
-            continue
-        modules = []
-        for m in p.get("module", []) if isinstance(p.get("module"), list) else []:
-            if not isinstance(m, dict):
-                continue
-            mname = m.get("name")
-            if not isinstance(mname, str) or not mname.strip():
-                continue
-            modules.append(
-                {
-                    "name": mname,
-                    "displayName": m.get("displayName") if isinstance(m.get("displayName"), str) else mname,
-                    "description": m.get("purpose") if isinstance(m.get("purpose"), str) else "",
-                }
-            )
-        out_data_products["dataProducts"].append(
-            {
-                "name": name,
-                "displayName": p.get("displayName") if isinstance(p.get("displayName"), str) else name,
-                "description": p.get("purpose") if isinstance(p.get("purpose"), str) else "",
-                "dataModules": modules,
-            }
-        )
-
-    out_data_sources = {"type": "dataSources", "dataSources": []}
-    for s in (v1_data_sources or {}).get("items", []) if isinstance(v1_data_sources, dict) else []:
-        if not isinstance(s, dict):
-            continue
-        name = s.get("name")
-        if not isinstance(name, str) or not name.strip():
-            continue
-        out_data_sources["dataSources"].append(
-            {
-                "name": name,
-                "displayName": s.get("displayName") if isinstance(s.get("displayName"), str) else name,
-                "description": s.get("purpose") if isinstance(s.get("purpose"), str) else "",
-                "type": s.get("type"),
-                "connectionString": s.get("connectionString"),
-                "dataTypeMapping": s.get("dataTypeMapping") if isinstance(s.get("dataTypeMapping"), list) else None,
-                "extendedProperties": s.get("ExtendedProperties") if isinstance(s.get("ExtendedProperties"), dict) else None,
-            }
-        )
-
-    converted_data_types = []
-    for t in (v1_data_types or {}).get("items", []) if isinstance(v1_data_types, dict) else []:
-        if not isinstance(t, dict):
-            continue
-        name = t.get("name")
-        if not isinstance(name, str) or not name.strip():
-            continue
-        targets: dict[str, str] = {}
-        parquet = t.get("parquetType")
-        sql_type = t.get("sqlType")
-        if isinstance(parquet, str) and parquet.strip():
-            targets["databricks"] = parquet.strip()
-        if isinstance(sql_type, str) and sql_type.strip():
-            targets["sqlserver"] = sql_type.strip()
-        if not targets:
-            targets["databricks"] = name.strip()
-            warnings.append(f"Base/DataTypes.json: '{name}' missing parquetType/sqlType; using fallback targets.")
-        converted_data_types.append(
-            {
-                "name": name,
-                "displayName": t.get("displayName") if isinstance(t.get("displayName"), str) else name,
-                "description": t.get("purpose") if isinstance(t.get("purpose"), str) else (t.get("description") if isinstance(t.get("description"), str) else ""),
-                "hasCharLen": bool(t.get("hasCharLen", False)),
-                "hasPrecision": bool(t.get("hasPrecision", False)),
-                "hasScale": bool(t.get("hasScale", False)),
-                "targets": targets,
-            }
-        )
-    out_data_types = {"type": "dataTypes", "dataTypes": converted_data_types or default_data_types}
-
-    by_type: dict[str, list[dict[str, Any]]] = {}
-    for ds in out_data_sources.get("dataSources") or []:
-        t = ds.get("type")
-        type_name = t.strip() if isinstance(t, str) and t.strip() else "Unknown"
-        by_type.setdefault(type_name, []).append(ds)
-    out_data_source_types = {"type": "dataSourceTypes", "dataSourceTypes": []}
-    for type_name, sources in by_type.items():
-        mappings: list[dict[str, str]] = []
-        for s in sources:
-            for row in s.get("dataTypeMapping") or []:
-                if isinstance(row, dict) and isinstance(row.get("sourceType"), str) and isinstance(row.get("targetType"), str):
-                    mappings.append({"sourceType": row["sourceType"], "targetType": row["targetType"]})
-        uniq: dict[str, dict[str, str]] = {}
-        for m in mappings:
-            uniq[f"{m['sourceType']}::{m['targetType']}"] = m
-        data_type_mapping = list(uniq.values())
-        if not data_type_mapping:
-            warnings.append(f"Base/DataSourceTypes.json: '{type_name}' has no dataTypeMapping; generated fallback mapping.")
-            data_type_mapping = [{"sourceType": "string", "targetType": "string"}]
-        out_data_source_types["dataSourceTypes"].append(
-            {"name": type_name, "displayName": type_name, "description": "", "dataTypeMapping": data_type_mapping}
-        )
-
-    out_zones = {
-        "type": "zones",
-        "zones": [
-            {"name": "raw", "targetName": "raw", "displayName": "Raw"},
-            {"name": "stage", "targetName": "010-Stage", "displayName": "Stage", "localFolderName": "010-Stage"},
-            {"name": "core", "targetName": "020-Core", "displayName": "Core", "localFolderName": "020-Core"},
-            {"name": "curated", "targetName": "030-Curated", "displayName": "Curated", "localFolderName": "030-Curated"},
-            {"name": "consumer", "targetName": "040-Consumer", "displayName": "Consumer", "localFolderName": "040-Consumer"},
-        ],
-    }
-
+    out_attribute_types = convert_base_attribute_types(v1_attribute_types, warnings)
+    out_data_products = convert_base_data_products(v1_data_products)
+    out_data_sources = convert_base_data_sources(v1_data_sources)
+    out_data_types = convert_base_data_types(v1_data_types, warnings)
+    out_data_source_types = build_data_source_types(out_data_sources, warnings)
+    present_zones: set[str] = set()
+    discovered_product_modules: dict[str, set[str]] = {}
     raw_by_key: dict[str, _V1RawEntityInfo] = {}
     used_raw_keys: set[str] = set()
 
+    def register_product_module(product: str, module: str) -> None:
+        if not product or not module:
+            return
+        if product == UNKNOWN_PRODUCT or module == UNKNOWN_MODULE:
+            return
+        discovered_product_modules.setdefault(product, set()).add(module)
+
     if isinstance(raw_path, str) and raw_path.strip():
+        raw_zone_root = (src_root / raw_path).resolve()
         for abs_path in sorted((src_root / raw_path).rglob("*.json")):
             if not abs_path.is_file():
                 continue
             try:
-                j = _read_json(abs_path)
+                model = parser_v1.parse_model_file(abs_path)
+                j = model.model_dump(exclude_none=True)
             except Exception as e:
                 warnings.append(f"Raw: failed to parse '{abs_path.relative_to(src_root).as_posix()}' ({e}); skipped.")
                 continue
+            if j.get("type") != "raw":
+                warnings.append(f"Raw: skipped '{abs_path.relative_to(src_root).as_posix()}' (type is not 'raw').")
+                continue
             ent = j.get("entity") if isinstance(j, dict) else {}
             ent = ent if isinstance(ent, dict) else {}
-            dp_raw = ent.get("dataProduct")
-            dm_raw = ent.get("dataModule")
+            data_product, data_module = _resolve_product_module(
+                abs_path=abs_path,
+                zone_root=raw_zone_root,
+                entity_product=ent.get("dataProduct"),
+                entity_module=ent.get("dataModule"),
+                warnings=warnings,
+                context=f"Raw/{abs_path.relative_to(src_root).as_posix()}",
+            )
             name_raw = ent.get("name")
             dn_raw = ent.get("displayName")
-            data_product = dp_raw.strip() if isinstance(dp_raw, str) and dp_raw.strip() else "UnknownProduct"
-            data_module = dm_raw.strip() if isinstance(dm_raw, str) and dm_raw.strip() else "UnknownModule"
             name = name_raw.strip() if isinstance(name_raw, str) and name_raw.strip() else abs_path.stem
             display_name = dn_raw.strip() if isinstance(dn_raw, str) and dn_raw.strip() else None
             key = f"{data_product}::{data_module}::{name}"
+            present_zones.add("raw")
+            register_product_module(data_product, data_module)
 
             attrs_raw = ent.get("attribute")
             attrs = attrs_raw if isinstance(attrs_raw, list) else []
@@ -614,34 +517,49 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
     def scan_zone(zone: str, rel_dir: Any) -> None:
         if not isinstance(rel_dir, str) or not rel_dir.strip():
             return
+        zone_root = (src_root / rel_dir).resolve()
         for abs_path in sorted((src_root / rel_dir).rglob("*.json")):
             if not abs_path.is_file():
                 continue
             try:
-                j = _read_json(abs_path)
+                model = parser_v1.parse_model_file(abs_path)
+                j = model.model_dump(exclude_none=True)
             except Exception as e:
                 warnings.append(f"Model: failed to parse '{abs_path.relative_to(src_root).as_posix()}' ({e}); skipped.")
                 continue
+            expected_type = zone
+            actual_type = j.get("type")
+            if actual_type != expected_type:
+                warnings.append(
+                    f"Model: skipped '{abs_path.relative_to(src_root).as_posix()}' (expected '{expected_type}', got '{actual_type}')."
+                )
+                continue
             ent = j.get("entity") if isinstance(j, dict) else {}
             ent = ent if isinstance(ent, dict) else {}
-            dp_raw = ent.get("dataProduct")
-            dm_raw = ent.get("dataModule")
+            data_product, data_module = _resolve_product_module(
+                abs_path=abs_path,
+                zone_root=zone_root,
+                entity_product=ent.get("dataProduct"),
+                entity_module=ent.get("dataModule"),
+                warnings=warnings,
+                context=f"{zone.capitalize()}/{abs_path.relative_to(src_root).as_posix()}",
+            )
             name_raw = ent.get("name")
             dn_raw = ent.get("displayName")
-            data_product = dp_raw.strip() if isinstance(dp_raw, str) and dp_raw.strip() else "UnknownProduct"
-            data_module = dm_raw.strip() if isinstance(dm_raw, str) and dm_raw.strip() else "UnknownModule"
             name = name_raw.strip() if isinstance(name_raw, str) and name_raw.strip() else abs_path.stem
             display_name = dn_raw.strip() if isinstance(dn_raw, str) and dn_raw.strip() else None
+            present_zones.add(zone)
+            register_product_module(data_product, data_module)
 
-            zone_folder = _v2_zone_folder(zone)
-            v2_rel_path = "/".join(["Model", zone_folder, data_product, data_module, f"{name}.json"])
-            v1_locators = [f"/{_v1_zone_label(zone)}/{data_product}/{data_module}/{name}"]
+            zone_folder = zone_v2_folder(zone)
+            v2_rel_path = "/".join([MODEL_DIR_NAME, zone_folder, data_product, data_module, f"{name}.json"])
+            v1_locators = [f"/{zone_v1_label(zone)}/{data_product}/{data_module}/{name}"]
             raw_key = None
             if zone == "stage":
                 raw_key = f"{data_product}::{data_module}::{name}"
                 if raw_key in raw_by_key:
                     used_raw_keys.add(raw_key)
-                    v1_locators.append(f"/{_v1_zone_label('raw')}/{data_product}/{data_module}/{name}")
+                    v1_locators.append(f"/{zone_v1_label('raw')}/{data_product}/{data_module}/{name}")
                 else:
                     warnings.append(f"Stage entity {raw_key} has no matching Raw entity; sourceDataType omitted.")
 
@@ -670,8 +588,10 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
             continue
         used_raw_keys.add(key)
         warnings.append(f"Raw entity {key} had no Stage counterpart; created synthetic Stage entity.")
-        zone_folder = _v2_zone_folder("stage")
-        v2_rel_path = "/".join(["Model", zone_folder, raw.data_product, raw.data_module, f"{raw.name}.json"])
+        present_zones.add("stage")
+        register_product_module(raw.data_product, raw.data_module)
+        zone_folder = zone_v2_folder("stage")
+        v2_rel_path = "/".join([MODEL_DIR_NAME, zone_folder, raw.data_product, raw.data_module, f"{raw.name}.json"])
         v1_entities.append(
             _V1EntityMeta(
                 src_abs_path=(src_root / raw.rel_path_to_v1_json).resolve(),
@@ -681,8 +601,8 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
                 name=raw.name,
                 display_name=raw.display_name,
                 v1_locators=[
-                    f"/{_v1_zone_label('raw')}/{raw.data_product}/{raw.data_module}/{raw.name}",
-                    f"/{_v1_zone_label('stage')}/{raw.data_product}/{raw.data_module}/{raw.name}",
+                    f"/{zone_v1_label('raw')}/{raw.data_product}/{raw.data_module}/{raw.name}",
+                    f"/{zone_v1_label('stage')}/{raw.data_product}/{raw.data_module}/{raw.name}",
                 ],
                 v2_rel_path=v2_rel_path,
                 entity_id=0,
@@ -691,11 +611,57 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
             )
         )
 
-    zone_base = {"stage": 1000, "core": 2000, "curated": 3000, "consumer": 4000}
-    for zone in ["stage", "core", "curated", "consumer"]:
+    existing_products: dict[str, dict[str, Any]] = {}
+    for row in out_data_products.get("dataProducts", []) if isinstance(out_data_products, dict) else []:
+        if not isinstance(row, dict):
+            continue
+        name_raw = row.get("name")
+        name = name_raw.strip() if isinstance(name_raw, str) and name_raw.strip() else ""
+        if not name:
+            continue
+        copy_row = dict(row)
+        modules: list[dict[str, Any]] = []
+        for module in row.get("dataModules", []) if isinstance(row.get("dataModules"), list) else []:
+            if not isinstance(module, dict):
+                continue
+            mname_raw = module.get("name")
+            mname = mname_raw.strip() if isinstance(mname_raw, str) and mname_raw.strip() else ""
+            if not mname:
+                continue
+            modules.append(
+                {
+                    "name": mname,
+                    "displayName": module.get("displayName") if isinstance(module.get("displayName"), str) else mname,
+                    "description": module.get("description") if isinstance(module.get("description"), str) else "",
+                }
+            )
+        copy_row["dataModules"] = modules
+        copy_row["displayName"] = copy_row.get("displayName") if isinstance(copy_row.get("displayName"), str) else name
+        copy_row["description"] = copy_row.get("description") if isinstance(copy_row.get("description"), str) else ""
+        existing_products[name] = copy_row
+
+    for product, module_names in discovered_product_modules.items():
+        row = existing_products.get(product)
+        if row is None:
+            row = {"name": product, "displayName": product, "description": "", "dataModules": []}
+            existing_products[product] = row
+        existing_modules = {m.get("name"): m for m in row.get("dataModules", []) if isinstance(m, dict)}
+        for module in sorted(module_names):
+            if module in existing_modules:
+                continue
+            row["dataModules"].append({"name": module, "displayName": module, "description": ""})
+        row["dataModules"] = sorted(
+            [m for m in row.get("dataModules", []) if isinstance(m, dict) and isinstance(m.get("name"), str)],
+            key=lambda m: m["name"],
+        )
+
+    out_data_products["dataProducts"] = sorted(existing_products.values(), key=lambda p: p["name"])
+    out_zones = build_zone_entries(present_zones)
+
+    for zone in ZONE_MODEL_ORDER:
         group = sorted([e for e in v1_entities if e.zone == zone], key=lambda e: e.v2_rel_path)
         for idx, e in enumerate(group):
-            e.entity_id = zone_base[zone] + idx
+            e.entity_id = ZONE_BASE_IDS[zone] + idx
 
     v1_locator_to_new_id: dict[str, int] = {}
     for e in v1_entities:
@@ -794,6 +760,7 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
         entity_properties: list[dict[str, str]] = []
         build_property_refs_from_tags(ent.get("tags"), entity_properties)
         build_property_refs_from_parameters(ent.get("parameters"), entity_properties, meta.v2_rel_path)
+        source_computations = _extract_source_computations(meta.v1.get("function"))
 
         v1_attrs_raw = ent.get("attribute")
         v1_attrs = v1_attrs_raw if isinstance(v1_attrs_raw, list) else []
@@ -840,6 +807,14 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
                 attribute_properties: list[dict[str, str]] = []
                 build_property_refs_from_tags(a.get("tags"), attribute_properties)
                 build_property_refs_from_parameters(a.get("parameter"), attribute_properties, f"{meta.v2_rel_path}:{name}")
+                history_raw = a.get("history")
+                history_norm = _normalize_v2_history(history_raw)
+                history_token = history_raw.strip().upper() if isinstance(history_raw, str) else ""
+                if history_token == "SK":
+                    prop_display_names.setdefault("column_type", "Column Type")
+                    attribute_properties.append({"property": "column_type", "value": "SK"})
+                    add_property_value("column_type", "SK")
+                expression = source_computations.get(name)
 
                 date_modified = _to_datetime_iso(a.get("dateModified"))
                 attrs_out.append(
@@ -847,11 +822,15 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
                         "ordinalNumber": idx + 1,
                         "name": name,
                         "displayName": a.get("displayName") if isinstance(a.get("displayName"), str) else None,
-                        "description": a.get("purpose") if isinstance(a.get("purpose"), str) else (a.get("explanation") if isinstance(a.get("explanation"), str) else ""),
+                        "description": compose_description(a.get("purpose"), a.get("explanation")),
                         "attributeType": attribute_type,
                         "dataType": dt,
-                        "isBusinessKey": bool(a.get("businessKeyNo")) if isinstance(a.get("businessKeyNo"), (int, float)) else False,
-                        "history": _normalize_v2_history(a.get("history")),
+                        "isBusinessKey": (
+                            bool(a.get("businessKeyNo")) if isinstance(a.get("businessKeyNo"), (int, float)) else False
+                        )
+                        or history_token == "BK",
+                        "history": history_norm,
+                        "expression": expression,
                         "refactorNames": a.get("refactorNames") if isinstance(a.get("refactorNames"), list) else None,
                         "dateModified": date_modified,
                         "dateAdded": _to_iso_now(),
@@ -866,17 +845,41 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
             stage_fn_raw = meta.v1.get("function")
             stage_fn = stage_fn_raw if isinstance(stage_fn_raw, dict) else {}
             raw = raw_by_key.get(meta.raw_key) if meta.raw_key else None
+            raw_data_source = None
+            raw_source_location = None
+            if raw and raw.function:
+                raw_data_source = raw.function.get("dataSource") or None
+                raw_source_location = raw.function.get("sourceLocation") or None
+            stage_ds_raw = stage_fn.get("dataSource")
+            stage_data_source = None
+            if isinstance(stage_ds_raw, str) and stage_ds_raw.strip():
+                stage_data_source = stage_ds_raw.strip()
+            stage_sl_raw = stage_fn.get("sourceLocation")
+            stage_source_location = None
+            if isinstance(stage_sl_raw, str) and stage_sl_raw.strip():
+                stage_source_location = stage_sl_raw.strip()
+
             data_source = None
             source_location = None
-            if raw and raw.function:
-                data_source = raw.function.get("dataSource") or data_source
-                source_location = raw.function.get("sourceLocation") or source_location
-            stage_ds_raw = stage_fn.get("dataSource")
-            if isinstance(stage_ds_raw, str) and stage_ds_raw.strip():
-                data_source = stage_ds_raw.strip()
-            stage_sl_raw = stage_fn.get("sourceLocation")
-            if isinstance(stage_sl_raw, str) and stage_sl_raw.strip():
-                source_location = stage_sl_raw.strip()
+            if _is_external_source_pair(raw_data_source, raw_source_location):
+                data_source = raw_data_source
+                source_location = raw_source_location
+                if (
+                    (stage_data_source or stage_source_location)
+                    and (
+                        stage_data_source != raw_data_source
+                        or stage_source_location != raw_source_location
+                    )
+                ):
+                    warnings.append(
+                        f"{meta.v2_rel_path}: conflicting stage/raw external sources; using raw source."
+                    )
+            elif stage_data_source or stage_source_location:
+                data_source = stage_data_source
+                source_location = stage_source_location
+            elif raw_data_source or raw_source_location:
+                data_source = raw_data_source
+                source_location = raw_source_location
 
             raw_attr_by_name: dict[str, dict[str, Any]] = {}
             if raw and raw.attributes:
@@ -915,8 +918,8 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
                         row["sourceDataType"] = to_source_data_type(raw_attr)
                     mapping_out.append(row)
 
-            final_data_source = data_source or "unknown"
-            final_source_location = source_location or "unknown"
+            final_data_source = data_source or UNKNOWN_SOURCE
+            final_source_location = source_location or UNKNOWN_SOURCE
             if not data_source or not source_location:
                 warnings.append(
                     f"{meta.v2_rel_path}: Stage entity is missing dataSource/sourceLocation; using '{final_data_source}' / '{final_source_location}'."
@@ -976,7 +979,7 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
                     continue
                 dm8l = dm8l.strip()
                 if dm8l == "#":
-                    warnings.append(f"{meta.v2_rel_path}: dropped external source '#'; no V2 mapping without dataSource.")
+                    # Source '#'-mappings are consumed via attribute expressions.
                     continue
                 if not dm8l.startswith("/"):
                     warnings.append(f"{meta.v2_rel_path}: dropped unrecognized source '{dm8l}'.")
@@ -1027,7 +1030,7 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
             "id": meta.entity_id,
             "name": meta.name,
             "displayName": meta.display_name or meta.name,
-            "description": ent.get("purpose") if isinstance(ent.get("purpose"), str) else (ent.get("explanation") if isinstance(ent.get("explanation"), str) else ""),
+            "description": compose_description(ent.get("purpose"), ent.get("explanation")),
             "parameters": [],
             "properties": _dedupe_property_refs(entity_properties) if entity_properties else None,
             "attributes": attrs_out,
@@ -1099,7 +1102,7 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
 
     def write_base(name: str, content: Any) -> None:
         nonlocal written_files
-        rel = f"Base/{name}.json"
+        rel = f"{BASE_DIR_NAME}/{name}.json"
         _write_json(out_root / rel, content)
         migrated_base_files.append(rel)
         written_files += 1
@@ -1117,42 +1120,36 @@ def migrate_solution_v1_to_v2(args: dict[str, Any]) -> dict[str, Any]:
     diagram_path = v1_solution_raw.get("diagramPath")
     output_path = v1_solution_raw.get("outputPath")
     if copy_generate and isinstance(generate_path, str) and generate_path.strip():
-        _safe_cp(src_root / generate_path, out_root / "Generate", copied_paths, warnings, "Generate")
+        _safe_cp(src_root / generate_path, out_root / GENERATE_DIR_NAME, copied_paths, warnings, GENERATE_DIR_NAME)
     if copy_diagram and isinstance(diagram_path, str) and diagram_path.strip():
-        _safe_cp(src_root / diagram_path, out_root / "Diagram", copied_paths, warnings, "Diagram")
+        _safe_cp(src_root / diagram_path, out_root / DIAGRAM_DIR_NAME, copied_paths, warnings, DIAGRAM_DIR_NAME)
     if copy_output and isinstance(output_path, str) and output_path.strip():
-        _safe_cp(src_root / output_path, out_root / "Output", copied_paths, warnings, "Output")
+        _safe_cp(src_root / output_path, out_root / OUTPUT_DIR_NAME, copied_paths, warnings, OUTPUT_DIR_NAME)
 
-    generator_targets: list[dict[str, Any]] = []
+    generator_target_names: list[str] = []
     if isinstance(generate_path, str) and generate_path.strip():
         try:
             gen_abs = src_root / generate_path
             for e in gen_abs.iterdir():
                 if not e.is_dir():
                     continue
-                if e.name.startswith(".") or e.name.startswith("__"):
-                    continue
-                generator_targets.append(
-                    {"name": e.name, "isDefault": False, "sourcePath": f"Generate/{e.name}", "outputPath": f"Output/{e.name}/generated"}
-                )
+                generator_target_names.append(e.name)
         except Exception as e:
             warnings.append(f"Generator: failed to scan V1 generatePath ({e}); using fallback target.")
-    if not generator_targets:
-        generator_targets = [{"name": "default", "isDefault": True, "sourcePath": "Generate/default", "outputPath": "Output/default/generated"}]
-    else:
-        generator_targets[0]["isDefault"] = True
+
+    generator_targets = build_generator_targets(generator_target_names)
 
     for t in generator_targets:
         (out_root / t["outputPath"]).mkdir(parents=True, exist_ok=True)
 
     v2_solution: dict[str, Any] = {
-        "schemaVersion": "2.0.0",
-        "basePath": "Base",
-        "modelPath": "Model",
+        "schemaVersion": V2_SCHEMA_VERSION,
+        "basePath": BASE_DIR_NAME,
+        "modelPath": MODEL_DIR_NAME,
         "generatorTargets": generator_targets,
     }
     if copy_diagram:
-        v2_solution["diagramPath"] = "Diagram"
+        v2_solution["diagramPath"] = DIAGRAM_DIR_NAME
 
     target_solution_path = out_root / f"{solution_name}.dm8s"
     _write_json(target_solution_path, v2_solution)

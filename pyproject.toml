@@ -63,7 +63,7 @@ quote-style = "double"
 ##############
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/datam8", "src/datam8_model"]
+packages = ["src/datam8", "src/datam8_model", "src/datam8_model_v1"]
 
 [tool.hatch.build.hooks.custom]
 path = "hatch_build_datamodel.py"
