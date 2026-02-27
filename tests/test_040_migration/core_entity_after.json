@@ -77,13 +77,15 @@
         "charLen": 128,
         "nullable": false
       },
-      "refactorNames": ["Anzeigename"],
+      "refactorNames": [
+        "Anzeigename"
+      ],
       "dateAdded": "2025-01-01T01:01:01Z"
     }
   ],
   "sources": [
     {
-      "sourceLocation": "/010-Stage/Sales/Customer/Customer",
+      "sourceLocation": 2,
       "mapping": [
         {
           "targetName": "CustomerID",
@@ -104,9 +106,28 @@
       ]
     },
     {
-      "sourceLocation": "/010-Stage/Sales/Customer/Customer_EN"
+      "sourceLocation": 3
     }
   ],
-  "relationships": [],
-  "transformations": []
+  "relationships": [
+    {
+      "targetLocation": 1,
+      "attributes": [
+        {
+          "targetName": "KundenNummer",
+          "sourceName": "KundenNummer"
+        }
+      ]
+    }
+  ],
+  "transformations": [
+    {
+      "stepNo": 1,
+      "kind": "function",
+      "name": "default (migrated)",
+      "function": {
+        "source": "customer.py"
+      }
+    }
+  ]
 }

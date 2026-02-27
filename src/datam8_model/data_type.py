@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Annotated
 
@@ -34,7 +35,7 @@ class DataType(BaseModel):
     nullable: bool
     charLen: Annotated[int | None, Field(gt=0)] = None
     precision: Annotated[int | None, Field(gt=0)] = None
-    scale: Annotated[int | None, Field(gt=0)] = None
+    scale: Annotated[int | None, Field(ge=0)] = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
@@ -80,13 +81,9 @@ class DataTypeDefinition(BaseModel):
     hasCharLen: bool | None = False
     hasPrecision: bool | None = False
     hasScale: bool | None = False
-    parquetType: str
+    targets: Mapping[str, str]
     """
-    The actual parquet data type that this datam8 internal type will map to.
-    """
-    sqlType: str
-    """
-    The atual sql data type that this datam8 internal type will map to.
+    Maps target (e.g. databricks, powerbi, sqlserver) to their data types.
     """
 
     def to_dict(self) -> dict:

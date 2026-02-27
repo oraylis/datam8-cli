@@ -166,14 +166,53 @@ class TransformationFunction(BaseModel):
         return model
 
 
-class SourceAttributeMapping(BaseModel):
+class ModelAttributeMapping(BaseModel):
+    """
+    Single attribute mapping.
+    """
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    sourceName: Annotated[str, Field(min_length=1)]
+    targetName: Annotated[str, Field(min_length=1)]
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> ModelAttributeMapping:
+        return ModelAttributeMapping.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> ModelAttributeMapping:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        ModelAttributeMapping
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
+        with open(path) as file:
+            model = ModelAttributeMapping.model_validate_json(file.read())
+
+        return model
+
+
+class SourceAttributeMapping(ModelAttributeMapping):
     """
     Map an attribute in the source to one in the current entity. May optionally contain an explicit source data type.
     """
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
-    targetName: str
-    sourceName: str
     sourceDataType: data_type.DataType | None = None
     properties: Sequence[property.PropertyReference] | None = None
 
@@ -261,13 +300,55 @@ class ModelTransformation(BaseModel):
         return model
 
 
+class ModelRelationship(BaseModel):
+    """
+    Maps attributes to a target location.
+    """
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    targetLocation: int | str
+    alias: str | None = None
+    attributes: Annotated[Sequence[ModelAttributeMapping], Field(min_length=1)]
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> ModelRelationship:
+        return ModelRelationship.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> ModelRelationship:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        ModelRelationship
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
+        with open(path) as file:
+            model = ModelRelationship.model_validate_json(file.read())
+
+        return model
+
+
 class InternalModelSource(BaseModel):
     """
     Internal source definition to reference other entities within datam8.
     """
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
-    sourceLocation: str | int
+    sourceLocation: int
     properties: Sequence[property.PropertyReference] | None = None
     mapping: Sequence[SourceAttributeMapping] | None = None
 
@@ -310,6 +391,7 @@ class ExternalModelSource(BaseModel):
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
     dataSource: str
+    sourceAlias: str | None = None
     sourceLocation: str
     properties: Sequence[property.PropertyReference] | None = None
     mapping: Sequence[SourceAttributeMapping] | None = None
@@ -366,6 +448,10 @@ class ModelEntity(BaseModel):
     transformations: Sequence[ModelTransformation]
     """
     List of transformations that will be executed in order of stepNo.
+    """
+    relationships: Sequence[ModelRelationship]
+    """
+    List of entity relationships.
     """
 
     def to_dict(self) -> dict:

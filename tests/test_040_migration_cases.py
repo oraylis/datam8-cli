@@ -4,23 +4,23 @@ from datetime import datetime, UTC
 
 from pytest_cases import parametrize
 
-from dm8model_v1 import (
+from datam8_model.v1 import (
     AttributeTypes as at_legacy,
     DataTypes as dt_legacy,
     DataProducts as dp_legacy,
     DataSources as ds_legacy,
     CoreModelEntry as core_legacy,
 )
-from dm8model import (
+from datam8_model import (
     data_type as dt,
     attribute as at,
     base as b,
     data_product as dp,
     data_source as ds,
     model as m,
-    property as p,
+    property as p,  # noqa: F401
 )
-from dm8gen import migration_v1, config, parser_v1
+from datam8 import migration_v1, parser_v1
 import pathlib
 
 ref_date = datetime.now(UTC)
@@ -80,6 +80,7 @@ class CaseBaseEntityMigration:
                             hasCharLen=True,
                             targets={
                                 "databricks": "string",
+                                "sqlserver": "nvarchar",
                             },
                         )
                     ],

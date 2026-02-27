@@ -25,7 +25,7 @@ from pydantic_core import ValidationError
 from datam8_model import folder as f
 from datam8_model.property import PropertyReference, PropertyValue
 
-from . import config, model, model_exceptions, parser, parser_exceptions, parser_v1, utils
+from . import config, model, model_exceptions, parser, parser_exceptions, utils
 
 logger = utils.start_logger(__name__)
 

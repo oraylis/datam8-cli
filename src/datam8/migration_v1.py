@@ -1,76 +1,39 @@
+import dataclasses
 import datetime
 import logging
 import pathlib
-import json
-from collections.abc import MutableSequence, Sequence
-from typing import overload
+import shutil
+from collections.abc import Sequence
+from typing import Any, overload
 
 from datam8 import parser_v1, utils
-from datam8_model import (  # noqa: I001
-    attribute as a,
-)
-from datam8_model import (
-    base as b,
-)
-from datam8_model import (
-    common as c,
-)
-from datam8_model import (
-    data_product as dp,
-)
-from datam8_model import (
-    data_source as ds,
-)
-from datam8_model import (
-    data_type as dt,
-)
-from datam8_model import (
-    diagram as d,
-)
-from datam8_model import (
-    folder as f,
-)
-from datam8_model import (
-    model as m,
-)
-from datam8_model import (
-    property as p,
-)
-from datam8_model import (
-    zone as z,
-)
+from datam8_model import attribute as a
+from datam8_model import base as b
+from datam8_model import data_product as dp
+from datam8_model import data_source as ds
+from datam8_model import data_type as dt
+from datam8_model import folder as f
+from datam8_model import model as m
+from datam8_model import property as p
 from datam8_model import solution as s
-from datam8_model.v1 import (
-    AttributeTypes as at_legacy,
-    Solution,
-)
-from datam8_model.v1 import (
-    CoreModelEntry as core_legacy,
-)
-from datam8_model.v1 import (
-    CuratedModelEntry as curated_legacy,
-)
-from datam8_model.v1 import (
-    DataProducts as dp_legacy,
-)
-from datam8_model.v1 import (
-    DataSources as ds_legacy,
-)
-from datam8_model.v1 import (
-    DataTypes as dt_legacy,
-)
-from datam8_model.v1 import (
-    RawModelEntry as raw_legacy,
-)
-from datam8_model.v1 import (
-    StageModelEntry as stage_legacy,
-)
+from datam8_model import zone as z
+from datam8_model.v1 import AttributeTypes as at_legacy
+from datam8_model.v1 import CoreModelEntry as core_legacy
+from datam8_model.v1 import CuratedModelEntry as curated_legacy
+from datam8_model.v1 import DataProducts as dp_legacy
+from datam8_model.v1 import DataSources as ds_legacy
+from datam8_model.v1 import DataTypes as dt_legacy
+from datam8_model.v1 import RawModelEntry as raw_legacy
+from datam8_model.v1 import Solution
+from datam8_model.v1 import StageModelEntry as stage_legacy
 
 logger = logging.getLogger(__name__)
 
-entity_id_counter = 0
-
-MODEL_DUMP_OPTIONS = {"indent": 2, "exclude_defaults": True, "exclude_none": True}
+MODEL_DUMP_OPTIONS: dict[str, Any] = {
+    "indent": 2,
+    "exclude_defaults": True,
+    "exclude_none": True,
+}
 
 type BaseEntitiesType = (
     ds_legacy.Model | at_legacy.Model | dp_legacy.Model | dt_legacy.Model
@@ -185,6 +148,7 @@ def _compose_description(purpose: str | None, explanation: str | None) -> str | 
 def data_type(old: dt_legacy.DataType) -> dt.DataTypeDefinition:
     targets = {
         "databricks": old.parquetType,
+        "sqlserver": old.sqlType,
     }
 
     new = dt.DataTypeDefinition(
@@ -237,175 +201,7 @@ def base_entities(old: BaseEntitiesType) -> b.BaseEntitiesType:
             )
 
 
-def migrate_base_entities(base_dir_path: pathlib.Path, output_path: pathlib.Path) -> None:
-    utils.mkdir(output_path, recursive=True)
-
-    for file in base_dir_path.glob("*.json"):
-        output_file_path = output_path / utils.pascal_to_snake_case(file.name)
-
-        logger.debug(f"Migrating {file} to {output_file_path}")
-
-        match file.name:
-            case "DataTypes.json":
-                base_entity = dt_legacy.Model.from_json_file(file)
-            case "DataProducts.json":
-                base_entity = dp_legacy.Model.from_json_file(file)
-            case "AttributeTypes.json":
-                base_entity = at_legacy.Model.from_json_file(file)
-            case "DataSources.json":
-                base_entity = ds_legacy.Model.from_json_file(file)
-            case _:
-                logger.warning(
-                    "Unknown base file found, cannot be migrated: %s", file.name
-                )
-                continue
-
-        content = base_entities(base_entity).model_dump_json(indent=2, exclude_none=True)
-
-        with open(output_file_path, "w") as file:
-            file.write(content)
-
-    logger.info(
-        f"Migrated base entities from {base_dir_path.as_posix()} to {output_path.as_posix()}"
-    )
-
-
-@overload
-def model_entities(old: raw_legacy.Model) -> m.ModelEntity: ...
-@overload
-def model_entities(old: stage_legacy.Model) -> m.ModelEntity: ...
-@overload
-def model_entities(old: core_legacy.Model) -> m.ModelEntity: ...
-@overload
-def model_entities(old: curated_legacy.Model) -> m.ModelEntity: ...
-
-
-def model_entities(old: parser_v1.ModelEntitiesType) -> m.ModelEntity:
-    match old:
-        case raw_legacy.Model():
-            raise NotImplementedError()
-        case stage_legacy.Model():
-            raise NotImplementedError()
-        case core_legacy.Model():
-            return core_entity(old)
-        case curated_legacy.Model():
-            raise NotImplementedError()
-
-
-def migrate_model_entities(
-    model_dir_path: pathlib.Path, output_path: pathlib.Path
-) -> Tags:
-    """
-    Migrate tags from a directory and return all used tags
-    """
-
-    tags: list[str] = []
-
-    for file in model_dir_path.glob("**/*.json"):
-        output_file_path = (
-            output_path
-            / file.parent.relative_to(model_dir_path.absolute())
-            / utils.pascal_to_snake_case(file.name)
-        )
-
-        logger.debug(f"Migrating {file} to {output_file_path}")
-
-        model_entity = parser_v1.parse_model_file(file)
-        content = model_entities(model_entity).model_dump_json(
-            indent=2, exclude_none=True, exclude_defaults=True
-        )
-
-        utils.mkdir(output_file_path.parent, recursive=True)
-
-        if model_entity.entity:
-            tags.extend(model_entity.entity.tags or [])
-
-        with open(output_file_path, "w") as file:
-            file.write(content)
-
-    logger.info(
-        f"Migrated model entities from {model_dir_path.as_posix()} to {output_path.as_posix()}"
-    )
-
-    return tags
-
-
-def migrate_zones(solution: Solution.Model, output_path: pathlib.Path) -> None:
-    new_zones = b.Zones(
-        type="zones",
-        zones=[
-            z.Zone(
-                name="Stage",
-                displayName=solution.AreaTypes_1.Stage,
-                targetName="Stage",
-            ),
-            z.Zone(
-                name="Core",
-                displayName=solution.AreaTypes_1.Core,
-                targetName="Core",
-            ),
-            z.Zone(
-                name="Curated",
-                displayName=solution.AreaTypes_1.Curated,
-                targetName="Curated",
-            ),
-        ],
-    )
-    content = new_zones.model_dump_json(
-        indent=2, exclude_defaults=True, exclude_none=True
-    )
-
-    with open(output_path, "w") as file:
-        file.write(content)
-
-
-def create_new_databricks_solution(output_path: pathlib.Path) -> None:
-    new_soution = s.Solution(
-        schemaVersion="2.0.0",
-        basePath=pathlib.Path("Base"),
-        modelPath=pathlib.Path("Model"),
-        generatorTargets=[
-            s.GeneratorTarget(
-                name="databricks",
-                sourcePath=pathlib.Path("Generate/databricks-lake"),
-                outputPath=pathlib.Path("Output"),
-                isDefault=True,
-            )
-        ],
-    )
-    content = new_soution.model_dump_json(**MODEL_DUMP_OPTIONS)
-
-    with open(output_path, "w") as file:
-        file.write(content)
-
-
-def create_new_properties(tags: Tags, output_path: pathlib.Path) -> None:
-    new_properties = b.Properties(
-        type="properties",
-        properties=[
-            p.Property(name="tags", displayName="Tags"),
-            p.Property(name="column_type", displayName="Column Type"),
-        ],
-    )
-    new_property_values = b.PropertyValues(
-        type="propertyValues",
-        propertyValues=[
-            p.PropertyValue(
-                name=tag,
-                property="tags",
-            )
-            for tag in tags
-        ],
-    )
-
-    with open(output_path / "properties.json", "w") as file:
-        file.write(new_properties.model_dump_json(**MODEL_DUMP_OPTIONS))
-
-    with open(output_path / "property_values.json", "w") as file:
-        file.write(new_property_values.model_dump_json(**MODEL_DUMP_OPTIONS))
-
-
-def get_dm8l_source(
+def get_dm8l_core_source(
     sources: Sequence[core_legacy.SourceEntity] | None,
 ) -> dict[str, core_legacy.MappingItem]:
     attributes: dict[str, core_legacy.MappingItem] = {}
@@ -422,92 +218,35 @@ def get_dm8l_source(
     return attributes
 
 
-def core_entity(old: core_legacy.Model) -> m.ModelEntity:
-    if old.entity is None or old.function is None:
-        raise MigrationError("entity|function")
+def attribute(old: core_legacy.Attribute | stage_legacy.Attribute) -> a.Attribute:
+    match old:
+        case core_legacy.Attribute():
+            return attribute_core(old)
+        case stage_legacy.Attribute():
+            return attribute_stage(old)
 
-    if old.entity.attribute is None:
-        raise MigrationError("entity.attribute")
 
-    global entity_id_counter
-    entity_id_counter += 1
-
-    attribute_mappings = get_dm8l_source(old.function.source)
-
-    attributes: list[a.Attribute] = []
-    source_mappings: list[m.InternalModelSource] = []
-    ordinal_number = 0
-
-    for attr in old.entity.attribute:
-        ordinal_number += 1
-        new_attribute = attribute(attr)
-        new_attribute.ordinalNumber = ordinal_number
-
-        if attr.name in attribute_mappings:
-            source_computation = attribute_mappings[attr.name].sourceComputation
-            new_attribute.expression = (
-                source_computation if source_computation != "Default" else None
-            )
-
-        attributes.append(new_attribute)
-
-    for src in old.function.source or []:
-        if src.dm8l == "#":
-            continue
-
-        source_mapping = [
-            m.SourceAttributeMapping(
-                sourceName=mapping.sourceName,
-                targetName=mapping.name,
-            )
-            for mapping in src.mapping or []
-            if mapping.name is not None and mapping.name != mapping.sourceName
-        ]
-
-        new_source = m.InternalModelSource(
-            sourceLocation=src.dm8l,
-            mapping=source_mapping if len(source_mapping) > 0 else None,
-        )
-
-        source_mappings.append(new_source)
-
-    relationships: list[m.ModelRelationship] = []
-    for rel in old.entity.relationship or []:
-        new_relationship = m.ModelRelationship(
-            targetLocation=rel.dm8lKey,
-            alias=rel.role if rel.role != "#" else None,
-            attributes=[
-                m.ModelAttributeMapping(
-                    sourceName=attr.dm8lKeyAttr, targetName=attr.dm8lAttr
-                )
-                for attr in rel.fields or []
-            ],
-        )
-        relationships.append(new_relationship)
-
-    new = m.ModelEntity(
-        id=entity_id_counter,
-        name=old.entity.name,
-        displayName=old.entity.displayName,
-        description=_compose_description(old.entity.purpose, old.entity.explanation),
-        parameters=[
-            m.ModelParameter(name=p.name, value=p.value)
-            for p in old.entity.parameters or []
-        ],
-        properties=[
-            p.PropertyReference(property="tags", value=tag)
-            for tag in old.entity.tags or []
-        ],
-        attributes=attributes,
-        sources=source_mappings,
-        transformations=[],
-        relationships=relationships,
+def attribute_stage(old: stage_legacy.Attribute) -> a.Attribute:
+    new = a.Attribute(
+        ordinalNumber=1,
+        name=old.name,
+        dataType=dt.DataType(
+            type=old.type,
+            nullable=old.nullable or False,
+            charLen=old.charLength,
+            precision=old.precision,
+            scale=old.scale,
+        ),
+        attributeType="Source",
+        dateAdded=datetime.datetime.now(datetime.UTC),
+        dateDeleted=None,
+        dateModified=None,
     )
 
     return new
 
 
-def attribute(old: core_legacy.Attribute) -> a.Attribute:
+def attribute_core(old: core_legacy.Attribute) -> a.Attribute:
     if old.dataType is None or old.attributeType is None:
         raise MigrationError("dataType|attributeType")
 
@@ -540,7 +279,7 @@ def attribute(old: core_legacy.Attribute) -> a.Attribute:
             precision=old.precision,
             scale=old.scale,
         ),
-        dateAdded=datetime.datetime.now(),
+        dateAdded=datetime.datetime.now(datetime.UTC),
         dateDeleted=None,
         dateModified=None,
         refactorNames=old.refactorNames if old.refactorNames else None,
@@ -549,6 +288,496 @@ def attribute(old: core_legacy.Attribute) -> a.Attribute:
     return new
 
 
+class MigrationV1:
+    def __init__(self, model_file_references: dict[str, parser_v1.ModelFileReference]):
+        self.model_file_references = model_file_references
+
+    @overload
+    def model_entities(self, old: raw_legacy.Model) -> m.ModelEntity: ...
+    @overload
+    def model_entities(self, old: stage_legacy.Model) -> m.ModelEntity: ...
+    @overload
+    def model_entities(self, old: core_legacy.Model) -> m.ModelEntity: ...
+    @overload
+    def model_entities(self, old: curated_legacy.Model) -> m.ModelEntity: ...
+
+    def model_entities(self, old: parser_v1.ModelEntitiesType) -> m.ModelEntity:
+        match old:
+            case core_legacy.Model() | curated_legacy.Model():
+                return self.core_entity(old)
+            case stage_legacy.Model():
+                return self.stage_entity(old)
+
+        raise NotImplementedError()
+
+    def stage_entity(self, old: stage_legacy.Model) -> m.ModelEntity:
+        if old.entity is None or old.function is None:
+            raise MigrationError("entity|function")
+
+        if old.entity.attribute is None:
+            raise MigrationError("entity.attribute")
+
+        if old.function.dataSource is None or old.function.sourceLocation is None:
+            raise MigrationError("function.dataSource|function.sourceLocation")
+
+        stage_locator = (
+            f"/Stage/{old.entity.dataProduct}/{old.entity.dataModule}/{old.entity.name}"
+        )
+        raw_locator = old.function.sourceLocation.replace("raw", "/Raw")
+
+        raw_entity = parser_v1.parse_model_file(
+            self.model_file_references[raw_locator].path
+        )
+        if not isinstance(raw_entity, raw_legacy.Model):
+            raise Exception("Stage needs to have a raw entity as a source")
+
+        if (
+            raw_entity.function is None
+            or raw_entity.function.dataSource is None
+            or raw_entity.entity is None
+            or raw_entity.function.sourceLocation is None
+        ):
+            raise MigrationError("raw_entity.function")
+
+        source_attributes: dict[str, raw_legacy.Attribute] = {
+            attr.name: attr for attr in raw_entity.entity.attribute or []
+        }
+        source_attribute_mappings: dict[str, stage_legacy.AttributesMapping] = {
+            sam.target: sam for sam in old.function.attributeMapping or []
+        }
+
+        new_source = m.ExternalModelSource(
+            dataSource=raw_entity.function.dataSource,
+            sourceLocation=raw_entity.function.sourceLocation,
+            mapping=[
+                m.SourceAttributeMapping(
+                    sourceName=mapping.source,
+                    targetName=mapping.target,
+                    sourceDataType=dt.DataType(
+                        type=source_attributes[mapping.source].type,
+                        nullable=source_attributes[mapping.source].nullable or False,
+                        charLen=source_attributes[mapping.source].charLength,
+                        precision=source_attributes[mapping.source].precision,
+                        scale=source_attributes[mapping.source].scale,
+                    ),
+                )
+                for target, mapping in source_attribute_mappings.items()
+            ],
+        )
+
+        attributes: list[a.Attribute] = []
+        ordinal_number: int = 0
+
+        for attr in old.entity.attribute:
+            ordinal_number += 1
+            new_attribute = attribute(attr)
+            new_attribute.ordinalNumber = ordinal_number
+
+            old_date_added = source_attributes[attr.name].dateAdded
+            old_date_modified = source_attributes[attr.name].dateModified
+            old_date_deleted = source_attributes[attr.name].dateDeleted
+
+            new_date_modified = (
+                datetime.datetime.fromisoformat(old_date_modified).astimezone(
+                    datetime.UTC
+                )
+                if old_date_modified is not None
+                else None
+            )
+            new_date_added = (
+                datetime.datetime.fromisoformat(old_date_added).astimezone(datetime.UTC)
+                if old_date_added is not None
+                else None
+            )
+
+            new_date_deleted = (
+                datetime.datetime.fromisoformat(old_date_deleted).astimezone(datetime.UTC)
+                if old_date_deleted is not None
+                else None
+            )
+            new_attribute.dateModified = new_date_modified
+            new_attribute.dateAdded = (
+                new_date_added or new_date_modified or new_attribute.dateAdded
+            )
+            new_attribute.dateDeleted = new_date_deleted
+
+            attributes.append(new_attribute)
+
+        new = m.ModelEntity(
+            id=self.model_file_references[stage_locator].id,
+            name=old.entity.name,
+            displayName=old.entity.displayName,
+            attributes=attributes,
+            sources=[new_source],
+            transformations=[],
+            relationships=[],
+        )
+
+        return new
+
+    def core_entity(self, old: core_legacy.Model | curated_legacy.Model) -> m.ModelEntity:
+        if old.entity is None or old.function is None:
+            raise MigrationError("entity|function")
+
+        if old.entity.attribute is None:
+            raise MigrationError("entity.attribute")
+
+        match old:
+            case core_legacy.Model():
+                attribute_mappings = get_dm8l_core_source(old.function.source)
+            case curated_legacy.Model():
+                attribute_mappings: dict[str, Any] = {}
+
+        attributes: list[a.Attribute] = []
+        base_locator = (
+            f"{old.entity.dataProduct}/{old.entity.dataModule}/{old.entity.name}"
+        )
+        source_mappings: list[m.InternalModelSource] = []
+        transformations: list[m.ModelTransformation] = []
+        ordinal_number = 0
+
+        for attr in old.entity.attribute:
+            ordinal_number += 1
+            new_attribute = attribute(attr)
+            new_attribute.ordinalNumber = ordinal_number
+            # new_attribute.dateAdded = datetime.datetime.now()
+
+            if attr.name in attribute_mappings:
+                source_computation = attribute_mappings[attr.name].sourceComputation
+                new_attribute.expression = (
+                    source_computation if source_computation != "Default" else None
+                )
+
+            attributes.append(new_attribute)
+
+        match old:
+            case core_legacy.Model():
+                locator = "/Core/" + base_locator
+                transformations.append(
+                    m.ModelTransformation(
+                        stepNo=1,
+                        kind=m.TransformationKind.FUNCTION,
+                        name="default (migrated)",
+                        function=m.TransformationFunction(
+                            source=f"{utils.pascal_to_snake_case(old.entity.name)}.py"
+                        ),
+                    )
+                )
+                for src in old.function.source or []:
+                    if src.dm8l == "#":
+                        continue
+
+                    source_mapping = [
+                        m.SourceAttributeMapping(
+                            sourceName=mapping.sourceName,
+                            targetName=mapping.name,
+                        )
+                        for mapping in src.mapping or []
+                        if mapping.name is not None and mapping.name != mapping.sourceName
+                    ]
+
+                    new_source = m.InternalModelSource(
+                        sourceLocation=self.model_file_references[src.dm8l].id,
+                        mapping=source_mapping if len(source_mapping) > 0 else None,
+                    )
+
+                    source_mappings.append(new_source)
+            case curated_legacy.Model():
+                locator = "/Curated/" + base_locator
+                curStep = 1
+                for func in old.function:
+                    transformations.append(
+                        m.ModelTransformation(
+                            stepNo=curStep,
+                            kind=m.TransformationKind.FUNCTION,
+                            name=func.name,
+                            function=m.TransformationFunction(
+                                source=f"{utils.pascal_to_snake_case(old.entity.name)}.py"
+                            ),
+                        )
+                    )
+                    for src in func.source or []:
+                        source_mappings.append(
+                            m.InternalModelSource(
+                                sourceLocation=self.model_file_references[src.dm8l].id
+                            )
+                        )
+
+        relationships: list[m.ModelRelationship] = []
+        for rel in old.entity.relationship or []:
+            new_relationship = m.ModelRelationship(
+                targetLocation=self.model_file_references[rel.dm8lKey].id,
+                alias=rel.role if rel.role != "#" else None,
+                attributes=[
+                    m.ModelAttributeMapping(
+                        sourceName=attr.dm8lKeyAttr, targetName=attr.dm8lAttr
+                    )
+                    for attr in rel.fields or []
+                ],
+            )
+            relationships.append(new_relationship)
+
+        new = m.ModelEntity(
+            id=self.model_file_references[locator].id,
+            name=old.entity.name,
+            displayName=old.entity.displayName,
+            description=_compose_description(old.entity.purpose, old.entity.explanation),
+            parameters=[
+                m.ModelParameter(name=p.name, value=p.value)
+                for p in old.entity.parameters or []
+            ],
+            properties=[
+                p.PropertyReference(property="tags", value=tag)
+                for tag in old.entity.tags or []
+            ],
+            attributes=attributes,
+            sources=source_mappings,
+            transformations=transformations,
+            relationships=relationships,
+        )
+
+        return new
+
+    def migrate_model_entities(
+        self, model_dir_path: pathlib.Path, output_path: pathlib.Path
+    ) -> Tags:
+        """
+        Migrate tags from a directory and return all used tags
+        """
+
+        tags: list[str] = []
+
+        for file in model_dir_path.glob("**/*.json"):
+            output_file_path = (
+                output_path
+                / file.parent.relative_to(model_dir_path.absolute())
+                / utils.pascal_to_snake_case(file.name)
+            )
+
+            logger.debug(f"Migrating {file} to {output_file_path}")
+
+            model_entity = parser_v1.parse_model_file(file)
+            content = self.model_entities(model_entity).model_dump_json(
+                indent=2, exclude_none=True, exclude_defaults=True
+            )
+
+            utils.mkdir(output_file_path.parent, recursive=True)
+
+            if model_entity.entity:
+                tags.extend(model_entity.entity.tags or [])
+
+            with open(output_file_path, "w") as _f:
+                _f.write(content)
+
+            python_file = file.with_suffix(".py")
+            if python_file.exists():
+                shutil.copy2(python_file, output_file_path.with_suffix(".py"))
+
+        logger.info(
+            f"Migrated model entities from {model_dir_path.as_posix()} to {output_path.as_posix()}"
+        )
+
+        return tags
+
+    @staticmethod
+    def migrate_base_entities(
+        base_dir_path: pathlib.Path, output_path: pathlib.Path
+    ) -> "NewBaseEntities":
+        utils.mkdir(output_path, recursive=True)
+
+        data_types, data_products, attribute_types, data_sources = [], [], [], []
+
+        for file in base_dir_path.glob("*.json"):
+            output_file_path = output_path / utils.pascal_to_snake_case(file.name)
+
+            logger.debug(f"Migrating {file} to {output_file_path}")
+
+            match file.name:
+                case "DataTypes.json":
+                    base_entity = dt_legacy.Model.from_json_file(file)
+                case "DataProducts.json":
+                    base_entity = dp_legacy.Model.from_json_file(file)
+                case "AttributeTypes.json":
+                    base_entity = at_legacy.Model.from_json_file(file)
+                case "DataSources.json":
+                    base_entity = ds_legacy.Model.from_json_file(file)
+                case _:
+                    logger.warning(
+                        "Unknown base file found, cannot be migrated: %s", file.name
+                    )
+                    continue
+
+            new_base_entities = base_entities(base_entity)
+            match new_base_entities:
+                case b.DataTypes():
+                    data_types = new_base_entities.dataTypes
+                case b.DataProducts():
+                    data_products = new_base_entities.dataProducts
+                case b.AttributeTypes():
+                    attribute_types = new_base_entities.attributeTypes
+                case b.DataSources():
+                    data_sources = new_base_entities.dataSources
+
+            content = new_base_entities.model_dump_json(indent=2, exclude_none=True)
+
+            with open(output_file_path, "w") as file:
+                file.write(content)
+
+        assert data_types is not None, "DataTypes were not found in solution"
+        assert data_products is not None, "DataProducts were not found in solution"
+        assert attribute_types is not None, "AttributeTypes were not found in solution"
+        assert data_sources is not None, "DataSources were not found in solution"
+
+        logger.info(
+            f"Migrated base entities from {base_dir_path.as_posix()} to {output_path.as_posix()}"
+        )
+
+        return NewBaseEntities(
+            data_types=data_types,
+            data_products=data_products,
+            attribute_types=attribute_types,
+            data_sources=data_sources,
+        )
+
+    @staticmethod
+    def migrate_zones(
+        solution: Solution.Model, output_path: pathlib.Path
+    ) -> list[z.Zone]:
+        new_zones = b.Zones(
+            type="zones",
+            zones=[
+                z.Zone(
+                    name="Stage",
+                    displayName=solution.AreaTypes_1.Stage,
+                    targetName="Stage",
+                ),
+                z.Zone(
+                    name="Core",
+                    displayName=solution.AreaTypes_1.Core,
+                    targetName="Core",
+                ),
+                z.Zone(
+                    name="Curated",
+                    displayName=solution.AreaTypes_1.Curated,
+                    targetName="Curated",
+                ),
+            ],
+        )
+        content = new_zones.model_dump_json(
+            indent=2, exclude_defaults=True, exclude_none=True
+        )
+
+        with open(output_path, "w") as file:
+            file.write(content)
+
+        return [z for z in new_zones.zones]
+
+    @staticmethod
+    def create_new_databricks_solution(output_path: pathlib.Path) -> None:
+        new_soution = s.Solution(
+            schemaVersion="2.0.0",
+            basePath=pathlib.Path("Base"),
+            modelPath=pathlib.Path("Model"),
+            generatorTargets=[
+                s.GeneratorTarget(
+                    name="databricks",
+                    sourcePath=pathlib.Path("Generate/databricks-lake"),
+                    outputPath=pathlib.Path("Output"),
+                    isDefault=True,
+                )
+            ],
+        )
+        content = new_soution.model_dump_json(**MODEL_DUMP_OPTIONS)
+
+        with open(output_path, "w") as file:
+            file.write(content)
+
+    @staticmethod
+    def create_new_properties(tags: Tags, output_path: pathlib.Path) -> None:
+        new_properties = b.Properties(
+            type="properties",
+            properties=[
+                p.Property(name="tags", displayName="Tags"),
+                p.Property(name="column_type", displayName="Column Type"),
+            ],
+        )
+        new_property_values = b.PropertyValues(
+            type="propertyValues",
+            propertyValues=[
+                p.PropertyValue(
+                    name=tag,
+                    property="tags",
+                )
+                for tag in tags
+            ],
+        )
+
+        with open(output_path / "properties.json", "w") as file:
+            file.write(new_properties.model_dump_json(**MODEL_DUMP_OPTIONS))
+
+        with open(output_path / "property_values.json", "w") as file:
+            file.write(new_property_values.model_dump_json(**MODEL_DUMP_OPTIONS))
+
+    @staticmethod
+    def create_properties_for_folders(
+        zones: Sequence[z.Zone],
+        data_products: Sequence[dp.DataProduct],
+        output_path: pathlib.Path,
+    ) -> None:
+        """Should only be called AFTER other models have been migrated. No new folders will be created."""
+        next_id = 1
+
+        for zone in zones:
+            zone_path = output_path / zone.name
+            if not zone_path.exists():
+                continue
+
+            for product in data_products:
+                product_path = zone_path / product.name
+                if not product_path.exists():
+                    continue
+
+                product_folder = b.Folders(
+                    type="folders",
+                    folders=[
+                        f.Folder(id=next_id, name=product.name, dataProduct=product.name)
+                    ],
+                )
+                next_id += 1
+
+                with open(product_path / ".properties.json", "w") as _file:
+                    _file.write(product_folder.model_dump_json(**MODEL_DUMP_OPTIONS))
+
+                for module in product.dataModules:
+                    module_path = product_path / module.name
+                    if not module_path.exists():
+                        continue
+
+                    module_folder = b.Folders(
+                        type="folders",
+                        folders=[
+                            f.Folder(
+                                id=next_id,
+                                name=module.name,
+                                dataProduct=product.name,
+                                dataModule=module.name,
+                            )
+                        ],
+                    )
+                    next_id += 1
+
+                    with open(module_path / ".properties.json", "w") as _file:
+                        _file.write(module_folder.model_dump_json(**MODEL_DUMP_OPTIONS))
+
+
 class MigrationError(Exception):
     def __init__(self, attr: str):
         super().__init__(f"Attribute {attr} cannot be None")
+
+
+@dataclasses.dataclass
+class NewBaseEntities:
+    data_types: Sequence[dt.DataTypeDefinition]
+    data_products: Sequence[dp.DataProduct]
+    attribute_types: Sequence[a.AttributeType]
+    data_sources: Sequence[ds.DataSource]

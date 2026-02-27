@@ -19,12 +19,11 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import datetime
-from enum import Enum
+from enum import Enum, StrEnum
 from pathlib import Path
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from . import data_type, property
 
@@ -39,6 +38,12 @@ class HistoryType(Enum):
     SCD2 = "SCD2"
     SCD3 = "SCD3"
     SCD4 = "SCD4"
+
+
+class ExpressionLanguage(StrEnum):
+    SQL = "sql"
+    DAX = "dax"
+    PYTHON = "python"
 
 
 class HasUnit(Enum):
@@ -120,11 +125,13 @@ class Attribute(BaseModel):
     """
     Defines how an attribute in a slowly chaning dimension should behave.
     """
+    expression: str | None = None
+    expressionLanguage: ExpressionLanguage | str | None = ExpressionLanguage.SQL
     unit: str | None = None
     refactorNames: Sequence[str] | None = None
-    dateModified: datetime | None = None
-    dateDeleted: datetime | None = None
-    dateAdded: datetime
+    dateModified: AwareDatetime | None = None
+    dateDeleted: AwareDatetime | None = None
+    dateAdded: AwareDatetime
     properties: Sequence[property.PropertyReference] | None = None
 
     def to_dict(self) -> dict:

@@ -104,7 +104,6 @@ MigrationOutputDir = Annotated[
     Path,
     typer.Option(
         "--output-dir",
-        "-od",
         help="Directory where the migrated model will be written to",
     ),
 ]

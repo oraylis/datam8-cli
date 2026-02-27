@@ -23,7 +23,7 @@ class GenerateDatamodelHook(interface.BuildHookInterface):
             input_file_type=dcg.InputFileType.JsonSchema,
             output=self.__output_dir,
             output_model_type=dcg.DataModelType.PydanticV2BaseModel,
-            output_datetime_class=dcg.DatetimeClassType.Datetime,
+            output_datetime_class=dcg.DatetimeClassType.Awaredatetime,
             target_python_version=dcg.PythonVersion.PY_312,
             custom_template_dir=self.__template_dir,
             formatters=[dcg.Formatter.RUFF_CHECK, dcg.Formatter.RUFF_FORMAT],

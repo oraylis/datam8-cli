@@ -162,7 +162,7 @@ class Zones(BaseModel):
     type: Annotated[Literal["zones"], Field(title="EntityType")]
     properties: Any | None = None
     propertyValues: Any | None = None
-    zones: Annotated[Sequence[zone.Zone], Field(min_length=1)]
+    zones: Sequence[zone.Zone]
     dataTypes: Any | None = None
     dataSourceTypes: Any | None = None
     dataProducts: Any | None = None
@@ -266,7 +266,7 @@ class DataSourceTypes(BaseModel):
     propertyValues: Any | None = None
     zones: Any | None = None
     dataTypes: Any | None = None
-    dataSourceTypes: Annotated[Sequence[data_source.DataSourceType], Field(min_length=1)]
+    dataSourceTypes: Sequence[data_source.DataSourceType]
     dataProducts: Any | None = None
     dataModules: Any | None = None
     attributeTypes: Any | None = None
@@ -522,7 +522,7 @@ class DataProducts(BaseModel):
     zones: Any | None = None
     dataTypes: Any | None = None
     dataSourceTypes: Any | None = None
-    dataProducts: Annotated[Sequence[data_product.DataProduct], Field(min_length=1)]
+    dataProducts: Sequence[data_product.DataProduct]
     dataModules: Any | None = None
     attributeTypes: Any | None = None
     dataSources: Any | None = None

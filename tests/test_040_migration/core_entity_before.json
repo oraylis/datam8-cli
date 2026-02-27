@@ -59,7 +59,18 @@
         "history": "SCD2"
       }
     ],
-    "relationship": [],
+    "relationship": [
+      {
+        "dm8lKey": "/Core/Sales/Customer/Customer",
+        "role": "#",
+        "fields": [
+          {
+            "dm8lKeyAttr": "KundenNummer",
+            "dm8lAttr": "KundenNummer"
+          }
+        ]
+      }
+    ],
     "refactorNames": []
   },
   "function": {

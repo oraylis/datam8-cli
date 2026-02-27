@@ -1,14 +1,15 @@
+import logging
+
 import pytest_cases
+from deepdiff import DeepDiff
 from test_040_migration_cases import (
-    CaseModelEntityMigration,
-    CaseBaseEntityMigration,
     BaseEntityMapping,
+    CaseBaseEntityMigration,
+    CaseModelEntityMigration,
     ModelEntityMapping,
 )
-from deepdiff import DeepDiff
 
-from dm8gen import migration_v1
-import logging
+from datam8 import migration_v1
 
 logger = logging.getLogger(__name__)
 
@@ -75,10 +76,13 @@ def test_migrate_model(case: BaseEntityMapping):
 @pytest_cases.parametrize_with_cases(
     "case", cases=CaseModelEntityMigration, glob="*_valid"
 )
-def test_migrated_model_entity(case: ModelEntityMapping):
+def test_migrated_model_entity(
+    case: ModelEntityMapping, migration: migration_v1.MigrationV1
+):
     old = case.legacy
     new = case.new
-    migrated = migration_v1.model_entities(old)
+
+    migrated = migration.model_entities(old)
 
     diff = DeepDiff(
         migrated,
