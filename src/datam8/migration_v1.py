@@ -58,6 +58,7 @@ def data_source(old: ds_legacy.DataSource) -> ds.DataSource:
         description=old.purpose,
         connectionString=old.connectionString,
         dataTypeMapping=new_mapping,
+        extendedProperties=utils.none_if(getattr(old, "ExtendedProperties", None), {})
     )
 
     return new
@@ -233,7 +234,7 @@ def attribute_stage(old: stage_legacy.Attribute) -> a.Attribute:
         dataType=dt.DataType(
             type=old.type,
             nullable=old.nullable or False,
-            charLen=old.charLength,
+            charLen=utils.none_if(old.charLength, 0),
             precision=old.precision,
             scale=old.scale,
         ),
@@ -275,7 +276,7 @@ def attribute_core(old: core_legacy.Attribute) -> a.Attribute:
         dataType=dt.DataType(
             type=old.dataType,
             nullable=old.nullable or False,
-            charLen=old.charLength,
+            charLen=utils.none_if(old.charLength, 0),
             precision=old.precision,
             scale=old.scale,
         ),
@@ -320,13 +321,11 @@ class MigrationV1:
         if old.function.dataSource is None or old.function.sourceLocation is None:
             raise MigrationError("function.dataSource|function.sourceLocation")
 
-        stage_locator = (
-            f"/Stage/{old.entity.dataProduct}/{old.entity.dataModule}/{old.entity.name}"
-        )
+        stage_locator = f"/stage/{old.entity.dataProduct.lower()}/{old.entity.dataModule.lower()}/{old.entity.name.lower()}"
         raw_locator = old.function.sourceLocation.replace("raw", "/Raw")
 
         raw_entity = parser_v1.parse_model_file(
-            self.model_file_references[raw_locator].path
+            self.model_file_references[raw_locator.lower()].path
         )
         if not isinstance(raw_entity, raw_legacy.Model):
             raise Exception("Stage needs to have a raw entity as a source")
@@ -356,7 +355,9 @@ class MigrationV1:
                     sourceDataType=dt.DataType(
                         type=source_attributes[mapping.source].type,
                         nullable=source_attributes[mapping.source].nullable or False,
-                        charLen=source_attributes[mapping.source].charLength,
+                        charLen=utils.none_if(
+                            source_attributes[mapping.source].charLength, 0
+                        ),
                         precision=source_attributes[mapping.source].precision,
                         scale=source_attributes[mapping.source].scale,
                     ),
@@ -373,28 +374,52 @@ class MigrationV1:
             new_attribute = attribute(attr)
             new_attribute.ordinalNumber = ordinal_number
 
-            old_date_added = source_attributes[attr.name].dateAdded
-            old_date_modified = source_attributes[attr.name].dateModified
-            old_date_deleted = source_attributes[attr.name].dateDeleted
+            old_date_added = source_attributes[
+                source_attribute_mappings[attr.name].source
+            ].dateAdded
+            old_date_modified = source_attributes[
+                source_attribute_mappings[attr.name].source
+            ].dateModified
+            old_date_deleted = source_attributes[
+                source_attribute_mappings[attr.name].source
+            ].dateDeleted
 
-            new_date_modified = (
-                datetime.datetime.fromisoformat(old_date_modified).astimezone(
-                    datetime.UTC
+            try:
+                new_date_modified = (
+                    datetime.datetime.fromisoformat(old_date_modified).astimezone(
+                        datetime.UTC
+                    )
+                    if old_date_modified is not None
+                    else None
                 )
-                if old_date_modified is not None
-                else None
-            )
-            new_date_added = (
-                datetime.datetime.fromisoformat(old_date_added).astimezone(datetime.UTC)
-                if old_date_added is not None
-                else None
-            )
 
-            new_date_deleted = (
-                datetime.datetime.fromisoformat(old_date_deleted).astimezone(datetime.UTC)
-                if old_date_deleted is not None
-                else None
-            )
+                new_date_added = (
+                    datetime.datetime.fromisoformat(old_date_added).astimezone(
+                        datetime.UTC
+                    )
+                    if old_date_added is not None
+                    else None
+                )
+
+                new_date_deleted = (
+                    datetime.datetime.fromisoformat(old_date_deleted).astimezone(
+                        datetime.UTC
+                    )
+                    if old_date_deleted is not None
+                    else None
+                )
+            except Exception as err:
+                logger.error(
+                    "Could not convert existing timestamp for %s:%s - %s (%s)",
+                    stage_locator,
+                    new_attribute.name,
+                    old_date_modified,
+                    str(err),
+                )
+                new_date_added = new_attribute.dateAdded
+                new_date_modified = None
+                new_date_deleted = None
+
             new_attribute.dateModified = new_date_modified
             new_attribute.dateAdded = (
                 new_date_added or new_date_modified or new_attribute.dateAdded
@@ -429,9 +454,7 @@ class MigrationV1:
                 attribute_mappings: dict[str, Any] = {}
 
         attributes: list[a.Attribute] = []
-        base_locator = (
-            f"{old.entity.dataProduct}/{old.entity.dataModule}/{old.entity.name}"
-        )
+        base_locator = f"{old.entity.dataProduct.lower()}/{old.entity.dataModule.lower()}/{old.entity.name.lower()}"
         source_mappings: list[m.InternalModelSource] = []
         transformations: list[m.ModelTransformation] = []
         ordinal_number = 0
@@ -452,7 +475,7 @@ class MigrationV1:
 
         match old:
             case core_legacy.Model():
-                locator = "/Core/" + base_locator
+                locator = "/core/" + base_locator
                 transformations.append(
                     m.ModelTransformation(
                         stepNo=1,
@@ -477,13 +500,13 @@ class MigrationV1:
                     ]
 
                     new_source = m.InternalModelSource(
-                        sourceLocation=self.model_file_references[src.dm8l].id,
+                        sourceLocation=self.model_file_references[src.dm8l.lower()].id,
                         mapping=source_mapping if len(source_mapping) > 0 else None,
                     )
 
                     source_mappings.append(new_source)
             case curated_legacy.Model():
-                locator = "/Curated/" + base_locator
+                locator = "/curated/" + base_locator
                 curStep = 1
                 for func in old.function:
                     transformations.append(
@@ -551,7 +574,7 @@ class MigrationV1:
             output_file_path = (
                 output_path
                 / file.parent.relative_to(model_dir_path.absolute())
-                / utils.pascal_to_snake_case(file.name)
+                / file.name
             )
 
             logger.debug(f"Migrating {file} to {output_file_path}")
@@ -586,6 +609,7 @@ class MigrationV1:
         utils.mkdir(output_path, recursive=True)
 
         data_types, data_products, attribute_types, data_sources = [], [], [], []
+        data_source_types: dict[str, ds.DataSourceType] = {}
 
         for file in base_dir_path.glob("*.json"):
             output_file_path = output_path / utils.pascal_to_snake_case(file.name)
@@ -617,11 +641,26 @@ class MigrationV1:
                     attribute_types = new_base_entities.attributeTypes
                 case b.DataSources():
                     data_sources = new_base_entities.dataSources
+                    for src in data_sources:
+                        if src.type not in data_types:
+                            data_source_types[src.type] = ds.DataSourceType(
+                                name=src.type,
+                                dataTypeMapping=[x for x in src.dataTypeMapping or []],
+                            )
+                        src.dataTypeMapping = None
 
             content = new_base_entities.model_dump_json(indent=2, exclude_none=True)
 
             with open(output_file_path, "w") as file:
                 file.write(content)
+
+        with open(output_path / "data_source_types.json", "w") as _file:
+            _file.write(
+                b.DataSourceTypes(
+                    type="dataSourceTypes",
+                    dataSourceTypes=[x for x in data_source_types.values()],
+                ).model_dump_json(**MODEL_DUMP_OPTIONS)
+            )
 
         assert data_types is not None, "DataTypes were not found in solution"
         assert data_products is not None, "DataProducts were not found in solution"

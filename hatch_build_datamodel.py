@@ -1,5 +1,5 @@
-import pathlib
 import os
+import pathlib
 
 import datamodel_code_generator as dcg
 from hatchling.builders.hooks.plugin import interface

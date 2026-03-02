@@ -56,8 +56,8 @@ class AttributeType(BaseModel):
     defaultScale: int | None = None
     hasUnit: HasUnit | None = None
     isUnit: IsUnit | None = None
-    canBeInRelation: bool | None = "False"
-    isDefaultProperty: bool | None = "False"
+    canBeInRelation: bool | None = False
+    isDefaultProperty: bool | None = False
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")

@@ -36,9 +36,9 @@ class DataType(BaseModel):
     name: str
     displayName: str | None = None
     purpose: str | None = None
-    hasCharLen: bool | None = "False"
-    hasPrecision: bool | None = "False"
-    hasScale: bool | None = "False"
+    hasCharLen: bool | None = False
+    hasPrecision: bool | None = False
+    hasScale: bool | None = False
     parquetType: str
     sqlType: str
 

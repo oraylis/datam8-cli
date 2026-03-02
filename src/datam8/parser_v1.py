@@ -42,7 +42,7 @@ def parse_solution_file(
         indeces.extend(index.curatedIndex.entry)
 
     for idx in indeces:
-        mapping_file_id[idx.locator] = ModelFileReference(
+        mapping_file_id[idx.locator.lower()] = ModelFileReference(
             id=next_id, path=pathlib.Path(idx.absPath)
         )
         next_id += 1

@@ -47,6 +47,12 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from .. import config, opts
 
 
+def none_if[T](input: T | None, value: T) -> T | None:
+    if input == value:
+        return None
+    return input
+
+
 def pascal_to_snake_case(text: str) -> str:
     """
     Convert a pascal or camel case string to snake case

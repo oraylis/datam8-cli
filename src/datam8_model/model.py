@@ -306,7 +306,7 @@ class ModelRelationship(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
-    targetLocation: int | str
+    targetLocation: int
     alias: str | None = None
     attributes: Annotated[Sequence[ModelAttributeMapping], Field(min_length=1)]
 
