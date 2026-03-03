@@ -30,7 +30,12 @@ class DataType(BaseModel):
     An datam8 abstract internal data type.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     type: str
     nullable: bool
     charLen: Annotated[int | None, Field(gt=0)] = None
@@ -41,7 +46,7 @@ class DataType(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> DataType:
+    def from_dict(obj: Any) -> DataType:
         return DataType.model_validate(obj, from_attributes=False)
 
     @staticmethod
@@ -74,7 +79,12 @@ class DataTypeDefinition(BaseModel):
     Defines a class of data type to configure which `DataType` properties are relevant for a specific type.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     name: str
     displayName: str | None = None
     description: str | None = None
@@ -90,7 +100,7 @@ class DataTypeDefinition(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> DataTypeDefinition:
+    def from_dict(obj: Any) -> DataTypeDefinition:
         return DataTypeDefinition.model_validate(obj, from_attributes=False)
 
     @staticmethod

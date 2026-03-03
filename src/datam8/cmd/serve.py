@@ -17,7 +17,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-import json
 import socket
 
 import typer
@@ -25,7 +24,8 @@ import uvicorn
 
 from datam8 import config, factory, logging, opts
 from datam8.api.app import create_app
-from datam8.core.runtime_meta import get_version
+
+from . import common
 
 app = typer.Typer(
     name="serve",
@@ -47,18 +47,17 @@ def _bind(host: str, port: int) -> tuple[socket.socket, int]:
 
 
 @app.callback(invoke_without_command=True)
-def command(
+def main(
     solution_path: opts.SolutionPath,
     token: opts.ApiToken = None,
     host: opts.ApiHost = "127.0.0.1",
     port: opts.ApiPort = 0,
     openapi: opts.OpenApi = False,
     log_level: opts.LogLevel = opts.LogLevels.INFO,
+    version: opts.Version = False,
 ):
-    config.log_level = log_level
-    config.set_solution(solution_path)
     config.run_as_api = True
-    logging.setup_logger()
+    common.main_callback(solution_path, log_level, version)
 
     model = factory.create_model()
 

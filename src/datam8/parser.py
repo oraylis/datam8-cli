@@ -30,7 +30,7 @@ from datam8_model import base as b
 from datam8_model import model as m
 from datam8_model import solution as s
 
-from . import config, logging, utils
+from . import config, logging
 from . import parser_exceptions as errors
 from .model import (
     EntityDict,
@@ -44,7 +44,7 @@ from .model import (
 logger = logging.getLogger(__name__)
 
 
-@utils.print_progress_async("Parsing files...")
+# @utils.print_progress_async("Parsing files...")
 async def parse_full_solution_async(solution_path: pathlib.Path) -> Model:
     """Load and parses all json files in a solution into generator internal objects.
 
@@ -70,9 +70,7 @@ async def parse_full_solution_async(solution_path: pathlib.Path) -> Model:
 
     solution = __parse_solution_file(solution_path)
     worker_model = executor.submit(__parse_model_entities, solution.modelPath)
-    worker_base = executor.submit(
-        __parse_base_entities, solution.basePath, solution.modelPath
-    )
+    worker_base = executor.submit(__parse_base_entities, solution.basePath, solution.modelPath)
 
     base_entities = worker_base.result()
     model_entities = worker_model.result()
@@ -149,9 +147,7 @@ def __parse_model_entities(
         _executor.shutdown()
 
     if parse_errors:
-        raise errors.ModelParseException(
-            inner_exceptions=[err for err in parse_errors.values()]
-        )
+        raise errors.ModelParseException(inner_exceptions=[err for err in parse_errors.values()])
 
     logger.info(f"Parsed model entities: {len(model_files)}")
 
@@ -190,7 +186,9 @@ def __parse_base_entities(
     _executor = executor or futures.ThreadPoolExecutor()
 
     # ensure every entity type except modelEntities is present in dictionary
-    base_entities: dict[b.EntityType, list[EntityWrapper]] = new_empty_entity_type_dict()
+    base_entities: dict[b.EntityType, list[EntityWrapper[b.BaseEntityType]]] = (
+        new_empty_entity_type_dict()
+    )
     del base_entities[b.EntityType.MODEL_ENTITIES]
 
     loaded_entities = _executor.map(__parse_base_entity_file, base_files)
@@ -211,9 +209,7 @@ def __parse_base_entities(
             match entity_type:
                 case b.EntityType.PROPERTY_VALUES:
                     locator_path = (
-                        pathlib.Path(
-                            entity_type.value, getattr(entity, "property"), locator_path
-                        )  # noqa: B009
+                        pathlib.Path(entity_type.value, getattr(entity, "property"), locator_path)  # noqa: B009
                     )
                 case b.EntityType.FOLDERS:
                     locator_path = rel_path.parents[1] / locator_path
@@ -231,9 +227,7 @@ def __parse_base_entities(
         _executor.shutdown()
 
     if parse_errors:
-        raise errors.ModelParseException(
-            inner_exceptions=[err for err in parse_errors.values()]
-        )
+        raise errors.ModelParseException(inner_exceptions=[err for err in parse_errors.values()])
 
     unpacked_entities = {
         k.value: {wrapped_entity.locator: wrapped_entity for wrapped_entity in v}
@@ -270,9 +264,7 @@ def __parse_base_entity_file(
 def __validate_folder_product_module(
     base_entities: dict[str, EntityDict[Any]],
 ) -> None:
-    data_products: EntityDict[Any] = base_entities.get(
-        b.EntityType.DATA_PRODUCTS.value, {}
-    )
+    data_products: EntityDict[Any] = base_entities.get(b.EntityType.DATA_PRODUCTS.value, {})
     folders: EntityDict[Any] = base_entities.get(b.EntityType.FOLDERS.value, {})
 
     known_products: dict[str, set[str]] = {}

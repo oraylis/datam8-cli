@@ -133,6 +133,12 @@ def test_get_entity_dict(input: tuple[str, list[str]], model: Model):
         )
 
 
+def test_get_entities(model: Model):
+    entities = model.get_entities("/modelEntities")
+
+    assert len(entities) > 0
+
+
 # @parametrize_with_cases("locator", cases=CasesLocator, glob="*_multiple")
 # def test_lookup_entity__multiple(locator, model):
 #     """Test Model.lookup_entity() with multiple resolve locators."""

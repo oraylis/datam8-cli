@@ -21,11 +21,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field, ValidationError
 
-from datam8 import factory, generate, logging, model_exceptions, opts
+from datam8 import factory, generate, logging, model, model_exceptions, opts
 from datam8.core import refactor as refactor_core
 from datam8.core import search as search_core
 from datam8.core import workspace_io, workspace_service
@@ -35,6 +35,7 @@ from datam8.core.jsonops import merge_patch, set_by_pointer
 from datam8.core.lock import SolutionLock
 from datam8.core.parse_utils import parse_duration_seconds
 from datam8.core.solution_index import read_index, validate_index
+from datam8_model import base as b
 from datam8_model import model as model_model
 
 from .common import lock_timeout_seconds
@@ -269,20 +270,20 @@ class DuplicateEntityBody(BaseModel):
     noLock: bool | None = None
 
 
-@router.get("/model/entity")
-async def model_entity_get(
-    selector: str = Query(...),
-    by: str = Query("auto"),
-    solutionPath: str | None = Query(None),
-) -> ModelDocumentResponse:
-    """Read a model entity by selector."""
-    entity = resolve_model_entity(selector, solution_path=solutionPath, by=by)
-    content = model_model.ModelEntity.model_validate(
-        workspace_io.read_workspace_json(entity.rel_path, solutionPath)
-    )
-    return ModelDocumentResponse(
-        entity=entity.rel_path, content=_dump_sparse_json(content)
-    )
+# @router.get("/model/entity")
+# async def model_entity_get(
+#     selector: str = Query(...),
+#     by: str = Query("auto"),
+#     solutionPath: str | None = Query(None),
+# ) -> ModelDocumentResponse:
+#     """Read a model entity by selector."""
+#     entity = resolve_model_entity(selector, solution_path=solutionPath, by=by)
+#     content = model_model.ModelEntity.model_validate(
+#         workspace_io.read_workspace_json(entity.rel_path, solutionPath)
+#     )
+#     return ModelDocumentResponse(
+#         entity=entity.rel_path, content=_dump_sparse_json(content)
+#     )
 
 
 @router.post("/model/entity/create")
@@ -303,9 +304,7 @@ async def model_entity_validate(
     body: ModelEntitySelectorBody,
 ) -> ValidationStatusResponse:
     """Validate that a model entity matches the schema."""
-    entity = resolve_model_entity(
-        body.selector, solution_path=body.solutionPath, by=body.by
-    )
+    entity = resolve_model_entity(body.selector, solution_path=body.solutionPath, by=body.by)
     try:
         model_model.ModelEntity.model_validate(
             workspace_io.read_workspace_json(entity.rel_path, body.solutionPath)
@@ -321,13 +320,9 @@ async def model_entity_validate(
 @router.post("/model/entity/set")
 async def model_entity_set(body: ModelEntitySetBody) -> MessageWithPathResponse:
     """Set a JSON pointer value in a model entity."""
-    entity = resolve_model_entity(
-        body.selector, solution_path=body.solutionPath, by=body.by
-    )
+    entity = resolve_model_entity(body.selector, solution_path=body.solutionPath, by=body.by)
     current = workspace_io.read_workspace_json(entity.rel_path, body.solutionPath)
-    next_doc = set_by_pointer(
-        current, body.pointer, body.value, create_missing=body.createMissing
-    )
+    next_doc = set_by_pointer(current, body.pointer, body.value, create_missing=body.createMissing)
     abs_path = workspace_service.save_model_entity(
         rel_path=entity.rel_path,
         content=next_doc,
@@ -341,9 +336,7 @@ async def model_entity_set(body: ModelEntitySetBody) -> MessageWithPathResponse:
 @router.post("/model/entity/patch")
 async def model_entity_patch(body: ModelEntityPatchBody) -> MessageWithPathResponse:
     """Apply a JSON merge patch to a model entity."""
-    entity = resolve_model_entity(
-        body.selector, solution_path=body.solutionPath, by=body.by
-    )
+    entity = resolve_model_entity(body.selector, solution_path=body.solutionPath, by=body.by)
     current = workspace_io.read_workspace_json(entity.rel_path, body.solutionPath)
     next_doc = merge_patch(current, body.patch)
     abs_path = workspace_service.save_model_entity(
@@ -472,9 +465,7 @@ async def model_folder_metadata_get(
     solutionPath: str | None = Query(None),
 ) -> JsonDocumentResponse:
     """Read folder metadata from a `.properties.json` file."""
-    content = workspace_service.read_folder_metadata(
-        rel_path=relPath, solution_path=solutionPath
-    )
+    content = workspace_service.read_folder_metadata(rel_path=relPath, solution_path=solutionPath)
     return JsonDocumentResponse(relPath=relPath, content=_dump_sparse_json(content))
 
 
@@ -529,9 +520,7 @@ async def refactor_properties_route(
                 deleted_properties=body.deletedProperties,
                 deleted_values=body.deletedValues,
             )
-    return RefactorPropertiesResponse(
-        message="refactored", updatedFiles=result.updatedFiles
-    )
+    return RefactorPropertiesResponse(message="refactored", updatedFiles=result.updatedFiles)
 
 
 @router.post("/index/regenerate")
@@ -569,15 +558,49 @@ async def generator_run(body: GenerateBody) -> generate.GenerateResult:
 
     result = generate.generate_output(
         model,
-        generate.GeneratorConfig(
-            target=model.get_generator_target(body.target or opts.default_target),
-            clean_output=body.cleanOutput or False,
-            payloads=body.payloads or [],
-            generate_all=False,
-        ),
+        target=body.target or opts.default_target,
+        clean_output=body.cleanOutput or False,
+        payloads=body.payloads or [],
+        generate_all=False,
     )
 
     return result
+
+
+@router.get("/entities/{locator:path}", response_model=None)
+async def get_entities(locator: str = "/") -> list[model.EntityWrapperVariant]:
+    """
+    Returns a list of entities based on the given locator. Returns an empty list if none are found.
+    """
+    return factory.get_model().get_entities(locator)
+
+
+@router.patch("/entities/{locator:path}")
+async def patch_entity(
+    locator: str, patch: dict[str, Any]
+) -> model.EntityWrapper[b.BaseEntityType]:
+    wrapper = factory.get_model().get_entity_by_locator(locator)
+    wrapper.update(**patch)
+    return wrapper
+
+
+@router.put("/entities/{locator:path}")
+async def create_entity(
+    locator: str, body: dict[str, Any]
+) -> model.EntityWrapper[b.BaseEntityType]:
+    _locator = model.Locator.from_path(locator)
+    entity = factory.get_model().add_entity(_locator, body)
+    return entity
+
+
+@router.post("/model/save")
+async def model_save(locator: str | None = None) -> None:
+    factory.get_model().save(locator)
+
+
+@router.get("/model/unsaved")
+async def get_unsaved() -> list[str]:
+    return [str(_loc) for _loc in factory.get_model().get_unsaved_entities()]
 
 
 @router.get(

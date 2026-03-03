@@ -67,6 +67,7 @@ def create_model(solution_path: pathlib.Path | None = None) -> model.Model:
 
     _model = asyncio.run(parser.parse_full_solution_async(path))
     create_undefined_folders(_model)
+    _model.refresh_file_references()
 
     if not config.lazy:
         _model.resolve()
@@ -116,9 +117,7 @@ def create_model_or_exit(solution_path: pathlib.Path | None = None) -> model.Mod
         sys.exit(1)
 
 
-def resolve_property(
-    model: model.Model, reference: PropertyReference
-) -> list[PropertyValue]:
+def resolve_property(model: model.Model, reference: PropertyReference) -> list[PropertyValue]:
     """
     Lookup and Resolve a single PropertyReference. Useful to resolve properties that are not
     set directly on the entity, e.g. a property on an attribute.
@@ -177,8 +176,17 @@ def create_undefined_folders(_model: model.Model):
             if ploc in _model.folders or ploc.entityName is None:
                 continue
 
+            source_file_path = pathlib.Path(
+                config.solution_folder_path,
+                _model.solution.modelPath,
+                *ploc.folders,
+                ploc.entityName,
+                ".properties.json",
+            )
+
+            # file will not be created, only when a change is applied/saved
             undefined_folders[ploc] = model.EntityWrapper(
-                source_file=pathlib.Path(str(ploc)).absolute(),
+                source_file=source_file_path.absolute(),
                 locator=ploc,
                 entity=f.Folder(
                     id=next_id,

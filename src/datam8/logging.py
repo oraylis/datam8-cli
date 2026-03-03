@@ -45,12 +45,13 @@ def setup_logger(
     log_directory: pathlib.Path | None = None,
     enable_write_log: bool = False,
 ) -> None:
-
     stream_handler = logging.StreamHandler()
     stream_handler.setFormatter(ColorFormatter())
 
+    converted_log_level: str = config.log_level.value.upper()
+
     logging.basicConfig(
-        level=config.log_level.value.upper(),
+        level=converted_log_level,
         handlers=[stream_handler],
     )
 
@@ -70,6 +71,7 @@ def setup_logger(
 
         logging.root.addHandler(file_handler)
 
+    # when running in debug mode always print the full traceback
     if logging.root.getEffectiveLevel() <= DEBUG:
         sys.tracebacklimit = 0
 

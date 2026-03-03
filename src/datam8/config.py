@@ -25,22 +25,29 @@ supported_model_versions = ("2.0.0",)
 
 log_level: opts.LogLevels = opts.LogLevels.WARNING
 
-solution_folder_path: Path
-solution_path: Path
-
+solution_folder_path: Path = Path().cwd()
+""" Path to the directory containing the dm8s file. Typically the repository's root """
+solution_path: Path = Path().cwd()
+""" Path to the dm8s file """
 run_as_api: bool = False
 """
 Flag to indicate weither datam8 runs in api mode. Some parts of the code will emit different
 errors.
 """
-
 lazy: bool = False
-"""
-If set to true only resolves references when entity is looked up
-"""
+""" If set to true only resolves references when entity is looked up """
 
 
 def set_solution(path: str | Path) -> None:
+    """
+    Configures the solution to be used within the library.
+
+    Parameters
+    ----------
+    `path` : *str* or *Path*
+        A pathlike object pointing to either a .dm8s file directory or a directory containing one. If a directory
+        was provided it need to contain only a single .dm8s file.
+    """
     global solution_path, solution_folder_path
     search_path = Path(path).expanduser()
 

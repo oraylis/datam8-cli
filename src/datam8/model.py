@@ -15,12 +15,11 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
-
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Annotated, Any, Self
 
-from pydantic import BaseModel, ConfigDict, Field, SkipValidation
+from pydantic import BaseModel, ConfigDict, Field, SkipValidation, ValidationError
 
 from datam8_model import attribute as a
 from datam8_model import base as b
@@ -33,17 +32,58 @@ from datam8_model import property as p
 from datam8_model import solution as s
 from datam8_model import zone as z
 
-from . import logging, opts, utils
+from . import logging, opts, utils, config
 from . import model_exceptions as errors
 
 logger = logging.getLogger(__name__)
 
 
-type BaseEntityDict[T] = dict[b.EntityType, list[T]]
-type EntityDict[T] = dict[Locator, EntityWrapper[T]]
+type BaseEntityDict[T: b.BaseEntityType] = dict[b.EntityType, list[T]]
+type EntityDict[T: b.BaseEntityType] = dict[Locator, EntityWrapper[T]]
+type EntityWrapperVariant = (
+    EntityWrapper[a.AttributeType]
+    | EntityWrapper[dp.DataProduct]
+    | EntityWrapper[dp.DataModule]
+    | EntityWrapper[ds.DataSource]
+    | EntityWrapper[ds.DataSourceType]
+    | EntityWrapper[dt.DataTypeDefinition]
+    | EntityWrapper[f.Folder]
+    | EntityWrapper[m.ModelEntity]
+    | EntityWrapper[p.Property]
+    | EntityWrapper[p.PropertyValue]
+    | EntityWrapper[z.Zone]
+)
 
 
-def wrap_base_entity[T](
+def class_from_type(_type: b.EntityType) -> type[b.BaseEntityType]:
+    match _type:
+        case b.EntityType.PROPERTIES:
+            _class = p.Property
+        case b.EntityType.PROPERTY_VALUES:
+            _class = p.PropertyValue
+        case b.EntityType.ZONES:
+            _class = z.Zone
+        case b.EntityType.MODEL_ENTITIES:
+            _class = m.ModelEntity
+        case b.EntityType.FOLDERS:
+            _class = f.Folder
+        case b.EntityType.DATA_TYPES:
+            _class = dt.DataTypeDefinition
+        case b.EntityType.DATA_SOURCES:
+            _class = ds.DataSource
+        case b.EntityType.DATA_SOURCE_TYPES:
+            _class = ds.DataSourceType
+        case b.EntityType.DATA_PRODUCTS:
+            _class = dp.DataProduct
+        case b.EntityType.DATA_MODULES:
+            _class = dp.DataModule
+        case b.EntityType.ATTRIBUTE_TYPES:
+            _class = a.AttributeType
+
+    return _class
+
+
+def wrap_base_entity[T: b.BaseEntityType](
     entity_type: b.EntityType, locator_path: Path, entity: T, source_file: Path
 ) -> "EntityWrapper[T]":
     """
@@ -77,7 +117,7 @@ def wrap_base_entity[T](
     )
 
 
-def new_empty_entity_type_dict() -> dict[b.EntityType, list[Any]]:
+def new_empty_entity_type_dict() -> dict[b.EntityType, "list[EntityWrapper[b.BaseEntityType]]"]:
     """Create an empty dictionary to every available BaseEntityType.
 
     WARNING: The type of the result list items is not set.
@@ -177,22 +217,27 @@ class Locator(m.Locator):
         `Locator`
             An identifier unique for every object in the solution.
         """
+        if path == "/":
+            return ROOT_LOCATOR
+
         parts = path.removesuffix(".json").removeprefix("/").split("/")
-        # parts = [part for part in parts if part != ""]
 
         if any(
             [
-                len(parts) < 2,
+                len(parts) < 1,
                 parts[0] not in [member.value for member in b.EntityType],
             ]
         ):
             raise errors.InvalidLocatorError(path)
 
-        locator = Locator(
-            entityType=parts[0],
-            folders=parts[1:-1],
-            entityName=None if parts[-1] == "" else parts[-1],
-        )
+        if len(parts) == 1:
+            locator = Locator(entityType=parts[0], folders=[], entityName=None)
+        else:
+            locator = Locator(
+                entityType=parts[0],
+                folders=parts[1:-1],
+                entityName=None if parts[-1] == "" else parts[-1],
+            )
 
         return locator
 
@@ -223,6 +268,9 @@ class Locator(m.Locator):
         while current.parent:
             yield current.parent
             current = current.parent
+
+
+ROOT_LOCATOR = Locator(entityType="/", folders=[], entityName=None)
 
 
 class PropertyReference(p.PropertyReference):
@@ -259,7 +307,7 @@ class PropertyReference(p.PropertyReference):
         )
 
 
-class EntityWrapper[T](BaseModel):
+class EntityWrapper[T: b.BaseEntityType](BaseModel):
     """
     A wrapper class around the actual solution files offering more information
     and functionality for further use of the model.
@@ -277,9 +325,7 @@ class EntityWrapper[T](BaseModel):
     properties : `dict[PropertyReference, EntityWrapper[PropertyValue]]`
     """
 
-    model_config = ConfigDict(
-        populate_by_name=True,
-    )
+    model_config = ConfigDict(populate_by_name=True, arbitrary_types_allowed=True)
     locator: Locator
     """
     A unique identifier for every entity/object within the solution.
@@ -299,12 +345,18 @@ class EntityWrapper[T](BaseModel):
     """
     _properties: dict[Locator, p.PropertyValue] = {}
     "Use `properties` instead when accessing them. This is meant for internal generator usage."
+    _changed: bool = False
+    "Flag to track if the wrapped entity has been changed"
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, EntityWrapper):
             return False
 
         return self.locator == other.locator
+
+    @property
+    def has_changed(self) -> bool:
+        return self._changed
 
     @property
     def properties(self) -> dict[Locator, p.PropertyValue]:
@@ -370,9 +422,7 @@ class EntityWrapper[T](BaseModel):
             self.resolved = True
             return self
 
-        property_references: list[p.PropertyReference] = (
-            getattr(self.entity, "properties") or []
-        )
+        property_references: list[p.PropertyReference] = getattr(self.entity, "properties") or []
 
         property_references += [
             pr
@@ -398,9 +448,7 @@ class EntityWrapper[T](BaseModel):
             pass
             # logger.error(attr.properties)
 
-    def get_inherited_property_references(
-        self, model: "Model"
-    ) -> list[p.PropertyReference]:
+    def get_inherited_property_references(self, model: "Model") -> list[p.PropertyReference]:
         """
         Get a distinct list of properties of parent Entities (most likely foldres).
 
@@ -421,9 +469,7 @@ class EntityWrapper[T](BaseModel):
                 continue
 
             parent_properties.extend(
-                iter(
-                    [pr for pr in parent_folder.properties if pr not in parent_properties]
-                )
+                iter([pr for pr in parent_folder.properties if pr not in parent_properties])
             )
 
         return parent_properties
@@ -465,6 +511,17 @@ class EntityWrapper[T](BaseModel):
             if property_value.entity.properties:
                 self._resolve_properties(model, property_value.entity.properties)
 
+    def update(self, **kwargs: Any) -> None:
+        new_entity = self.entity.model_copy(update=kwargs, deep=True)
+
+        try:
+            new_entity = type(new_entity).model_validate(new_entity)
+        except ValidationError as err:
+            raise utils.create_error(err, code=520)
+
+        self.entity = new_entity
+        self._changed = True
+
 
 class Model:
     """
@@ -496,12 +553,33 @@ class Model:
         for k, v in kwargs.items():
             setattr(self, k, v)
 
+        self._model_files: dict[Path, EntityFileRef] = {}
+        """Internal dictionary to allow easy mapping of files and their entities"""
+
+        self.__next_model_id = max([w.entity.id for w in self.modelEntities.values()])
+
+    def get_next_model_id(self) -> int:
+        next = self.__next_model_id
+        self.__next_model_id += 1
+        return next
+
+    def refresh_file_references(self) -> None:
+        self._model_files = {}
+
+        for _wrapper in self.get_entity_iterator():
+            if _wrapper.source_file not in self._model_files:
+                self._model_files[_wrapper.source_file] = EntityFileRef(
+                    _type=b.EntityType(_wrapper.locator.entityType), file_path=_wrapper.source_file
+                )
+
+            self._model_files[_wrapper.source_file].locators.append(_wrapper.locator)
+
     def resolve(self) -> None:
         "Resolve all entities by iterating over them."
         for wrapper in self.get_entity_iterator():
             wrapper.resolve(self)
 
-    def get_entity_iterator(self) -> Iterator[EntityWrapper[Any]]:
+    def get_entity_iterator(self) -> Iterator[EntityWrapperVariant]:
         for entity_type in b.EntityType:
             entities: EntityDict = getattr(self, entity_type.value)
             for _, wrapper in entities.items():
@@ -518,9 +596,7 @@ class Model:
         raise utils.create_error(errors.InvalidGeneratorTargetError(name))
 
     def get_generator_default_target(self) -> s.GeneratorTarget:
-        default_targets = list(
-            filter(lambda t: t.isDefault, self.solution.generatorTargets)
-        )
+        default_targets = list(filter(lambda t: t.isDefault, self.solution.generatorTargets))
 
         match len(default_targets):
             case 0:
@@ -530,7 +606,7 @@ class Model:
             case _:
                 raise Exception("Multiple default targets defined")
 
-    def _get_entity[T](
+    def _get_entity[T: b.BaseEntityType](
         self, entity_dict: EntityDict[T], entity_type: b.EntityType, name: str
     ) -> EntityWrapper[T]:
         locator = Locator.from_path(f"{entity_type.value}/{name}")
@@ -552,16 +628,12 @@ class Model:
 
     def get_data_type(self, name: str) -> EntityWrapper[dt.DataTypeDefinition]:
         """Get a data type by name."""
-        wrapped_data_type = self._get_entity(
-            self.dataTypes, b.EntityType.DATA_TYPES, name
-        )
+        wrapped_data_type = self._get_entity(self.dataTypes, b.EntityType.DATA_TYPES, name)
         return wrapped_data_type
 
     def get_data_source(self, name: str) -> EntityWrapper[ds.DataSource]:
         """Get a data source by name."""
-        wrapped_data_source = self._get_entity(
-            self.dataSources, b.EntityType.DATA_SOURCES, name
-        )
+        wrapped_data_source = self._get_entity(self.dataSources, b.EntityType.DATA_SOURCES, name)
         return wrapped_data_source
 
     def get_data_source_type(self, name: str) -> EntityWrapper[ds.DataSourceType]:
@@ -573,9 +645,7 @@ class Model:
 
     def get_data_product(self, name: str) -> EntityWrapper[dp.DataProduct]:
         """Get a data product by name."""
-        wrapped_data_product = self._get_entity(
-            self.dataProducts, b.EntityType.DATA_PRODUCTS, name
-        )
+        wrapped_data_product = self._get_entity(self.dataProducts, b.EntityType.DATA_PRODUCTS, name)
         return wrapped_data_product
 
     def get_data_module(self, data_product: str, name: str) -> dp.DataModule:
@@ -600,14 +670,10 @@ class Model:
 
     def get_property(self, name: str) -> EntityWrapper[p.Property]:
         """Get a property by name."""
-        wrapped_property = self._get_entity(
-            self.properties, b.EntityType.PROPERTIES, name
-        )
+        wrapped_property = self._get_entity(self.properties, b.EntityType.PROPERTIES, name)
         return wrapped_property
 
-    def get_property_value(
-        self, property: str, name: str
-    ) -> EntityWrapper[p.PropertyValue]:
+    def get_property_value(self, property: str, name: str) -> EntityWrapper[p.PropertyValue]:
         """Get a property value by its property and name."""
         property_values = [
             pv
@@ -656,7 +722,7 @@ class Model:
 
         raise errors.EntityNotFoundError(f"Model Id {id}")
 
-    def get_entity_by_locator(self, locator: str | Locator) -> EntityWrapper[Any]:
+    def get_entity_by_locator(self, locator: str | Locator) -> EntityWrapper[b.BaseEntityType]:
         """
         Retrieve a single entity by its locator.
 
@@ -674,32 +740,62 @@ class Model:
             Of an unkown entity type. Needs to be type hinted manually if required.
         """
         locator = _ensure_locator(locator)
-        wrapper: EntityWrapper[b.BaseEntityType] = getattr(self, locator.entityType)[
-            locator
-        ]
+        wrapper: EntityWrapper[b.BaseEntityType] = getattr(self, locator.entityType)[locator]
 
         if not wrapper.resolved:
             wrapper.resolve(self)
 
         return wrapper
 
+    def add_entity(
+        self, locator: Locator, content: dict[str, Any]
+    ) -> EntityWrapper[b.BaseEntityType]:
+        source_file_path = Path(config.solution_folder_path, *locator.folders)
+        _type = b.EntityType(locator.entityType)
+
+        content.update({"id": self.get_next_model_id(), "name": locator.entityName})
+
+        try:
+            new_wrapper = EntityWrapper(
+                locator=locator,
+                source_file=source_file_path,
+                entity=class_from_type(_type).from_dict(content),
+                _changed=True,
+            )
+        except ValidationError as err:
+            raise utils.create_error(err)
+
+        entity_dict: EntityDict[b.BaseEntityType] = getattr(self, _type.value)
+
+        if locator in entity_dict:
+            raise utils.create_error(Exception(f"Locator already exists in model: {locator}"))
+
+        entity_dict[locator] = new_wrapper
+
+        new_wrapper.resolve(self)
+
+        return new_wrapper
+
     def get_entity_by_selector(
         self, selector: str, by: opts.Selectors
-    ) -> EntityWrapper[Any]:
+    ) -> EntityWrapper[b.BaseEntityType]:
         match by:
             case opts.Selectors.NAME:
                 for wrapper in self.modelEntities.values():
                     if wrapper.entity.name == selector:
-                        return wrapper
+                        return wrapper  # pyright: ignore [reportReturnType]
                 raise errors.EntityNotFoundError(selector)
             case opts.Selectors.ID:
-                return self.get_model_entity_by_id(int(selector))
+                return self.get_model_entity_by_id(int(selector))  # pyright: ignore [reportReturnType]
             case opts.Selectors.LOCATOR:
                 return self.get_entity_by_locator(selector)
             case _:
                 raise NotImplementedError(f"by {by}")
 
-    def get_entities(self, search_locator: str | Locator) -> list[EntityWrapper[Any]]:
+    def get_all_entities(self) -> list[EntityWrapperVariant]:
+        return [wrapper for wrapper in self.get_entity_iterator()]
+
+    def get_entities(self, search_locator: str | Locator) -> list[EntityWrapperVariant]:
         """
         Retrieve a list of EntityWrappers that are hierarchically underneath the
         given locator.
@@ -716,18 +812,18 @@ class Model:
             entities are not available automatically and need to be added manually.
         """
         search_locator = _ensure_locator(search_locator)
+
+        if search_locator == ROOT_LOCATOR:
+            return self.get_all_entities()
+
         child_locators = self.get_child_locators(search_locator)
 
-        if not child_locators:
-            raise Exception("No entites found")
+        if len(child_locators) == 0:
+            return []
 
-        entity_dict: EntityDict[b.BaseEntityType] = getattr(
-            self, search_locator.entityType
-        )
+        entity_dict: dict[Locator, EntityWrapperVariant] = getattr(self, search_locator.entityType)
         entities = [
-            entity_dict[_loc]
-            if entity_dict[_loc].resolved
-            else entity_dict[_loc].resolve(self)
+            entity_dict[_loc] if entity_dict[_loc].resolved else entity_dict[_loc].resolve(self)
             for _loc in child_locators
         ]
 
@@ -755,8 +851,142 @@ class Model:
         locators_to_be_compared: list[Locator] = [
             _loc for _loc in getattr(self, search_locator.entityType)
         ]
-        found_locators = list(
-            filter(lambda _loc: _loc in search_locator, locators_to_be_compared)
-        )
+        found_locators = list(filter(lambda _loc: _loc in search_locator, locators_to_be_compared))
 
         return found_locators
+
+    def save(self, locator: str | None = None) -> None:
+        """
+        Saves the current state of the model or a specific entity to the corresponding json file.
+        """
+        changed_wrappers = [w for w in self.get_entities(locator or "/") if w.has_changed]
+
+        if len(changed_wrappers) == 0:
+            logger.info("Nothing has changed")
+            return
+
+        # group change entities by file to minimize disk operations
+        file_to_wrappers: dict[Path, list[EntityWrapperVariant]] = {}
+        for _p, file_ref in self._model_files.items():
+            _changed = [w for w in changed_wrappers if w.locator in file_ref.locators]
+            if len(_changed) > 0:
+                file_to_wrappers[_p] = _changed
+
+        logger.info(
+            "Saving %s changed files, with %s changed entities",
+            len(file_to_wrappers),
+            len(changed_wrappers),
+        )
+
+        for _file in file_to_wrappers:
+            if _file.exists():
+                self._model_files[_file].update(file_to_wrappers[_file])
+            else:
+                self._model_files[_file].create(file_to_wrappers[_file])
+
+            # reset _changed attribute for saved entities
+            for wrapper in file_to_wrappers[_file]:
+                wrapper._changed = False
+
+    def get_unsaved_entities(self) -> list[Locator]:
+        unsaved_entities = [
+            wrapper.locator for wrapper in self.get_entity_iterator() if wrapper.has_changed
+        ]
+        return unsaved_entities
+
+
+class EntityFileRef:
+    def __init__(
+        self, _type: b.EntityType, file_path: Path, locators: list[Locator] | None = None
+    ) -> None:
+        self._type: b.EntityType = _type
+        self.file_path: Path = file_path
+        self.locators: list[Locator] = locators or []
+
+    def __repr__(self) -> str:
+        return f"EntityFileRef({self._type} file={self.file_path})"
+
+    def create(self, wrappers: list[EntityWrapperVariant]) -> None:
+        entities = [wrapper.entity for wrapper in wrappers]
+        _model = None
+
+        match self._type:
+            case b.EntityType.MODEL_ENTITIES:
+                # model entities are special, since those files only contain a single entry
+                assert len(entities) == 1, (
+                    "Only one wrapper to update allowed when updateing single model file"
+                )
+                _model = entities[0]
+            case b.EntityType.FOLDERS:
+                _class = b.Folders
+            case b.EntityType.PROPERTIES:
+                _class = b.Properties
+            case b.EntityType.PROPERTY_VALUES:
+                _class = b.PropertyValues
+            case b.EntityType.ZONES:
+                _class = b.Zones
+            case b.EntityType.DATA_TYPES:
+                _class = b.DataTypes
+            case b.EntityType.DATA_SOURCE_TYPES:
+                _class = b.DataSourceTypes
+            case b.EntityType.DATA_PRODUCTS:
+                _class = b.DataProducts
+            case b.EntityType.DATA_MODULES:
+                _class = b.DataModules
+            case b.EntityType.ATTRIBUTE_TYPES:
+                _class = b.AttributeTypes
+            case b.EntityType.DATA_SOURCES:
+                _class = b.DataSources
+            case _:
+                raise utils.create_error(NotImplementedError(self._type.value))
+
+        # one of both is always defined
+        _model = _model or _class.from_dict(  # pyright: ignore [reportPossiblyUnboundVariable]
+            {"type": self._type.value, self._type.value: entities},
+        )
+
+        with open(self.file_path, "x") as _file:
+            _file.write(
+                _model.model_dump_json(
+                    indent=4,
+                    exclude_defaults=True,
+                    exclude_none=True,
+                )
+            )
+
+    def update(self, wrappers: list[EntityWrapperVariant]) -> None:
+        """
+        Raises
+        ------
+        FileNotFoundError
+            If the file to be updated does not exist
+        """
+        match self._type:
+            case b.EntityType.MODEL_ENTITIES:
+                current_content = m.ModelEntity.from_json_file(self.file_path)
+                assert len(wrappers) == 1, (
+                    "Only one wrapper to update allowed when updateing single model file"
+                )
+                current_content = wrappers[0].entity
+
+            case _:
+                current_content = b.BaseEntities.from_json_file(self.file_path)
+                entities: b.BaseEntityType = getattr(current_content.root, self._type.value)
+
+                for idx in range(len(wrappers)):
+                    for existing_entity in entities:
+                        if existing_entity.name == wrappers[idx].entity.name:
+                            entities[idx] = wrappers[idx].entity
+
+                setattr(current_content.root, self._type.value, entities)
+
+        with open(self.file_path, "w") as _file:
+            _file.write(
+                current_content.model_dump_json(
+                    indent=4,
+                    exclude_defaults=True,
+                    exclude_none=True,
+                )
+            )
+
+        logger.info("Saved %s entities to %s", len(wrappers), self.file_path)

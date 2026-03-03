@@ -19,7 +19,9 @@
 import rich
 import typer
 
-from datam8 import config, factory, logging, opts
+from datam8 import config, factory, opts
+
+from . import common
 
 app = typer.Typer(
     name="validate",
@@ -30,15 +32,13 @@ app = typer.Typer(
 
 
 @app.callback(invoke_without_command=True)
-def command(
+def main(
     solution_path: opts.SolutionPath,
     log_level: opts.LogLevel = opts.LogLevels.WARNING,
+    version: opts.Version = False,
 ):
     """Validate solution model."""
-    config.set_solution(solution_path)
-    config.log_level = log_level
-
-    logging.setup_logger()
+    common.main_callback(solution_path, log_level, version)
 
     factory.create_model_or_exit(
         solution_path=config.solution_path,

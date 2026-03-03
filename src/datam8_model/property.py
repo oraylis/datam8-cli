@@ -30,7 +30,12 @@ class PropertyReference(BaseModel):
     Used to reference from any entity to a `Property`.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     property: str
     value: str
 
@@ -38,7 +43,7 @@ class PropertyReference(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> PropertyReference:
+    def from_dict(obj: Any) -> PropertyReference:
         return PropertyReference.model_validate(obj, from_attributes=False)
 
     @staticmethod
@@ -71,7 +76,12 @@ class PropertyScope(BaseModel):
     Defines for which type of entities a `PropertyType` is available for assignment.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     type: str
     singleUsage: bool | None = True
     """
@@ -83,7 +93,7 @@ class PropertyScope(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> PropertyScope:
+    def from_dict(obj: Any) -> PropertyScope:
         return PropertyScope.model_validate(obj, from_attributes=False)
 
     @staticmethod
@@ -116,7 +126,12 @@ class PropertyValue(BaseModel):
     A single globally available static property value that can be referenced from other entities.
     """
 
-    model_config = ConfigDict(extra="allow", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="allow",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     name: str
     displayName: str | None = None
     default: bool | None = False
@@ -130,7 +145,7 @@ class PropertyValue(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> PropertyValue:
+    def from_dict(obj: Any) -> PropertyValue:
         return PropertyValue.model_validate(obj, from_attributes=False)
 
     @staticmethod
@@ -163,7 +178,12 @@ class Property(BaseModel):
     Defines properties for which specific pre-selectable values can created.
     """
 
-    model_config = ConfigDict(extra="allow", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="allow",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     name: str
     displayName: str
     schema_: Annotated[str | None, Field(alias="schema")] = None
@@ -173,7 +193,7 @@ class Property(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> Property:
+    def from_dict(obj: Any) -> Property:
         return Property.model_validate(obj, from_attributes=False)
 
     @staticmethod

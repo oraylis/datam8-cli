@@ -43,6 +43,7 @@ from pathlib import Path
 from typing import Any
 
 import fastapi
+import rich
 from pydantic import BaseModel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
@@ -51,18 +52,27 @@ from datam8 import config, logging, opts
 logger = logging.getLogger(__name__)
 
 
-def create_error(err: Exception) -> Exception:
+def create_error(err: Exception, code: int = 500) -> Exception:
     if config.run_as_api:
-        return fastapi.HTTPException(status_code=500, detail=str(err))
+        return fastapi.HTTPException(status_code=code, detail=str(err).splitlines())
 
     return err
 
 
-def emit_result(*messages: str, model: BaseModel, json: bool = False) -> None:
-    if json:
-        print(model.model_dump_json(indent=4))
-    else:
-        for msg in messages:
+def emit_result(
+    *messages: Any,
+    models: list[BaseModel] | None = None,
+    json: bool = False,
+    pretty: bool = False,
+) -> None:
+    if json and models:
+        print(*[model.model_dump_json(indent=4) for model in models], sep="\n")
+        return
+
+    for msg in messages:
+        if pretty:
+            rich.print(msg)
+        else:
             print(msg)
 
 
@@ -206,9 +216,7 @@ def start_logger(
         if os.path.exists(log_path):
             os.remove(log_path)
 
-        formatter = logging.Formatter(
-            "%(asctime)s - %(levelname)s - %(name)s: %(message)s"
-        )
+        formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(name)s: %(message)s")
         file_handler = FileHandler(log_path)
         file_handler.setFormatter(formatter)
 

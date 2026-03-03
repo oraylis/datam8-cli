@@ -28,7 +28,12 @@ from . import property
 
 
 class Folder(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
     id: Annotated[int, Field(gt=0)]
     """
     Internal id of an entity.
@@ -48,7 +53,7 @@ class Folder(BaseModel):
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> Folder:
+    def from_dict(obj: Any) -> Folder:
         return Folder.model_validate(obj, from_attributes=False)
 
     @staticmethod

@@ -30,10 +30,27 @@ from typing import Any
 
 import typer
 
+from datam8 import config, logging, opts
 from datam8.core.errors import Datam8ValidationError
 from datam8.core.lock import SolutionLock
 from datam8.core.parse_utils import parse_duration_seconds
 from datam8.core.runtime_meta import get_version
+
+logger = logging.getLogger(__name__)
+
+
+def main_callback(
+    solution_path: opts.SolutionPath,
+    log_level: opts.LogLevel = opts.LogLevels.WARNING,
+    version: opts.Version = False,
+) -> None:
+    """CLI root callback."""
+    version_callback(version)
+
+    config.set_solution(solution_path)
+    config.log_level = log_level
+
+    logging.setup_logger()
 
 
 @dataclass(frozen=True)
@@ -112,7 +129,9 @@ def make_global_options(
     )
 
 
-def resolve_solution_path(opts: GlobalOptions, solution_path: str | None = None) -> str | None:
+def resolve_solution_path(
+    opts: GlobalOptions, solution_path: str | None = None
+) -> str | None:
     """Resolve explicit solution_path over global --solution."""
     return solution_path or opts.solution
 
@@ -129,7 +148,9 @@ def emit_json(payload: Any) -> None:
     sys.stdout.flush()
 
 
-def emit_result(opts: GlobalOptions, payload: Any, *, human_lines: list[str] | None = None) -> None:
+def emit_result(
+    opts: GlobalOptions, payload: Any, *, human_lines: list[str] | None = None
+) -> None:
     """Emit command result in JSON or human format."""
     if opts.json_output:
         emit_json(payload)
@@ -166,9 +187,13 @@ def open_in_editor(*, suffix: str, initial_text: str) -> str:
     """Open an editor and return updated file content."""
     editor = os.environ.get("EDITOR") or os.environ.get("VISUAL")
     if not editor:
-        raise Datam8ValidationError(message="No editor configured.", details={"hint": "Set EDITOR or VISUAL."})
+        raise Datam8ValidationError(
+            message="No editor configured.", details={"hint": "Set EDITOR or VISUAL."}
+        )
 
-    with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8", suffix=suffix, newline="\n") as tmp:
+    with tempfile.NamedTemporaryFile(
+        "w", delete=False, encoding="utf-8", suffix=suffix, newline="\n"
+    ) as tmp:
         tmp.write(initial_text)
         tmp_path = tmp.name
     try:

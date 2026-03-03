@@ -54,7 +54,6 @@ def generate_output(
     When running in api different error types get raised, which results in not triggering the except cases.
     """
     try:
-        _target = model.get_generator_target(target)
         result = __generate_output_unsafe(
             model,
             _config=GeneratorConfig(
@@ -146,9 +145,7 @@ def register_payload(
         logger.debug(f"Registering payload {func.__module__}:{func.__name__}")
 
         if func.__name__ in [
-            payload.name
-            for payloads in payload_functions.values()
-            for payload in payloads
+            payload.name for payloads in payload_functions.values() for payload in payloads
         ]:
             raise PayloadRegisteredMultipleTimesError(func.__name__)
 
@@ -208,9 +205,7 @@ async def render_payload(
         )
         return err
 
-    template_loader = jinja2.FileSystemLoader(
-        [_config.template_path, config.solution_folder_path]
-    )
+    template_loader = jinja2.FileSystemLoader([_config.template_path, config.solution_folder_path])
     template_env = jinja2.Environment(loader=template_loader)
     template_path = _config.target.sourcePath / payload.template_path
 
@@ -221,9 +216,7 @@ async def render_payload(
         return err
 
     coros = [
-        render_template(
-            payload.name, _p.get_data(), template, _p.get_output_path(), _config
-        )
+        render_template(payload.name, _p.get_data(), template, _p.get_output_path(), _config)
         for _p in payloads
     ]
     results = [

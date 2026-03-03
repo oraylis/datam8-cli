@@ -174,7 +174,10 @@ OpenApi = Annotated[
     ),
 ]
 
-Selector = Annotated[str, typer.Argument(help="Entity selector")]
+Selector = Annotated[
+    str,
+    typer.Argument(help="Entity selector"),
+]
 
 SelectBy = Annotated[
     Selectors,
@@ -192,9 +195,26 @@ ApiPort = Annotated[
 ]
 
 ApiHost = Annotated[
-    str, typer.Option("-h", "--host", help="Host where the fastapi will listen on")
+    str,
+    typer.Option("-h", "--host", help="Host where the fastapi will listen on"),
 ]
 
 ApiToken = Annotated[
-    str | None, typer.Option("-t", "--token", help="Token to restrict access to the api")
+    str | None,
+    typer.Option("-t", "--token", help="Token to restrict access to the api"),
+]
+
+Version = Annotated[
+    bool,
+    typer.Option("--version", is_eager=True),
+]
+
+DataSource = Annotated[
+    str,
+    typer.Argument(help="Name or locator of a data source"),
+]
+
+Locator = Annotated[
+    str,
+    typer.Argument(help="A search locator"),
 ]
