@@ -12,4 +12,5 @@ wheels/
 # environment variable files
 .envrc
 
+.jj
 .DS_Store

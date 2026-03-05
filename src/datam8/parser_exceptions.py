@@ -33,4 +33,5 @@ class ModelParseException(Exception):
 
 class NotSupportedModelVersion(Exception):
     def __init__(self, version: str):
+        self.version = version
         super().__init__(f"Tried to parse an unsupported model version: {version}")

@@ -680,7 +680,7 @@ class Model:
         search_locator = _ensure_locator(search_locator)
         child_locators = self.get_child_locators(search_locator)
 
-        if not child_locators:
+        if len(child_locators) == 0:
             raise Exception("No entites found")
 
         entity_dict: EntityDict[b.BaseEntityType] = getattr(
