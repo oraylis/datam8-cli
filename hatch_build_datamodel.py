@@ -1,3 +1,4 @@
+import os
 import pathlib
 
 import datamodel_code_generator as dcg
@@ -22,7 +23,7 @@ class GenerateDatamodelHook(interface.BuildHookInterface):
             input_file_type=dcg.InputFileType.JsonSchema,
             output=self.__output_dir,
             output_model_type=dcg.DataModelType.PydanticV2BaseModel,
-            output_datetime_class=dcg.DatetimeClassType.Datetime,
+            output_datetime_class=dcg.DatetimeClassType.Awaredatetime,
             target_python_version=dcg.PythonVersion.PY_312,
             custom_template_dir=self.__template_dir,
             formatters=[dcg.Formatter.RUFF_CHECK, dcg.Formatter.RUFF_FORMAT],
@@ -48,7 +49,8 @@ class GenerateDatamodelHook(interface.BuildHookInterface):
         self.convert_crlf_to_lf()
 
     def clean(self, versions):
-        self.__output_dir.rmdir()
+        for file in self.__output_dir.glob("*.py"):
+            os.remove(file)
 
     def convert_crlf_to_lf(self):
         for file in self.__output_dir.glob("**/*.py"):

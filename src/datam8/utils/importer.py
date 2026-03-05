@@ -64,6 +64,9 @@ def load_modules(module_path: pathlib.Path) -> dict[str, ModuleType]:
         f"Loaded {len(modules)} modules with {len(generate.payload_functions)} payload(s)"
     )
 
+    if len(generate.payload_functions) == 0:
+        logger.warning("No payloads where founds!")
+
     return modules
 
 

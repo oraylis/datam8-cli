@@ -34,6 +34,7 @@ dev = [
   "pytest-cases>=3.8.6",
   "datamodel-code-generator>=0.33.0",
   "hatchling == 1.27.0",
+  "deepdiff ~=8.6",
 ]
 
 [build-system]

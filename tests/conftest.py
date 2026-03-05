@@ -7,6 +7,7 @@ import pytest
 from pytest_cases import fixture
 
 from datam8 import config as datam8_config
+from datam8 import migration_v1, parser_v1
 from datam8 import model as datam8_model
 from datam8.parser import parse_full_solution_async
 
@@ -78,6 +79,27 @@ def model(config: TestConfig) -> datam8_model.Model:
     model.resolve()
 
     return model
+
+
+@fixture
+def migration(config: TestConfig) -> migration_v1.MigrationV1:
+    return migration_v1.MigrationV1(
+        {
+            "/Core/Sales/Customer/Customer": parser_v1.ModelFileReference(
+                id=1,
+                path=pathlib.Path().cwd()
+                / "tests"
+                / "test_040_migration"
+                / "core_entity_before.json",
+            ),
+            "/010-Stage/Sales/Customer/Customer": parser_v1.ModelFileReference(
+                id=2, path=pathlib.Path().cwd()
+            ),
+            "/010-Stage/Sales/Customer/Customer_EN": parser_v1.ModelFileReference(
+                id=3, path=pathlib.Path().cwd()
+            ),
+        }
+    )
 
 
 def __get_variable(

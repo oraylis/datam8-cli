@@ -16,43 +16,29 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+
 from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
-
-from . import property
+from pydantic import BaseModel, ConfigDict
 
 
-class Folder(BaseModel):
+class Options(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
-    id: Annotated[int, Field(gt=0)]
-    """
-    Internal id of an entity.
-    """
     name: str
-    displayName: str | None = None
-    description: str | None = None
-    path: str | None = None
-    """
-    Path of this folder, if not set the current directory will be used.
-    """
-    dataProduct: str | None = None
-    dataModule: str | None = None
-    properties: Sequence[property.PropertyReference] | None = None
+    value: str
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> Folder:
-        return Folder.model_validate(obj, from_attributes=False)
+    def from_dict(obj) -> Options:
+        return Options.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> Folder:
+    def from_json_file(path: Path) -> Options:
         """Loads ands validates a json file from the given path.
 
         Parameters
@@ -62,7 +48,7 @@ class Folder(BaseModel):
 
         Returns
         -------
-        Folder
+        Options
             Instantiated and validated pydantic model
 
         Raises
@@ -71,6 +57,44 @@ class Folder(BaseModel):
             If the data in the json file does not much the model constraints.
         """
         with open(path) as file:
-            model = Folder.model_validate_json(file.read())
+            model = Options.model_validate_json(file.read())
+
+        return model
+
+
+class Model(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    diagramType: str | None = None
+    coreEntities: Sequence[str] | None = None
+    diagramOptions: Sequence[Options] | None = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj) -> Model:
+        return Model.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> Model:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        Model
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
+        with open(path) as file:
+            model = Model.model_validate_json(file.read())
 
         return model

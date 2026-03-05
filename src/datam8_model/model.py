@@ -307,6 +307,7 @@ class ModelRelationship(BaseModel):
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
     targetLocation: int
+    alias: str | None = None
     attributes: Annotated[Sequence[ModelAttributeMapping], Field(min_length=1)]
 
     def to_dict(self) -> dict:
@@ -347,7 +348,7 @@ class InternalModelSource(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
-    sourceLocation: str | int
+    sourceLocation: int
     properties: Sequence[property.PropertyReference] | None = None
     mapping: Sequence[SourceAttributeMapping] | None = None
 

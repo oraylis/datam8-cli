@@ -16,63 +16,46 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+
 from __future__ import annotations
 
 from collections.abc import Sequence
-from enum import Enum, StrEnum
+from enum import Enum
 from pathlib import Path
 from typing import Annotated
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
-
-from . import data_type, property
+from pydantic import BaseModel, ConfigDict, Field
 
 
-class HistoryType(Enum):
-    """
-    Defines how an attribute in a slowly chaning dimension should behave.
-    """
-
-    SCD0 = "SCD0"
-    SCD1 = "SCD1"
-    SCD2 = "SCD2"
-    SCD3 = "SCD3"
-    SCD4 = "SCD4"
-
-
-class ExpressionLanguage(StrEnum):
-    SQL = "sql"
-    DAX = "dax"
-    PYTHON = "python"
+class Type(Enum):
+    ATTRIBUTE_TYPE = "attributeType"
 
 
 class HasUnit(Enum):
-    """
-    Defines if an attribute should define a unit, e.g. `Physical` for weight or `Currency` for price.
-    """
+    NO_UNIT = "NoUnit"
+    PHYSICAL = "Physical"
+    CURRENCY = "Currency"
+    UNIT_FREE = "UnitFree"
 
+
+class IsUnit(Enum):
     NO_UNIT = "NoUnit"
     PHYSICAL = "Physical"
     CURRENCY = "Currency"
 
 
 class AttributeType(BaseModel):
-    """
-    Defines abstract business orientated attribute definitions, e.g. an email address
-    """
-
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
     name: str
     displayName: str
-    description: str | None = None
+    purpose: str | None = None
+    explanation: str | None = None
     defaultType: str
-    defaultLength: Annotated[int | None, Field(gt=0)] = None
-    defaultPrecision: Annotated[int | None, Field(gt=0)] = None
-    defaultScale: Annotated[int | None, Field(gt=0)] = None
-    hasUnit: HasUnit | None = HasUnit.NO_UNIT
-    """
-    Defines if an attribute should define a unit, e.g. `Physical` for weight or `Currency` for price.
-    """
+    defaultLength: int | None = None
+    defaultPrecision: int | None = None
+    defaultScale: int | None = None
+    hasUnit: HasUnit | None = None
+    isUnit: IsUnit | None = None
     canBeInRelation: bool | None = False
     isDefaultProperty: bool | None = False
 
@@ -108,41 +91,21 @@ class AttributeType(BaseModel):
         return model
 
 
-class Attribute(BaseModel):
-    """
-    An attribute of a model entity.
-    """
-
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
-    ordinalNumber: Annotated[int, Field(gt=0)]
-    name: str
-    displayName: str | None = None
-    description: str | None = None
-    attributeType: str
-    dataType: data_type.DataType
-    isBusinessKey: bool | None = False
-    history: Annotated[HistoryType | None, Field(title="HistoryType")] = HistoryType.SCD1
-    """
-    Defines how an attribute in a slowly chaning dimension should behave.
-    """
-    expression: str | None = None
-    expressionLanguage: ExpressionLanguage | str | None = ExpressionLanguage.SQL
-    unit: str | None = None
-    refactorNames: Sequence[str] | None = None
-    dateModified: AwareDatetime | None = None
-    dateDeleted: AwareDatetime | None = None
-    dateAdded: AwareDatetime
-    properties: Sequence[property.PropertyReference] | None = None
+class Model(BaseModel):
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+    field_schema: Annotated[str | None, Field(alias="$schema")] = None
+    type: Type | None = None
+    items: Sequence[AttributeType] | None = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 
     @staticmethod
-    def from_dict(obj) -> Attribute:
-        return Attribute.model_validate(obj, from_attributes=False)
+    def from_dict(obj) -> Model:
+        return Model.model_validate(obj, from_attributes=False)
 
     @staticmethod
-    def from_json_file(path: Path) -> Attribute:
+    def from_json_file(path: Path) -> Model:
         """Loads ands validates a json file from the given path.
 
         Parameters
@@ -152,7 +115,7 @@ class Attribute(BaseModel):
 
         Returns
         -------
-        Attribute
+        Model
             Instantiated and validated pydantic model
 
         Raises
@@ -161,6 +124,6 @@ class Attribute(BaseModel):
             If the data in the json file does not much the model constraints.
         """
         with open(path) as file:
-            model = Attribute.model_validate_json(file.read())
+            model = Model.model_validate_json(file.read())
 
         return model

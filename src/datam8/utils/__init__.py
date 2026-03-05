@@ -47,7 +47,37 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from .. import config, opts
 
 
+def none_if[T](input: T | None, value: T) -> T | None:
+    if input == value:
+        return None
+    return input
+
+
+def pascal_to_snake_case(text: str) -> str:
+    """
+    Convert a pascal or camel case string to snake case
+
+    Example
+    -------
+    * `AttributeTypes.json` to `attribute_types.json`
+    * `dataSources.json` to `data_sources.json`
+    * `data_types.json` to `data_types.json`
+    """
+    result: list[str] = []
+
+    for idx in range(0, len(text)):
+        if text[idx].isupper() and idx != 0:
+            result.append("_")
+
+        result.append(text[idx].lower())
+
+    return "".join(result)
+
+
 def delete_path(path: Path, recursive: bool = False) -> None:
+    if not path.exists():
+        return
+
     if path.is_file():
         os.remove(path)
         return
@@ -65,6 +95,9 @@ def delete_path(path: Path, recursive: bool = False) -> None:
 def mkdir(path: Path, recursive: bool = False) -> None:
     if not path.parent.exists() and recursive:
         mkdir(path.parent, recursive=recursive)
+
+    if path.exists():
+        return
 
     os.mkdir(path)
 

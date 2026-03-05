@@ -16,11 +16,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+from collections.abc import Sequence
 from pathlib import Path
 
 from . import opts
 
-supported_model_versions = ("2.0.0",)
+supported_model_versions: Sequence = ("2.0.0",)
 
 log_level: opts.LogLevels = opts.LogLevels.WARNING
 

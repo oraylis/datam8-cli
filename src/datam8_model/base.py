@@ -57,7 +57,7 @@ class AttributeTypes(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
-    type: Literal["attributeTypes"]
+    type: Annotated[Literal["attributeTypes"], Field(title="EntityType")]
     properties: Any | None = None
     propertyValues: Any | None = None
     zones: Any | None = None
@@ -108,7 +108,7 @@ class PropertyValues(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
-    type: Literal["propertyValues"]
+    type: Annotated[Literal["propertyValues"], Field(title="EntityType")]
     properties: Any | None = None
     propertyValues: Sequence[property.PropertyValue]
     zones: Any | None = None
@@ -159,10 +159,10 @@ class Zones(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
-    type: Literal["zones"]
+    type: Annotated[Literal["zones"], Field(title="EntityType")]
     properties: Any | None = None
     propertyValues: Any | None = None
-    zones: Annotated[Sequence[zone.Zone], Field(min_length=1)]
+    zones: Sequence[zone.Zone]
     dataTypes: Any | None = None
     dataSourceTypes: Any | None = None
     dataProducts: Any | None = None
@@ -210,7 +210,7 @@ class DataTypes(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
-    type: Literal["dataTypes"]
+    type: Annotated[Literal["dataTypes"], Field(title="EntityType")]
     properties: Any | None = None
     propertyValues: Any | None = None
     zones: Any | None = None
@@ -261,12 +261,12 @@ class DataSourceTypes(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
-    type: Literal["dataSourceTypes"]
+    type: Annotated[Literal["dataSourceTypes"], Field(title="EntityType")]
     properties: Any | None = None
     propertyValues: Any | None = None
     zones: Any | None = None
     dataTypes: Any | None = None
-    dataSourceTypes: Annotated[Sequence[data_source.DataSourceType], Field(min_length=1)]
+    dataSourceTypes: Sequence[data_source.DataSourceType]
     dataProducts: Any | None = None
     dataModules: Any | None = None
     attributeTypes: Any | None = None
@@ -312,7 +312,7 @@ class Folders(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
-    type: Literal["folders"]
+    type: Annotated[Literal["folders"], Field(title="EntityType")]
     properties: Any | None = None
     propertyValues: Any | None = None
     zones: Any | None = None
@@ -363,7 +363,7 @@ class Properties(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
-    type: Literal["properties"]
+    type: Annotated[Literal["properties"], Field(title="EntityType")]
     properties: Sequence[property.Property]
     propertyValues: Any | None = None
     zones: Any | None = None
@@ -414,7 +414,7 @@ class DataModules(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
-    type: Literal["dataModules"]
+    type: Annotated[Literal["dataModules"], Field(title="EntityType")]
     properties: Any | None = None
     propertyValues: Any | None = None
     zones: Any | None = None
@@ -465,7 +465,7 @@ class DataSources(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
-    type: Literal["dataSources"]
+    type: Annotated[Literal["dataSources"], Field(title="EntityType")]
     properties: Any | None = None
     propertyValues: Any | None = None
     zones: Any | None = None
@@ -516,13 +516,13 @@ class DataProducts(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
-    type: Literal["dataProducts"]
+    type: Annotated[Literal["dataProducts"], Field(title="EntityType")]
     properties: Any | None = None
     propertyValues: Any | None = None
     zones: Any | None = None
     dataTypes: Any | None = None
     dataSourceTypes: Any | None = None
-    dataProducts: Annotated[Sequence[data_product.DataProduct], Field(min_length=1)]
+    dataProducts: Sequence[data_product.DataProduct]
     dataModules: Any | None = None
     attributeTypes: Any | None = None
     dataSources: Any | None = None
@@ -567,7 +567,7 @@ class ModelEntities(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
-    type: Literal["modelEntities"]
+    type: Annotated[Literal["modelEntities"], Field(title="EntityType")]
     properties: Any | None = None
     propertyValues: Any | None = None
     zones: Any | None = None
