@@ -65,9 +65,15 @@ def create_model(solution_path: pathlib.Path | None = None) -> model.Model:
     if not path.exists():
         raise FileNotFoundError(path)
 
-    _model = asyncio.run(parser.parse_full_solution_async(path))
+    _model = asyncio.run(load_model(path))
+
+    return _model
+
+
+async def load_model(solution_path: pathlib.Path) -> model.Model:
+    _model = await parser.parse_full_solution_async(solution_path)
     create_undefined_folders(_model)
-    _model.refresh_file_references()
+    _model.init_file_references()
 
     if not config.lazy:
         _model.resolve()

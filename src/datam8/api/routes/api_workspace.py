@@ -18,14 +18,13 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
-from fastapi.concurrency import run_in_threadpool
+from fastapi import APIRouter, Body, HTTPException, Query
 from pydantic import BaseModel, Field, ValidationError
 
-from datam8 import factory, generate, logging, model, model_exceptions, opts
+from datam8 import config, factory, generate, logging, model, opts, parser
 from datam8.core import refactor as refactor_core
 from datam8.core import search as search_core
 from datam8.core import workspace_io, workspace_service
@@ -51,7 +50,6 @@ from .response_models import (
     IndexValidateResponse,
     JsonDocumentResponse,
     MessageWithPathResponse,
-    ModelDocumentResponse,
     ModelEntitiesResponse,
     ModelEntityResponse,
     MoveEntityResponse,
@@ -584,23 +582,58 @@ async def patch_entity(
     return wrapper
 
 
+@router.delete("/entities/{locator:path}")
+async def delete_entity(locator: str) -> dict[str, Any]:
+    deleted_locators = factory.get_model().delete_entities(locator)
+
+    return {
+        "deleted_entities": len(deleted_locators),
+        "deleted_locators": deleted_locators,
+    }
+
+
 @router.put("/entities/{locator:path}")
 async def create_entity(
     locator: str, body: dict[str, Any]
 ) -> model.EntityWrapper[b.BaseEntityType]:
-    _locator = model.Locator.from_path(locator)
-    entity = factory.get_model().add_entity(_locator, body)
+    entity = factory.get_model().add_entity(locator, body)
     return entity
 
 
+@router.post("/entities/move", response_model=None)
+async def move_entities(body: dict[str, str]) -> list[model.EntityWrapperVariant]:
+    # note sure how to validate in fast api that these to parameters are set in the body
+    _from = body["from"]
+    _to = body["to"]
+
+    return factory.get_model().move_entities(_from, _to)
+
+
 @router.post("/model/save")
-async def model_save(locator: str | None = None) -> None:
-    factory.get_model().save(locator)
+async def model_save(
+    body: dict[str, Any] = Body(default_factory=lambda: {"locator": None}),
+) -> None:
+    factory.get_model().save(body["locator"])
+
+
+@router.get("/model/reload")
+async def model_reload(force: bool = Query(False)) -> dict[str, Any]:
+    pending_changes, pending_deletions = factory.get_model().get_unsaved_entities()
+    if (len(pending_changes) > 0 or len(pending_deletions) > 0) and not force:
+        raise HTTPException(status_code=409, detail="")
+
+    factory._model = await factory.load_model(config.solution_path)
+
+    return {"reloadedAt": datetime.now(UTC).isoformat().replace("+00:00", "Z")}
 
 
 @router.get("/model/unsaved")
-async def get_unsaved() -> list[str]:
-    return [str(_loc) for _loc in factory.get_model().get_unsaved_entities()]
+async def get_unsaved() -> dict[str, list[str]]:
+    changed, deleted = factory.get_model().get_unsaved_entities()
+    return {
+        "changed": list(map(str, changed)),
+        "deleted": list(map(str, deleted)),
+    }
 
 
 @router.get(
