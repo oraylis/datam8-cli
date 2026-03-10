@@ -38,6 +38,7 @@ All non-readiness logs are written to stderr.
   - Full model validate parity: `POST /validate`
 - Migration: `POST /migration/v1-to-v2`
 - Model entities: `GET|POST|DELETE /model/entities`, `POST /model/entities/move`, `POST /model/folder/rename`
+  - Locator API: `GET|PATCH|PUT|DELETE /entities/{locator}`, `POST /entities/move`, `GET /model/unsaved`, `POST /model/save`, `POST /model/reload`
   - Parity aliases: `GET /model/entity`, `POST /model/entity/create`, `POST /model/entity/validate`, `POST /model/entity/set`, `POST /model/entity/patch`, `POST /model/entity/duplicate`
   - Folder metadata explicit endpoints: `GET|POST|DELETE /model/folder-metadata`
 - Model functions: `GET|POST /model/function/source`, `POST /model/function/rename`
@@ -74,6 +75,21 @@ All non-readiness logs are written to stderr.
   - optional `properties` (array of `{ property, value }`)
   - optional `dataProduct` (string) and `dataModule` (string)
 - Save/update uses `POST /model/entities` or `POST /model/folder-metadata` with `relPath` pointing to `.properties.json`.
+
+## Locator Delete Semantics
+
+- `DELETE /entities/{locator}` mutates only the in-memory model.
+- Persisting locator deletes still requires `POST /model/save`.
+- Deleting a folder locator removes that folder, descendant folder metadata, and descendant model entities from RAM immediately.
+
+## Locator Create, Move And Reload Semantics
+
+- `PUT /entities/folders/{...}` persists folder metadata to `Model/**/.properties.json` after an explicit `POST /model/save`.
+- `POST /entities/move` mutates only the in-memory model and is currently defined for `modelEntities` and `folders`.
+- Moving a folder locator updates descendant folder metadata and descendant model entity locators in RAM immediately.
+- Persisting locator moves still requires `POST /model/save`.
+- `POST /model/reload` reloads the singleton model from disk.
+- Reload returns `409` while unsaved locator changes exist unless `force=true` is passed.
 
 ### Folder Validation Rules
 

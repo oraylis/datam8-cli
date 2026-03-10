@@ -18,11 +18,10 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
-from fastapi.concurrency import run_in_threadpool
+from fastapi import APIRouter, Body, HTTPException, Query
 from pydantic import BaseModel, Field, ValidationError
 
 from datam8 import factory, generate, logging, model, model_exceptions, opts
@@ -51,7 +50,6 @@ from .response_models import (
     IndexValidateResponse,
     JsonDocumentResponse,
     MessageWithPathResponse,
-    ModelDocumentResponse,
     ModelEntitiesResponse,
     ModelEntityResponse,
     MoveEntityResponse,
@@ -568,7 +566,7 @@ async def generator_run(body: GenerateBody) -> generate.GenerateResult:
 
 
 @router.get("/entities/{locator:path}", response_model=None)
-async def get_entities(locator: str = "/") -> list[model.EntityWrapperVariant]:
+def get_entities(locator: str = "/") -> list[model.EntityWrapperVariant]:
     """
     Returns a list of entities based on the given locator. Returns an empty list if none are found.
     """
@@ -576,7 +574,7 @@ async def get_entities(locator: str = "/") -> list[model.EntityWrapperVariant]:
 
 
 @router.patch("/entities/{locator:path}")
-async def patch_entity(
+def patch_entity(
     locator: str, patch: dict[str, Any]
 ) -> model.EntityWrapper[b.BaseEntityType]:
     wrapper = factory.get_model().get_entity_by_locator(locator)
@@ -585,7 +583,7 @@ async def patch_entity(
 
 
 @router.put("/entities/{locator:path}")
-async def create_entity(
+def create_entity(
     locator: str, body: dict[str, Any]
 ) -> model.EntityWrapper[b.BaseEntityType]:
     _locator = model.Locator.from_path(locator)
@@ -593,14 +591,84 @@ async def create_entity(
     return entity
 
 
+@router.delete("/entities/{locator:path}")
+def delete_entity(locator: str) -> dict[str, Any]:
+    try:
+        delete_locator = model.Locator.from_path(locator)
+    except model_exceptions.InvalidLocatorError as err:
+        raise HTTPException(status_code=400, detail=str(err).splitlines()) from err
+
+    if delete_locator.entityName is None:
+        raise HTTPException(
+            status_code=400,
+            detail=[f"Locator does not reference an entity: {delete_locator}"],
+        )
+
+    try:
+        factory.get_model().delete_entity(delete_locator)
+    except model_exceptions.EntityNotFoundError as err:
+        raise HTTPException(status_code=404, detail=str(err).splitlines()) from err
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err).splitlines()) from err
+
+    return {"ok": True, "locator": str(delete_locator), "deleted": True}
+
+
+@router.post("/entities/move")
+def move_entity(body: dict[str, str]) -> model.EntityWrapper[b.BaseEntityType]:
+    from_raw = body.get("from")
+    to_raw = body.get("to")
+    if not from_raw or not to_raw:
+        raise HTTPException(status_code=400, detail=["Body must include 'from' and 'to'."])
+
+    try:
+        from_locator = model.Locator.from_path(from_raw)
+        to_locator = model.Locator.from_path(to_raw)
+    except model_exceptions.InvalidLocatorError as err:
+        raise HTTPException(status_code=400, detail=str(err).splitlines()) from err
+
+    try:
+        factory.get_model().move_entity(from_locator, to_locator)
+    except model_exceptions.EntityNotFoundError as err:
+        raise HTTPException(status_code=404, detail=str(err).splitlines()) from err
+    except FileExistsError as err:
+        raise HTTPException(status_code=409, detail=str(err).splitlines()) from err
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err).splitlines()) from err
+
+    return factory.get_model().get_entity_by_locator(to_locator)
+
+
 @router.post("/model/save")
-async def model_save(locator: str | None = None) -> None:
-    factory.get_model().save(locator)
+def model_save(
+    body: dict[str, Any] | None = Body(default=None),
+    locator: str | None = Query(None),
+) -> None:
+    target_locator = body.get("locator") if isinstance(body, dict) else locator
+    factory.get_model().save(target_locator)
 
 
 @router.get("/model/unsaved")
-async def get_unsaved() -> list[str]:
+def get_unsaved() -> list[str]:
     return [str(_loc) for _loc in factory.get_model().get_unsaved_entities()]
+
+
+@router.post("/model/reload")
+def model_reload(force: bool = Query(False)) -> dict[str, Any]:
+    current_model = factory.get_model()
+    unsaved = [str(locator) for locator in current_model.get_unsaved_entities()]
+    if unsaved and not force:
+        raise HTTPException(
+            status_code=409,
+            detail=["Reload would discard unsaved changes. Use force=true to continue."],
+        )
+
+    reloaded = factory.reload_model()
+    return {
+        "ok": True,
+        "reloadedAt": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "unsavedCount": len(reloaded.get_unsaved_entities()),
+    }
 
 
 @router.get(

@@ -75,6 +75,14 @@ def create_model(solution_path: pathlib.Path | None = None) -> model.Model:
     return _model
 
 
+def reload_model(solution_path: pathlib.Path | None = None) -> model.Model:
+    """Reload the singleton model from disk."""
+    global _model
+
+    _model = None
+    return create_model(solution_path=solution_path)
+
+
 def create_model_or_exit(solution_path: pathlib.Path | None = None) -> model.Model:
     """
     Create model and exit the program in case of a known error. This function is mainly provided
