@@ -275,6 +275,41 @@ def test_model_save_without_locator_persists_all_unsaved_model_entities(
     assert right_file.exists()
 
 
+def test_create_folder_is_persisted_via_save(api_client, tmp_path: Path) -> None:
+    solution_file = _create_delete_solution(tmp_path)
+    _activate_solution(solution_file)
+    folder_file = tmp_path / "Model" / "Raw" / "NewFolder" / ".properties.json"
+
+    with api_client(token="test-token", solution_path=solution_file) as client:
+        create_response = client.put(
+            "/entities/folders/Raw/NewFolder",
+            headers=_headers(),
+            json={"properties": []},
+        )
+        assert create_response.status_code == 200
+
+        get_response = client.get("/entities/folders/Raw/NewFolder", headers=_headers())
+        assert get_response.status_code == 200
+        assert len(get_response.json()) == 1
+        assert get_response.json()[0]["locator"]["entityName"] == "NewFolder"
+
+        unsaved = client.get("/model/unsaved", headers=_headers())
+        assert unsaved.status_code == 200
+        assert unsaved.json() == ["folders/Raw/NewFolder"]
+
+        save_response = client.post(
+            "/model/save",
+            headers=_headers(),
+            json={"locator": "folders/Raw/NewFolder"},
+        )
+        assert save_response.status_code == 200
+
+    assert folder_file.exists()
+    payload = json.loads(folder_file.read_text(encoding="utf-8"))
+    assert payload["type"] == "folders"
+    assert payload["folders"][0]["name"] == "NewFolder"
+
+
 def test_delete_model_entity_is_persisted_via_save(api_client, tmp_path: Path) -> None:
     solution_file = _create_delete_solution(tmp_path)
     _activate_solution(solution_file)
@@ -314,6 +349,50 @@ def test_delete_model_entity_is_persisted_via_save(api_client, tmp_path: Path) -
     assert not model_file.exists()
 
 
+def test_move_model_entity_is_persisted_via_save(api_client, tmp_path: Path) -> None:
+    solution_file = _create_delete_solution(tmp_path)
+    _activate_solution(solution_file)
+    old_file = tmp_path / "Model" / "Raw" / "Customer.json"
+    new_file = tmp_path / "Model" / "Raw" / "CustomerRenamed.json"
+
+    with api_client(token="test-token", solution_path=solution_file) as client:
+        move_response = client.post(
+            "/entities/move",
+            headers=_headers(),
+            json={
+                "from": "modelEntities/Raw/Customer",
+                "to": "modelEntities/Raw/CustomerRenamed",
+            },
+        )
+        assert move_response.status_code == 200
+        assert move_response.json()["locator"]["entityName"] == "CustomerRenamed"
+        assert move_response.json()["entity"]["name"] == "CustomerRenamed"
+
+        assert client.get("/entities/modelEntities/Raw/Customer", headers=_headers()).json() == []
+        moved = client.get("/entities/modelEntities/Raw/CustomerRenamed", headers=_headers())
+        assert moved.status_code == 200
+        assert moved.json()[0]["entity"]["name"] == "CustomerRenamed"
+
+        unsaved = client.get("/model/unsaved", headers=_headers())
+        assert unsaved.status_code == 200
+        assert set(unsaved.json()) == {
+            "modelEntities/Raw/Customer",
+            "modelEntities/Raw/CustomerRenamed",
+        }
+
+        save_response = client.post(
+            "/model/save",
+            headers=_headers(),
+            json={"locator": "modelEntities/Raw/CustomerRenamed"},
+        )
+        assert save_response.status_code == 200
+
+    assert not old_file.exists()
+    assert new_file.exists()
+    payload = json.loads(new_file.read_text(encoding="utf-8"))
+    assert payload["name"] == "CustomerRenamed"
+
+
 def test_delete_list_based_entity_deletes_containing_file(api_client, tmp_path: Path) -> None:
     solution_file = _create_delete_solution(tmp_path)
     _activate_solution(solution_file)
@@ -346,6 +425,58 @@ def test_delete_list_based_entity_deletes_containing_file(api_client, tmp_path: 
         assert unsaved_after.json() == []
 
     assert not base_file.exists()
+
+
+def test_move_folder_updates_descendants_and_persists(api_client, tmp_path: Path) -> None:
+    solution_file = _create_delete_solution(tmp_path)
+    _activate_solution(solution_file)
+    old_folder_dir = tmp_path / "Model" / "Raw" / "Sales"
+    new_folder_dir = tmp_path / "Model" / "Raw" / "Orders"
+    new_folder_file = new_folder_dir / ".properties.json"
+    new_model_file = new_folder_dir / "Order.json"
+
+    with api_client(token="test-token", solution_path=solution_file) as client:
+        move_response = client.post(
+            "/entities/move",
+            headers=_headers(),
+            json={"from": "folders/Raw/Sales", "to": "folders/Raw/Orders"},
+        )
+        assert move_response.status_code == 200
+        assert move_response.json()["locator"]["entityName"] == "Orders"
+        assert move_response.json()["entity"]["name"] == "Orders"
+
+        assert client.get("/entities/folders/Raw/Sales", headers=_headers()).json() == []
+        assert client.get("/entities/modelEntities/Raw/Sales/Order", headers=_headers()).json() == []
+
+        moved_folder = client.get("/entities/folders/Raw/Orders", headers=_headers())
+        assert moved_folder.status_code == 200
+        assert moved_folder.json()[0]["entity"]["name"] == "Orders"
+
+        moved_entity = client.get("/entities/modelEntities/Raw/Orders/Order", headers=_headers())
+        assert moved_entity.status_code == 200
+        assert moved_entity.json()[0]["entity"]["name"] == "Order"
+
+        unsaved = client.get("/model/unsaved", headers=_headers())
+        assert unsaved.status_code == 200
+        assert set(unsaved.json()) == {
+            "folders/Raw/Sales",
+            "folders/Raw/Orders",
+            "modelEntities/Raw/Sales/Order",
+            "modelEntities/Raw/Orders/Order",
+        }
+
+        save_response = client.post(
+            "/model/save",
+            headers=_headers(),
+            json={"locator": "folders/Raw/Orders"},
+        )
+        assert save_response.status_code == 200
+
+    assert not old_folder_dir.exists()
+    assert new_folder_file.exists()
+    assert new_model_file.exists()
+    payload = json.loads(new_folder_file.read_text(encoding="utf-8"))
+    assert payload["folders"][0]["name"] == "Orders"
 
 
 def test_delete_folder_removes_descendants_in_ram_and_on_save(
@@ -384,6 +515,80 @@ def test_delete_folder_removes_descendants_in_ram_and_on_save(
         assert unsaved_after.json() == []
 
     assert not raw_dir.exists()
+
+
+def test_reload_refreshes_model_from_disk(api_client, tmp_path: Path) -> None:
+    solution_file = _create_delete_solution(tmp_path)
+    _activate_solution(solution_file)
+    customer_file = tmp_path / "Model" / "Raw" / "Customer.json"
+
+    with api_client(token="test-token", solution_path=solution_file) as client:
+        initial = client.get("/entities/modelEntities/Raw/Customer", headers=_headers())
+        assert initial.status_code == 200
+        assert initial.json()[0]["entity"]["attributes"][0]["name"] == "id"
+
+        payload = json.loads(customer_file.read_text(encoding="utf-8"))
+        payload["attributes"][0]["name"] = "external_id"
+        customer_file.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+        before_reload = client.get("/entities/modelEntities/Raw/Customer", headers=_headers())
+        assert before_reload.status_code == 200
+        assert before_reload.json()[0]["entity"]["attributes"][0]["name"] == "id"
+
+        reload_response = client.post("/model/reload", headers=_headers())
+        assert reload_response.status_code == 200
+        assert reload_response.json()["ok"] is True
+        assert reload_response.json()["unsavedCount"] == 0
+
+        after_reload = client.get("/entities/modelEntities/Raw/Customer", headers=_headers())
+        assert after_reload.status_code == 200
+        assert after_reload.json()[0]["entity"]["attributes"][0]["name"] == "external_id"
+
+
+def test_reload_rejects_unsaved_changes_without_force(api_client, tmp_path: Path) -> None:
+    solution_file = _create_delete_solution(tmp_path)
+    _activate_solution(solution_file)
+
+    with api_client(token="test-token", solution_path=solution_file) as client:
+        create_response = client.put(
+            "/entities/modelEntities/Raw/NewCustomer",
+            headers=_headers(),
+            json=_model_entity_payload("newId"),
+        )
+        assert create_response.status_code == 200
+
+        reload_response = client.post("/model/reload", headers=_headers())
+        assert reload_response.status_code == 409
+
+        unsaved = client.get("/model/unsaved", headers=_headers())
+        assert unsaved.status_code == 200
+        assert unsaved.json() == ["modelEntities/Raw/NewCustomer"]
+
+
+def test_reload_force_discards_unsaved_changes(api_client, tmp_path: Path) -> None:
+    solution_file = _create_delete_solution(tmp_path)
+    _activate_solution(solution_file)
+
+    with api_client(token="test-token", solution_path=solution_file) as client:
+        create_response = client.put(
+            "/entities/modelEntities/Raw/NewCustomer",
+            headers=_headers(),
+            json=_model_entity_payload("newId"),
+        )
+        assert create_response.status_code == 200
+
+        reload_response = client.post("/model/reload?force=true", headers=_headers())
+        assert reload_response.status_code == 200
+        assert reload_response.json()["ok"] is True
+        assert reload_response.json()["unsavedCount"] == 0
+
+        get_response = client.get("/entities/modelEntities/Raw/NewCustomer", headers=_headers())
+        assert get_response.status_code == 200
+        assert get_response.json() == []
+
+        unsaved = client.get("/model/unsaved", headers=_headers())
+        assert unsaved.status_code == 200
+        assert unsaved.json() == []
 
 
 def test_delete_rejects_invalid_locator(api_client, tmp_path: Path) -> None:

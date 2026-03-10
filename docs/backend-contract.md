@@ -82,6 +82,15 @@ All non-readiness logs are written to stderr.
 - Persisting locator deletes still requires `POST /model/save`.
 - Deleting a folder locator removes that folder, descendant folder metadata, and descendant model entities from RAM immediately.
 
+## Locator Create, Move And Reload Semantics
+
+- `PUT /entities/folders/{...}` persists folder metadata to `Model/**/.properties.json` after an explicit `POST /model/save`.
+- `POST /entities/move` mutates only the in-memory model and is currently defined for `modelEntities` and `folders`.
+- Moving a folder locator updates descendant folder metadata and descendant model entity locators in RAM immediately.
+- Persisting locator moves still requires `POST /model/save`.
+- `POST /model/reload` reloads the singleton model from disk.
+- Reload returns `409` while unsaved locator changes exist unless `force=true` is passed.
+
 ### Folder Validation Rules
 
 - `dataModule` requires `dataProduct`.

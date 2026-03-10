@@ -279,6 +279,7 @@ class DeletedEntityRef:
     locator: Locator
     source_file: Path
     entity_type: b.EntityType
+    replacement_locator: Locator | None = None
 
 
 class PropertyReference(p.PropertyReference):
@@ -761,13 +762,8 @@ class Model:
         self, locator: Locator, content: dict[str, Any]
     ) -> EntityWrapper[b.BaseEntityType]:
         _type = b.EntityType(locator.entityType)
-        if _type == b.EntityType.MODEL_ENTITIES:
-            source_file_path = Path(
-                config.solution_folder_path,
-                self.solution.modelPath,
-                *locator.folders,
-                f"{locator.entityName}.json",
-            )
+        if _type in {b.EntityType.MODEL_ENTITIES, b.EntityType.FOLDERS}:
+            source_file_path = self._resolve_source_file(locator)
         else:
             source_file_path = Path(config.solution_folder_path, *locator.folders)
 
@@ -919,6 +915,79 @@ class Model:
             entity_type=b.EntityType(wrapper.locator.entityType),
         )
 
+    def _record_relocated_wrapper(
+        self, wrapper: EntityWrapperVariant, replacement_locator: Locator
+    ) -> None:
+        self._deleted_entities[wrapper.locator] = DeletedEntityRef(
+            locator=wrapper.locator,
+            source_file=wrapper.source_file,
+            entity_type=b.EntityType(wrapper.locator.entityType),
+            replacement_locator=replacement_locator,
+        )
+
+    def _resolve_source_file(self, locator: Locator) -> Path:
+        entity_type = b.EntityType(locator.entityType)
+        if locator.entityName is None:
+            raise ValueError(f"Locator does not reference an entity: {locator}")
+        entity_name = locator.entityName
+
+        if entity_type == b.EntityType.MODEL_ENTITIES:
+            return (
+                config.solution_folder_path
+                / self.solution.modelPath
+                / Path(*locator.folders, f"{entity_name}.json")
+            )
+
+        if entity_type == b.EntityType.FOLDERS:
+            return (
+                config.solution_folder_path
+                / self.solution.modelPath
+                / Path(*locator.folders, entity_name, ".properties.json")
+            )
+
+        raise ValueError(f"Unsupported entity type for source file resolution: {locator}")
+
+    def _rewrite_locator(
+        self, locator: Locator, from_locator: Locator, to_locator: Locator
+    ) -> Locator:
+        assert locator.entityName is not None
+        assert from_locator.entityName is not None
+        assert to_locator.entityName is not None
+
+        if locator.entityType == b.EntityType.MODEL_ENTITIES.value:
+            if from_locator.entityType == b.EntityType.MODEL_ENTITIES.value:
+                return to_locator
+
+            from_path = (*from_locator.folders, from_locator.entityName)
+            suffix = locator.folders[len(from_path) :]
+            return Locator(
+                entityType=locator.entityType,
+                folders=[*to_locator.folders, to_locator.entityName, *suffix],
+                entityName=locator.entityName,
+            )
+
+        from_path = (*from_locator.folders, from_locator.entityName)
+        to_path = (*to_locator.folders, to_locator.entityName)
+        current_path = (*locator.folders, locator.entityName)
+        suffix = current_path[len(from_path) :]
+        new_path = (*to_path, *suffix)
+        return Locator(
+            entityType=locator.entityType,
+            folders=list(new_path[:-1]),
+            entityName=new_path[-1],
+        )
+
+    def _prepare_moved_wrapper(
+        self, wrapper: EntityWrapperVariant, new_locator: Locator
+    ) -> EntityWrapperVariant:
+        wrapper.locator = new_locator
+        wrapper.source_file = self._resolve_source_file(new_locator)
+        wrapper.entity.name = new_locator.entityName  # type: ignore[attr-defined]
+        wrapper.resolved = False
+        wrapper._properties = {}
+        wrapper._changed = True
+        return wrapper
+
     def delete_entity(self, locator: str | Locator) -> list[Locator]:
         delete_locator = _ensure_locator(locator)
 
@@ -974,6 +1043,66 @@ class Model:
         self.refresh_file_references()
         return removed_locators
 
+    def move_entity(self, from_locator: str | Locator, to_locator: str | Locator) -> list[Locator]:
+        source_locator = _ensure_locator(from_locator)
+        target_locator = _ensure_locator(to_locator)
+
+        if source_locator.entityName is None or target_locator.entityName is None:
+            raise ValueError("Move requires source and target locators to reference entities.")
+
+        if source_locator.entityType != target_locator.entityType:
+            raise ValueError("Move requires source and target locators of the same entity type.")
+
+        entity_type = b.EntityType(source_locator.entityType)
+        if entity_type not in {b.EntityType.MODEL_ENTITIES, b.EntityType.FOLDERS}:
+            raise ValueError("Move is only supported for modelEntities and folders.")
+
+        entity_dict: dict[Locator, EntityWrapperVariant] = getattr(self, entity_type.value)
+        if source_locator not in entity_dict:
+            raise errors.EntityNotFoundError(str(source_locator))
+        if target_locator in entity_dict:
+            raise FileExistsError(str(target_locator))
+
+        if entity_type == b.EntityType.MODEL_ENTITIES:
+            wrapper = entity_dict.pop(source_locator)
+            self._record_relocated_wrapper(wrapper, target_locator)
+            self._prepare_moved_wrapper(wrapper, target_locator)
+            entity_dict[target_locator] = wrapper
+            self.refresh_file_references()
+            wrapper.resolve(self)
+            return [source_locator, target_locator]
+
+        source_path = (*source_locator.folders, source_locator.entityName)
+        target_path = (*target_locator.folders, target_locator.entityName)
+        if tuple(target_path[: len(source_path)]) == source_path:
+            raise ValueError("Cannot move a folder into itself or one of its descendants.")
+
+        folder_locators, model_entity_locators = self._collect_folder_subtree_locators(source_locator)
+        folder_wrappers = [(loc, self.folders.pop(loc)) for loc in folder_locators]
+        model_wrappers = [(loc, self.modelEntities.pop(loc)) for loc in model_entity_locators]
+
+        moved_locators: list[Locator] = []
+        for current_locator, wrapper in folder_wrappers:
+            new_locator = self._rewrite_locator(current_locator, source_locator, target_locator)
+            self._record_relocated_wrapper(wrapper, new_locator)
+            self._prepare_moved_wrapper(wrapper, new_locator)
+            self.folders[new_locator] = wrapper
+            moved_locators.extend([current_locator, new_locator])
+
+        for current_locator, wrapper in model_wrappers:
+            new_locator = self._rewrite_locator(current_locator, source_locator, target_locator)
+            self._record_relocated_wrapper(wrapper, new_locator)
+            self._prepare_moved_wrapper(wrapper, new_locator)
+            self.modelEntities[new_locator] = wrapper
+            moved_locators.extend([current_locator, new_locator])
+
+        self.refresh_file_references()
+        for wrapper in list(self.folders.values()) + list(self.modelEntities.values()):
+            if wrapper.has_changed and not wrapper.resolved:
+                wrapper.resolve(self)
+
+        return moved_locators
+
     def _cleanup_empty_model_dirs(self, file_paths: Sequence[Path]) -> None:
         model_root = config.solution_folder_path / self.solution.modelPath
 
@@ -1005,6 +1134,10 @@ class Model:
             record
             for record in self._deleted_entities.values()
             if self._is_locator_in_scope(scope_locator, record.locator)
+            or (
+                record.replacement_locator is not None
+                and self._is_locator_in_scope(scope_locator, record.replacement_locator)
+            )
         ]
         deleted_files = {record.source_file for record in deleted_records}
         if deleted_files:
@@ -1013,6 +1146,10 @@ class Model:
                 for record in self._deleted_entities.values()
                 if record.source_file in deleted_files
                 or self._is_locator_in_scope(scope_locator, record.locator)
+                or (
+                    record.replacement_locator is not None
+                    and self._is_locator_in_scope(scope_locator, record.replacement_locator)
+                )
             ]
             deleted_files = {record.source_file for record in deleted_records}
 
@@ -1118,6 +1255,7 @@ class EntityFileRef:
             {"type": self._type.value, self._type.value: entities},
         )
 
+        self.file_path.parent.mkdir(parents=True, exist_ok=True)
         with open(self.file_path, "x") as _file:
             _file.write(
                 _model.model_dump_json(

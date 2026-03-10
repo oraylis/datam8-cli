@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException, Query
@@ -613,6 +614,31 @@ def delete_entity(locator: str) -> dict[str, Any]:
     return {"ok": True, "locator": str(delete_locator), "deleted": True}
 
 
+@router.post("/entities/move")
+def move_entity(body: dict[str, str]) -> model.EntityWrapper[b.BaseEntityType]:
+    from_raw = body.get("from")
+    to_raw = body.get("to")
+    if not from_raw or not to_raw:
+        raise HTTPException(status_code=400, detail=["Body must include 'from' and 'to'."])
+
+    try:
+        from_locator = model.Locator.from_path(from_raw)
+        to_locator = model.Locator.from_path(to_raw)
+    except model_exceptions.InvalidLocatorError as err:
+        raise HTTPException(status_code=400, detail=str(err).splitlines()) from err
+
+    try:
+        factory.get_model().move_entity(from_locator, to_locator)
+    except model_exceptions.EntityNotFoundError as err:
+        raise HTTPException(status_code=404, detail=str(err).splitlines()) from err
+    except FileExistsError as err:
+        raise HTTPException(status_code=409, detail=str(err).splitlines()) from err
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err).splitlines()) from err
+
+    return factory.get_model().get_entity_by_locator(to_locator)
+
+
 @router.post("/model/save")
 def model_save(
     body: dict[str, Any] | None = Body(default=None),
@@ -625,6 +651,24 @@ def model_save(
 @router.get("/model/unsaved")
 def get_unsaved() -> list[str]:
     return [str(_loc) for _loc in factory.get_model().get_unsaved_entities()]
+
+
+@router.post("/model/reload")
+def model_reload(force: bool = Query(False)) -> dict[str, Any]:
+    current_model = factory.get_model()
+    unsaved = [str(locator) for locator in current_model.get_unsaved_entities()]
+    if unsaved and not force:
+        raise HTTPException(
+            status_code=409,
+            detail=["Reload would discard unsaved changes. Use force=true to continue."],
+        )
+
+    reloaded = factory.reload_model()
+    return {
+        "ok": True,
+        "reloadedAt": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "unsavedCount": len(reloaded.get_unsaved_entities()),
+    }
 
 
 @router.get(
