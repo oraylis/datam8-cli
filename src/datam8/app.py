@@ -23,7 +23,6 @@ from datam8.core.runtime_meta import get_version
 
 from .cmd import (
     base,
-    common,
     config_cmd,
     connector,
     datasource,

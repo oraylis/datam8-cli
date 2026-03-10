@@ -32,7 +32,7 @@ from datam8_model import property as p
 from datam8_model import solution as s
 from datam8_model import zone as z
 
-from . import logging, opts, utils, config
+from . import config, logging, opts, utils
 from . import model_exceptions as errors
 
 logger = logging.getLogger(__name__)
@@ -750,8 +750,16 @@ class Model:
     def add_entity(
         self, locator: Locator, content: dict[str, Any]
     ) -> EntityWrapper[b.BaseEntityType]:
-        source_file_path = Path(config.solution_folder_path, *locator.folders)
         _type = b.EntityType(locator.entityType)
+        if _type == b.EntityType.MODEL_ENTITIES:
+            source_file_path = Path(
+                config.solution_folder_path,
+                self.solution.modelPath,
+                *locator.folders,
+                f"{locator.entityName}.json",
+            )
+        else:
+            source_file_path = Path(config.solution_folder_path, *locator.folders)
 
         content.update({"id": self.get_next_model_id(), "name": locator.entityName})
 
@@ -770,7 +778,9 @@ class Model:
         if locator in entity_dict:
             raise utils.create_error(Exception(f"Locator already exists in model: {locator}"))
 
+        new_wrapper._changed = True
         entity_dict[locator] = new_wrapper
+        self.refresh_file_references()
 
         new_wrapper.resolve(self)
 
@@ -971,7 +981,7 @@ class EntityFileRef:
 
             case _:
                 current_content = b.BaseEntities.from_json_file(self.file_path)
-                entities: b.BaseEntityType = getattr(current_content.root, self._type.value)
+                entities: list[Any] = list(getattr(current_content.root, self._type.value))
 
                 for idx in range(len(wrappers)):
                     for existing_entity in entities:

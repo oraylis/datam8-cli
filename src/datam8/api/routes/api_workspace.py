@@ -18,14 +18,12 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
-from fastapi.concurrency import run_in_threadpool
+from fastapi import APIRouter, Body, Query
 from pydantic import BaseModel, Field, ValidationError
 
-from datam8 import factory, generate, logging, model, model_exceptions, opts
+from datam8 import factory, generate, logging, model, opts
 from datam8.core import refactor as refactor_core
 from datam8.core import search as search_core
 from datam8.core import workspace_io, workspace_service
@@ -51,7 +49,6 @@ from .response_models import (
     IndexValidateResponse,
     JsonDocumentResponse,
     MessageWithPathResponse,
-    ModelDocumentResponse,
     ModelEntitiesResponse,
     ModelEntityResponse,
     MoveEntityResponse,
@@ -568,7 +565,7 @@ async def generator_run(body: GenerateBody) -> generate.GenerateResult:
 
 
 @router.get("/entities/{locator:path}", response_model=None)
-async def get_entities(locator: str = "/") -> list[model.EntityWrapperVariant]:
+def get_entities(locator: str = "/") -> list[model.EntityWrapperVariant]:
     """
     Returns a list of entities based on the given locator. Returns an empty list if none are found.
     """
@@ -576,7 +573,7 @@ async def get_entities(locator: str = "/") -> list[model.EntityWrapperVariant]:
 
 
 @router.patch("/entities/{locator:path}")
-async def patch_entity(
+def patch_entity(
     locator: str, patch: dict[str, Any]
 ) -> model.EntityWrapper[b.BaseEntityType]:
     wrapper = factory.get_model().get_entity_by_locator(locator)
@@ -585,7 +582,7 @@ async def patch_entity(
 
 
 @router.put("/entities/{locator:path}")
-async def create_entity(
+def create_entity(
     locator: str, body: dict[str, Any]
 ) -> model.EntityWrapper[b.BaseEntityType]:
     _locator = model.Locator.from_path(locator)
@@ -594,12 +591,16 @@ async def create_entity(
 
 
 @router.post("/model/save")
-async def model_save(locator: str | None = None) -> None:
-    factory.get_model().save(locator)
+def model_save(
+    body: dict[str, Any] | None = Body(default=None),
+    locator: str | None = Query(None),
+) -> None:
+    target_locator = body.get("locator") if isinstance(body, dict) else locator
+    factory.get_model().save(target_locator)
 
 
 @router.get("/model/unsaved")
-async def get_unsaved() -> list[str]:
+def get_unsaved() -> list[str]:
     return [str(_loc) for _loc in factory.get_model().get_unsaved_entities()]
 
 

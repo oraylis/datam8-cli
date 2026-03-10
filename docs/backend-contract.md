@@ -38,6 +38,7 @@ All non-readiness logs are written to stderr.
   - Full model validate parity: `POST /validate`
 - Migration: `POST /migration/v1-to-v2`
 - Model entities: `GET|POST|DELETE /model/entities`, `POST /model/entities/move`, `POST /model/folder/rename`
+  - Locator API: `GET|PATCH|PUT|DELETE /entities/{locator}`, `POST /entities/move`, `GET /model/unsaved`, `POST /model/save`, `POST /model/reload`
   - Parity aliases: `GET /model/entity`, `POST /model/entity/create`, `POST /model/entity/validate`, `POST /model/entity/set`, `POST /model/entity/patch`, `POST /model/entity/duplicate`
   - Folder metadata explicit endpoints: `GET|POST|DELETE /model/folder-metadata`
 - Model functions: `GET|POST /model/function/source`, `POST /model/function/rename`
