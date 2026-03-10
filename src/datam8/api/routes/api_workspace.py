@@ -20,10 +20,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Body, Query
+from fastapi import APIRouter, Body, HTTPException, Query
 from pydantic import BaseModel, Field, ValidationError
 
-from datam8 import factory, generate, logging, model, opts
+from datam8 import factory, generate, logging, model, model_exceptions, opts
 from datam8.core import refactor as refactor_core
 from datam8.core import search as search_core
 from datam8.core import workspace_io, workspace_service
@@ -588,6 +588,29 @@ def create_entity(
     _locator = model.Locator.from_path(locator)
     entity = factory.get_model().add_entity(_locator, body)
     return entity
+
+
+@router.delete("/entities/{locator:path}")
+def delete_entity(locator: str) -> dict[str, Any]:
+    try:
+        delete_locator = model.Locator.from_path(locator)
+    except model_exceptions.InvalidLocatorError as err:
+        raise HTTPException(status_code=400, detail=str(err).splitlines()) from err
+
+    if delete_locator.entityName is None:
+        raise HTTPException(
+            status_code=400,
+            detail=[f"Locator does not reference an entity: {delete_locator}"],
+        )
+
+    try:
+        factory.get_model().delete_entity(delete_locator)
+    except model_exceptions.EntityNotFoundError as err:
+        raise HTTPException(status_code=404, detail=str(err).splitlines()) from err
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err).splitlines()) from err
+
+    return {"ok": True, "locator": str(delete_locator), "deleted": True}
 
 
 @router.post("/model/save")

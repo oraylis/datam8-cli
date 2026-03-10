@@ -76,6 +76,12 @@ All non-readiness logs are written to stderr.
   - optional `dataProduct` (string) and `dataModule` (string)
 - Save/update uses `POST /model/entities` or `POST /model/folder-metadata` with `relPath` pointing to `.properties.json`.
 
+## Locator Delete Semantics
+
+- `DELETE /entities/{locator}` mutates only the in-memory model.
+- Persisting locator deletes still requires `POST /model/save`.
+- Deleting a folder locator removes that folder, descendant folder metadata, and descendant model entities from RAM immediately.
+
 ### Folder Validation Rules
 
 - `dataModule` requires `dataProduct`.
