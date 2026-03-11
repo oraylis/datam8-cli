@@ -38,6 +38,7 @@ Utility Module to make working with datam8 models more comfortable in jinja2 tem
 import functools
 import logging
 import os
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -45,6 +46,33 @@ from typing import Any
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from .. import config, opts
+
+
+def _stream_supports_unicode(stream: Any) -> bool:
+    encoding = getattr(stream, "encoding", None)
+    if not isinstance(encoding, str) or not encoding.strip():
+        return False
+    try:
+        "⠋".encode(encoding)
+    except Exception:
+        return False
+    return True
+
+
+def _can_render_progress_spinner() -> bool:
+    # In API/electron/server mode we avoid transient rich spinners entirely to keep
+    # output transport-safe and avoid console encoding issues on Windows code pages.
+    runtime_mode = str(os.environ.get("DATAM8_MODE") or "").strip().lower()
+    if runtime_mode in {"electron", "server"}:
+        return False
+
+    stream = getattr(sys, "stderr", None)
+    if stream is None:
+        return False
+    is_tty = bool(getattr(stream, "isatty", lambda: False)())
+    if not is_tty:
+        return False
+    return _stream_supports_unicode(stream)
 
 
 def delete_path(path: Path, recursive: bool = False) -> None:
@@ -115,7 +143,7 @@ def print_progress_async(msg: str):
             if config.log_level in [
                 opts.LogLevels.WARNING,
                 opts.LogLevels.ERROR,
-            ]:
+            ] and _can_render_progress_spinner():
                 with Progress(
                     SpinnerColumn(),
                     TextColumn("[progress.description]{task.description}"),

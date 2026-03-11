@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Protocol
 
 import jinja2
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from . import config, factory, model, model_exceptions, opts, utils
 from .core.paths import resolve_solution
@@ -44,6 +44,7 @@ class GenerateResult(BaseModel):
     status: str
     target: str
     outputPath: str
+    messages: list[str] = Field(default_factory=list)
 
 
 def run_generation(

@@ -141,6 +141,9 @@ def test_serve_readiness_auth_and_generate_sync(
         response.raise_for_status()
         result = response.json()
         assert result.get("status") == "succeeded"
+        assert isinstance(result.get("messages"), list)
+        assert result.get("messages")
+        assert "datam8" in result["messages"][0]
 
     output_dir = work / output_path
     assert output_dir.exists(), f"Expected output directory at {output_dir}"
@@ -180,6 +183,7 @@ def test_generate_sync_can_run_twice_in_same_server_process(
         )
         response1.raise_for_status()
         assert response1.json().get("status") == "succeeded"
+        assert isinstance(response1.json().get("messages"), list)
 
         response2 = client.post(
             "/generate",
@@ -188,6 +192,7 @@ def test_generate_sync_can_run_twice_in_same_server_process(
         )
         response2.raise_for_status()
         assert response2.json().get("status") == "succeeded"
+        assert isinstance(response2.json().get("messages"), list)
 
 
 def test_generate_sync_target_none_returns_selected_target_name(
@@ -221,3 +226,4 @@ def test_generate_sync_target_none_returns_selected_target_name(
         result = response.json()
         assert result.get("status") == "succeeded"
         assert result.get("target") == target
+        assert isinstance(result.get("messages"), list)

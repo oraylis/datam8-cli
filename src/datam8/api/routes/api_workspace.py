@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -37,7 +38,11 @@ from datam8.core.solution_index import read_index, validate_index
 from datam8.generate import GenerateResult, run_generation
 from datam8_model import model as model_model
 
-from .common import lock_timeout_seconds
+from .common import (
+    OperationWithMessagesError,
+    lock_timeout_seconds,
+    run_with_log_messages,
+)
 from .response_models import (
     BaseEntitiesResponse,
     BaseEntityResponse,
@@ -537,16 +542,26 @@ async def index_validate_route(path: str | None = Query(None)) -> IndexValidateR
 @router.post("/generate", response_model=GenerateResult)
 async def generator_run(body: GenerateBody) -> GenerateResult:
     """Execute generator synchronously."""
-    return await run_in_threadpool(
-        run_generation,
-        solution_path=Path(body.solutionPath),
-        target=body.target,
-        log_level=body.logLevel or "info",
-        clean_output=bool(body.cleanOutput),
-        payloads=body.payloads or [],
-        generate_all=False,
-        lazy=bool(body.lazy),
-    )
+    try:
+        result, messages = await run_in_threadpool(
+            partial(
+                run_with_log_messages,
+                partial(
+                    run_generation,
+                    solution_path=Path(body.solutionPath),
+                    target=body.target,
+                    log_level=body.logLevel or "info",
+                    clean_output=bool(body.cleanOutput),
+                    payloads=body.payloads or [],
+                    generate_all=False,
+                    lazy=bool(body.lazy),
+                ),
+            )
+        )
+    except OperationWithMessagesError as wrapper:
+        raise wrapper.original
+
+    return result.model_copy(update={"messages": messages})
 
 
 @router.get(

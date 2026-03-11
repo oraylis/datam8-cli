@@ -39,6 +39,7 @@ from datam8.core import workspace_io, workspace_service
 from datam8.core.errors import Datam8ValidationError
 from datam8.core.solution_index import detect_solution_version
 
+from .common import OperationWithMessagesError, run_with_log_messages
 from .response_models import (
     BaseEntityResponse,
     ConfigResponse,
@@ -299,7 +300,7 @@ async def solution_full(path: str | None = Query(None)) -> SolutionFullResponse:
 async def solution_validate(path: str | None = Query(None)) -> SolutionValidateResponse:
     """Validate that a solution can be resolved and parsed."""
     resolved, _sol = workspace_io.read_solution(path)
-    return SolutionValidateResponse(status="ok", solutionPath=str(resolved.solution_file))
+    return SolutionValidateResponse(status="ok", solutionPath=str(resolved.solution_file), messages=[])
 
 
 @router.post("/validate")
@@ -313,27 +314,36 @@ async def validate(path: str | None = Query(None), logLevel: str | None = Query(
         )
 
     try:
-        resolved_solution = await run_in_threadpool(
+        resolved_solution, messages = await run_in_threadpool(
             partial(
-                factory.validate_solution_model,
-                solution_path=candidate,
-                log_level=logLevel,
+                run_with_log_messages,
+                partial(
+                    factory.validate_solution_model,
+                    solution_path=candidate,
+                    log_level=logLevel,
+                ),
             )
         )
-    except (
-        RecursionError,
-        ValidationError,
-        parser_exceptions.ModelParseException,
-        parser_exceptions.NotSupportedModelVersion,
-        model_exceptions.EntityNotFoundError,
-        model_exceptions.PropertiesNotResolvedError,
-    ) as err:
-        raise Datam8ValidationError(
-            message="Solution model validation failed.",
-            details={"error": str(err)},
-        )
+    except OperationWithMessagesError as wrapper:
+        err = wrapper.original
+        if isinstance(
+            err,
+            (
+                RecursionError,
+                ValidationError,
+                parser_exceptions.ModelParseException,
+                parser_exceptions.NotSupportedModelVersion,
+                model_exceptions.EntityNotFoundError,
+                model_exceptions.PropertiesNotResolvedError,
+            ),
+        ):
+            raise Datam8ValidationError(
+                message="Solution model validation failed.",
+                details={"error": str(err), "messages": wrapper.messages},
+            )
+        raise err
 
-    return SolutionValidateResponse(status="ok", solutionPath=str(resolved_solution))
+    return SolutionValidateResponse(status="ok", solutionPath=str(resolved_solution), messages=messages)
 
 
 @router.post("/solution/new-project")
