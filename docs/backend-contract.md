@@ -36,6 +36,12 @@ All non-readiness logs are written to stderr.
 - Filesystem: `GET /fs/list`
 - Solution: `GET /solution`, `GET /solution/full`, `GET /solution/inspect`, `POST /solution/new-project`
   - Full model validate parity: `POST /validate`
+  - New project request supports:
+    - `application/json`: `{ "solutionName": "...", "projectRoot": "...", "basePath": "Base", "modelPath": "Model", "targets": [{ "name": "...", "isDefault": true, "sourcePath": "Generate/<name>", "outputPath": "Output/<name>/generated" }] }`
+    - At least one target is required (via `targets` or legacy `target`).
+    - Optional JSON archive transport (desktop-safe): `targetArchives` as `{ "<targetIndex>": "<base64ZipBytes>" }`.
+    - Backward-compatible legacy field: `target` (singular) instead of `targets`.
+    - `multipart/form-data` with `payload` JSON field and optional ZIP file parts per target (`targets[].zipField`). ZIP contents are extracted into that target's `sourcePath`.
 - Migration: `POST /migration/v1-to-v2`
 - Model entities: `GET|POST|DELETE /model/entities`, `POST /model/entities/move`, `POST /model/folder/rename`
   - Parity aliases: `GET /model/entity`, `POST /model/entity/create`, `POST /model/entity/validate`, `POST /model/entity/set`, `POST /model/entity/patch`, `POST /model/entity/duplicate`

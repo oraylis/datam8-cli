@@ -19,8 +19,10 @@
 from __future__ import annotations
 
 import json
+import io
 import os
 import re
+import zipfile
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -989,51 +991,166 @@ def list_function_sources(
     return sorted(files)
 
 
+def _normalize_relative_project_path(value: str | None, *, field_name: str) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        raise Datam8ValidationError(message=f"{field_name} is required.", details=None)
+    if "\0" in raw:
+        raise Datam8ValidationError(message=f"{field_name} contains invalid characters.", details={"field": field_name})
+
+    normalized = raw.replace("\\", "/")
+    if normalized.startswith(("/", "\\")) or (len(normalized) >= 2 and normalized[1] == ":") or Path(normalized).is_absolute():
+        raise Datam8ValidationError(message=f"{field_name} must be relative to the solution root.", details={"field": field_name, "value": raw})
+
+    parts = [part for part in normalized.split("/") if part]
+    if not parts or any(part in (".", "..") for part in parts):
+        raise Datam8ValidationError(message=f"{field_name} must not contain '.' or '..'.", details={"field": field_name, "value": raw})
+
+    return Path(*parts).as_posix()
+
+
+def _normalize_new_project_targets(
+    *,
+    target: str | None,
+    targets: list[dict[str, Any]] | None,
+) -> list[dict[str, Any]]:
+    raw_targets: list[dict[str, Any]]
+    if targets is not None:
+        raw_targets = list(targets)
+    elif isinstance(target, str) and target.strip():
+        raw_targets = [{"name": target.strip()}]
+    else:
+        raw_targets = []
+
+    if len(raw_targets) == 0:
+        raise Datam8ValidationError(
+            message="At least one target is required.",
+            details=None,
+        )
+
+    normalized: list[dict[str, Any]] = []
+    seen_names: set[str] = set()
+    explicit_default_count = 0
+
+    for idx, entry in enumerate(raw_targets):
+        if not isinstance(entry, dict):
+            raise Datam8ValidationError(
+                message="Each target must be an object.",
+                details={"index": idx},
+            )
+        name_raw = entry.get("name")
+        name = name_raw.strip() if isinstance(name_raw, str) else ""
+        if not name:
+            raise Datam8ValidationError(
+                message="Target name is required.",
+                details={"index": idx},
+            )
+
+        key = name.lower()
+        if key in seen_names:
+            raise Datam8ValidationError(
+                message="Target names must be unique.",
+                details={"name": name},
+            )
+        seen_names.add(key)
+
+        source_raw = entry.get("sourcePath")
+        output_raw = entry.get("outputPath")
+        source_path = _normalize_relative_project_path(
+            source_raw if isinstance(source_raw, str) and source_raw.strip() else f"Generate/{name}",
+            field_name=f"targets[{idx}].sourcePath",
+        )
+        output_path = _normalize_relative_project_path(
+            output_raw if isinstance(output_raw, str) and output_raw.strip() else f"Output/{name}/generated",
+            field_name=f"targets[{idx}].outputPath",
+        )
+        is_default = entry.get("isDefault") is True
+        if is_default:
+            explicit_default_count += 1
+
+        normalized.append(
+            {
+                "name": name,
+                "isDefault": is_default,
+                "sourcePath": source_path,
+                "outputPath": output_path,
+            }
+        )
+
+    if explicit_default_count > 1:
+        raise Datam8ValidationError(
+            message="At most one target can be marked as default.",
+            details=None,
+        )
+
+    if normalized and explicit_default_count == 0:
+        normalized[0]["isDefault"] = True
+
+    return normalized
+
+
+def _normalize_zip_entry_path(entry_name: str | None) -> str | None:
+    raw_name = (entry_name or "").replace("\\", "/")
+    if not raw_name:
+        return None
+    if raw_name.startswith(("/", "\\")):
+        raise Datam8ValidationError(message="Unsafe ZIP entry (zip-slip).", details={"entry": entry_name})
+
+    parts = [part for part in raw_name.split("/") if part and part != "."]
+    if not parts or any(part == ".." for part in parts):
+        raise Datam8ValidationError(message="Unsafe ZIP entry (zip-slip).", details={"entry": entry_name})
+    return Path(*parts).as_posix()
+
+
+def _validate_zip_bytes(*, zip_bytes: bytes) -> None:
+    try:
+        with zipfile.ZipFile(io.BytesIO(zip_bytes), "r") as archive:
+            for info in archive.infolist():
+                _ = _normalize_zip_entry_path(info.filename)
+    except zipfile.BadZipFile as err:
+        raise Datam8ValidationError(message="Invalid ZIP archive.", details={"error": str(err)})
+
+
+def _extract_zip_bytes_to_dir(*, zip_bytes: bytes, destination: Path) -> None:
+    destination.mkdir(parents=True, exist_ok=True)
+    try:
+        with zipfile.ZipFile(io.BytesIO(zip_bytes), "r") as archive:
+            for info in archive.infolist():
+                rel_path = _normalize_zip_entry_path(info.filename)
+                if rel_path is None:
+                    continue
+                target = safe_join(destination, rel_path)
+                if info.is_dir():
+                    target.mkdir(parents=True, exist_ok=True)
+                    continue
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with archive.open(info, "r") as src, open(target, "wb") as dst:
+                    dst.write(src.read())
+    except zipfile.BadZipFile as err:
+        raise Datam8ValidationError(message="Invalid ZIP archive.", details={"error": str(err)})
+
+
 def create_new_project(
     *,
     solution_name: str,
     project_root: str,
     base_path: str | None,
     model_path: str | None,
-    target: str,
+    target: str | None = None,
+    targets: list[dict[str, Any]] | None = None,
+    target_archives: dict[int, bytes] | None = None,
 ) -> str:
-    """Create a new minimal v2 solution workspace on disk.
+    """Create a new minimal v2 solution workspace on disk."""
+    if not solution_name or not project_root:
+        raise Datam8ValidationError(message="solutionName and projectRoot are required", details=None)
 
-    Parameters
-    ----------
-    solution_name : str
-        Name of the solution and project folder.
-    project_root : str
-        Parent directory where the project will be created.
-    base_path : str | None
-        Optional base folder name (defaults to `Base`).
-    model_path : str | None
-        Optional model folder name (defaults to `Model`).
-    target : str
-        Generator target name for initial solution setup.
-
-    Returns
-    -------
-    str
-        Absolute path to the created `.dm8s` solution file.
-
-    Raises
-    ------
-    Datam8ConflictError
-        If project directory or solution file already exists.
-    Datam8ValidationError
-        If required input arguments are missing."""
-    if not solution_name or not project_root or not target:
-        raise Datam8ValidationError(message="solutionName, projectRoot and target are required", details=None)
-
-    base_path_segment = base_path or "Base"
-    model_path_segment = model_path or "Model"
+    normalized_targets = _normalize_new_project_targets(target=target, targets=targets)
+    base_path_segment = _normalize_relative_project_path(base_path or "Base", field_name="basePath")
+    model_path_segment = _normalize_relative_project_path(model_path or "Model", field_name="modelPath")
 
     project_dir = Path(project_root) / solution_name
     base_dir = project_dir / base_path_segment
     model_dir = project_dir / model_path_segment
-    generator_dir = project_dir / "Generate" / target
-    output_dir = project_dir / "Output" / target / "generated"
     solution_file_path = project_dir / f"{solution_name}.dm8s"
 
     if project_dir.exists():
@@ -1041,21 +1158,33 @@ def create_new_project(
     if solution_file_path.exists():
         raise Datam8ConflictError(message=f"Solution already exists at {solution_file_path}", details={"solutionPath": str(solution_file_path)})
 
-    for d in (project_dir, base_dir, model_dir, generator_dir, output_dir):
-        d.mkdir(parents=True, exist_ok=True)
+    archives_to_extract: list[tuple[Path, bytes]] = []
+    if target_archives:
+        for idx, archive_bytes in target_archives.items():
+            if idx < 0 or idx >= len(normalized_targets):
+                raise Datam8ValidationError(message="Archive target index is out of bounds.", details={"index": idx})
+            if not isinstance(archive_bytes, (bytes, bytearray)) or len(archive_bytes) == 0:
+                raise Datam8ValidationError(message="ZIP archive content is empty.", details={"index": idx})
+            archive_data = bytes(archive_bytes)
+            _validate_zip_bytes(zip_bytes=archive_data)
+            source_dir = safe_join(project_dir, normalized_targets[idx]["sourcePath"])
+            archives_to_extract.append((source_dir, archive_data))
+
+    dirs_to_create = [project_dir, base_dir, model_dir]
+    for target_entry in normalized_targets:
+        dirs_to_create.append(safe_join(project_dir, target_entry["sourcePath"]))
+        dirs_to_create.append(safe_join(project_dir, target_entry["outputPath"]))
+    for directory in dirs_to_create:
+        directory.mkdir(parents=True, exist_ok=True)
+
+    for source_dir, archive_data in archives_to_extract:
+        _extract_zip_bytes_to_dir(zip_bytes=archive_data, destination=source_dir)
 
     solution_content = {
         "schemaVersion": "2.0.0",
         "basePath": base_path_segment,
         "modelPath": model_path_segment,
-        "generatorTargets": [
-            {
-                "name": target,
-                "isDefault": True,
-                "sourcePath": f"Generate/{target}",
-                "outputPath": f"Output/{target}/generated",
-            }
-        ],
+        "generatorTargets": normalized_targets,
     }
 
     default_attribute_types = [
@@ -1090,10 +1219,11 @@ def create_new_project(
         "boolean": {"databricks": "boolean", "sqlserver": "bit"},
     }
 
-    def _target_value(type_name: str) -> str:
+    def _target_value(type_name: str, target_name: str) -> str:
         type_defaults = target_defaults.get(type_name, {})
-        return type_defaults.get(target, type_defaults.get("databricks", type_name))
+        return type_defaults.get(target_name, type_defaults.get("databricks", type_name))
 
+    target_names = [entry["name"] for entry in normalized_targets]
     default_data_types = [
         {
             "name": "string",
@@ -1101,7 +1231,7 @@ def create_new_project(
             "hasCharLen": True,
             "hasPrecision": False,
             "hasScale": False,
-            "targets": {target: _target_value("string")},
+            "targets": {name: _target_value("string", name) for name in target_names},
         },
         {
             "name": "int",
@@ -1109,7 +1239,7 @@ def create_new_project(
             "hasCharLen": False,
             "hasPrecision": False,
             "hasScale": False,
-            "targets": {target: _target_value("int")},
+            "targets": {name: _target_value("int", name) for name in target_names},
         },
         {
             "name": "long",
@@ -1117,7 +1247,7 @@ def create_new_project(
             "hasCharLen": False,
             "hasPrecision": False,
             "hasScale": False,
-            "targets": {target: _target_value("long")},
+            "targets": {name: _target_value("long", name) for name in target_names},
         },
         {
             "name": "double",
@@ -1125,7 +1255,7 @@ def create_new_project(
             "hasCharLen": False,
             "hasPrecision": False,
             "hasScale": False,
-            "targets": {target: _target_value("double")},
+            "targets": {name: _target_value("double", name) for name in target_names},
         },
         {
             "name": "decimal",
@@ -1133,7 +1263,7 @@ def create_new_project(
             "hasCharLen": False,
             "hasPrecision": True,
             "hasScale": True,
-            "targets": {target: _target_value("decimal")},
+            "targets": {name: _target_value("decimal", name) for name in target_names},
         },
         {
             "name": "datetime",
@@ -1141,7 +1271,7 @@ def create_new_project(
             "hasCharLen": False,
             "hasPrecision": False,
             "hasScale": False,
-            "targets": {target: _target_value("datetime")},
+            "targets": {name: _target_value("datetime", name) for name in target_names},
         },
         {
             "name": "boolean",
@@ -1149,7 +1279,7 @@ def create_new_project(
             "hasCharLen": False,
             "hasPrecision": False,
             "hasScale": False,
-            "targets": {target: _target_value("boolean")},
+            "targets": {name: _target_value("boolean", name) for name in target_names},
         },
     ]
 

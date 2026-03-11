@@ -18,11 +18,15 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
+import json
 import os
+import re
 from functools import partial
 from typing import Any
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from pydantic_core import ValidationError
@@ -61,6 +65,16 @@ class MigrateV1ToV2Body(BaseModel):
     options: dict[str, Any] | None = None
 
 
+class NewProjectTargetBody(BaseModel):
+    """Request body target entry for creating a new project."""
+
+    name: str
+    isDefault: bool | None = None
+    sourcePath: str | None = None
+    outputPath: str | None = None
+    zipField: str | None = None
+
+
 class NewProjectBody(BaseModel):
     """Request body for creating a new minimal solution project."""
 
@@ -68,7 +82,124 @@ class NewProjectBody(BaseModel):
     projectRoot: str
     basePath: str | None = None
     modelPath: str | None = None
-    target: str
+    target: str | None = None
+    targets: list[NewProjectTargetBody] | None = None
+    targetArchives: dict[str, str] | None = None
+
+
+def _targets_from_body(body: NewProjectBody) -> list[dict[str, Any]]:
+    if body.targets is not None:
+        out: list[dict[str, Any]] = []
+        for entry in body.targets:
+            payload: dict[str, Any] = {"name": entry.name}
+            if entry.isDefault is not None:
+                payload["isDefault"] = entry.isDefault
+            if entry.sourcePath is not None:
+                payload["sourcePath"] = entry.sourcePath
+            if entry.outputPath is not None:
+                payload["outputPath"] = entry.outputPath
+            out.append(payload)
+        return out
+    if body.target and body.target.strip():
+        return [{"name": body.target.strip()}]
+    return []
+
+
+def _decode_target_archives(payload: dict[str, str] | None) -> dict[int, bytes] | None:
+    if not payload:
+        return None
+
+    decoded: dict[int, bytes] = {}
+    for raw_index, raw_archive in payload.items():
+        index_text = (raw_index or "").strip()
+        if not index_text or not index_text.isdigit():
+            raise Datam8ValidationError(
+                message="targetArchives keys must be target indices.",
+                details={"index": raw_index},
+            )
+        archive_base64 = (raw_archive or "").strip()
+        if not archive_base64:
+            raise Datam8ValidationError(
+                message="ZIP archive content is empty.",
+                details={"index": int(index_text)},
+            )
+        try:
+            archive_bytes = base64.b64decode(archive_base64, validate=True)
+        except (binascii.Error, ValueError):
+            raise Datam8ValidationError(
+                message="Invalid base64 ZIP archive.",
+                details={"index": int(index_text)},
+            )
+        if not archive_bytes:
+            raise Datam8ValidationError(
+                message="ZIP archive content is empty.",
+                details={"index": int(index_text)},
+            )
+        decoded[int(index_text)] = archive_bytes
+    return decoded
+
+
+def _parse_content_disposition(value: str) -> tuple[str | None, str | None]:
+    name_match = re.search(r'name="([^"]+)"', value)
+    filename_match = re.search(r'filename="([^"]*)"', value)
+    field_name = name_match.group(1) if name_match else None
+    filename = filename_match.group(1) if filename_match else None
+    return field_name, filename
+
+
+def _parse_multipart_form(
+    *,
+    content_type: str,
+    body: bytes,
+) -> tuple[dict[str, str], dict[str, dict[str, Any]]]:
+    boundary_match = re.search(r'boundary="?([^";]+)"?', content_type, flags=re.IGNORECASE)
+    if not boundary_match:
+        raise Datam8ValidationError(message="Multipart boundary is missing.", details=None)
+    boundary = boundary_match.group(1).encode("utf-8")
+    delimiter = b"--" + boundary
+
+    fields: dict[str, str] = {}
+    files: dict[str, dict[str, Any]] = {}
+    for chunk in body.split(delimiter):
+        part = chunk
+        if not part:
+            continue
+        if part.startswith(b"\r\n"):
+            part = part[2:]
+        if part.endswith(b"--\r\n"):
+            part = part[:-4]
+        elif part.endswith(b"--"):
+            part = part[:-2]
+        if part.endswith(b"\r\n"):
+            part = part[:-2]
+        if not part or part == b"--":
+            continue
+        header_blob, sep, content = part.partition(b"\r\n\r\n")
+        if sep != b"\r\n\r\n":
+            continue
+
+        headers: dict[str, str] = {}
+        for raw_line in header_blob.decode("latin-1").split("\r\n"):
+            key, _, value = raw_line.partition(":")
+            if not _:
+                continue
+            headers[key.strip().lower()] = value.strip()
+
+        content_disposition = headers.get("content-disposition", "")
+        field_name, filename = _parse_content_disposition(content_disposition)
+        if not field_name:
+            continue
+
+        if filename is not None and filename != "":
+            files[field_name] = {
+                "filename": filename,
+                "contentType": headers.get("content-type"),
+                "content": content,
+            }
+        else:
+            fields[field_name] = content.decode("utf-8")
+
+    return fields, files
 
 
 @router.get("/config")
@@ -206,13 +337,114 @@ async def validate(path: str | None = Query(None), logLevel: str | None = Query(
 
 
 @router.post("/solution/new-project")
-async def solution_new_project(body: NewProjectBody) -> SolutionPathResponse:
+async def solution_new_project(request: Request) -> SolutionPathResponse:
     """Create a new minimal project and return solution path."""
+    content_type = (request.headers.get("content-type") or "").lower()
+
+    body: NewProjectBody
+    target_archives: dict[int, bytes] | None = None
+
+    if "multipart/form-data" in content_type:
+        form_data = None
+        fallback_fields: dict[str, str] = {}
+        fallback_files: dict[str, dict[str, Any]] = {}
+
+        try:
+            form_data = await request.form()
+        except Exception as err:
+            if "python-multipart" in str(err).lower():
+                raw_body = await request.body()
+                fallback_fields, fallback_files = _parse_multipart_form(content_type=content_type, body=raw_body)
+            else:
+                raise Datam8ValidationError(
+                    message="Invalid multipart form body.",
+                    details={"error": str(err)},
+                )
+
+        if form_data is not None:
+            payload_value = form_data.get("payload")
+            if isinstance(payload_value, str):
+                payload_raw = payload_value
+            elif isinstance(payload_value, (bytes, bytearray)):
+                try:
+                    payload_raw = bytes(payload_value).decode("utf-8")
+                except UnicodeDecodeError:
+                    raise Datam8ValidationError(message="Multipart payload is not valid UTF-8.", details=None)
+            else:
+                payload_raw = ""
+        else:
+            payload_raw = fallback_fields.get("payload", "")
+
+        if not payload_raw.strip():
+            raise Datam8ValidationError(message="Multipart request requires 'payload' JSON field.", details=None)
+        try:
+            body = NewProjectBody.model_validate_json(payload_raw)
+        except ValidationError as err:
+            raise Datam8ValidationError(
+                message="Invalid new-project payload.",
+                details={"errors": err.errors()},
+            )
+
+        if body.targets:
+            target_archives = {}
+            for idx, target in enumerate(body.targets):
+                zip_field = (target.zipField or "").strip()
+                if not zip_field:
+                    continue
+                if form_data is not None:
+                    upload = form_data.get(zip_field)
+                    if upload is None:
+                        raise Datam8ValidationError(
+                            message="ZIP file reference not found in multipart payload.",
+                            details={"zipField": zip_field, "index": idx},
+                        )
+                    read_fn = getattr(upload, "read", None)
+                    if read_fn is None:
+                        raise Datam8ValidationError(
+                            message="ZIP file reference did not contain a file upload.",
+                            details={"zipField": zip_field, "index": idx},
+                        )
+                    archive_bytes = await read_fn()
+                else:
+                    upload = fallback_files.get(zip_field)
+                    if upload is None:
+                        raise Datam8ValidationError(
+                            message="ZIP file reference not found in multipart payload.",
+                            details={"zipField": zip_field, "index": idx},
+                        )
+                    archive_bytes = upload.get("content")
+                if not archive_bytes:
+                    raise Datam8ValidationError(
+                        message="ZIP file is empty.",
+                        details={"zipField": zip_field, "index": idx},
+                    )
+                target_archives[idx] = archive_bytes
+    else:
+        raw = await request.body()
+        try:
+            body = NewProjectBody.model_validate(json.loads(raw.decode("utf-8")))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            raise Datam8ValidationError(message="Invalid JSON body.", details=None)
+        except ValidationError as err:
+            raise Datam8ValidationError(
+                message="Invalid new-project payload.",
+                details={"errors": err.errors()},
+            )
+
+    decoded_archives = _decode_target_archives(body.targetArchives)
+    if decoded_archives:
+        if target_archives:
+            target_archives.update(decoded_archives)
+        else:
+            target_archives = decoded_archives
+
     solution_path = workspace_io.create_new_project(
         solution_name=body.solutionName,
         project_root=body.projectRoot,
         base_path=body.basePath,
         model_path=body.modelPath,
         target=body.target,
+        targets=_targets_from_body(body),
+        target_archives=target_archives,
     )
     return SolutionPathResponse(solutionPath=solution_path)

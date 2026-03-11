@@ -18,13 +18,24 @@
 
 from __future__ import annotations
 
+import base64
+import io
 import json
+import zipfile
 from pathlib import Path
 
 
 def _write_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def _build_zip(entries: dict[str, str]) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for rel_path, content in entries.items():
+            archive.writestr(rel_path, content)
+    return buffer.getvalue()
 
 
 def _create_solution(tmp_path: Path) -> Path:
@@ -137,3 +148,128 @@ def test_solution_full_and_save_keep_model_entity_sparse(tmp_path: Path, api_cli
     assert "history" not in written_attr
     assert "expressionLanguage" not in written_attr
     assert "isBusinessKey" not in written_attr
+
+
+def test_solution_new_project_accepts_targets_list_json(tmp_path: Path, api_client) -> None:
+    token = "solution-new-project-json-token"
+
+    with api_client(token=token) as client:
+        response = client.post(
+            "/solution/new-project",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "solutionName": "ApiMultiTarget",
+                "projectRoot": str(tmp_path),
+                "basePath": "Base",
+                "modelPath": "Model",
+                "targets": [
+                    {"name": "databricks"},
+                    {"name": "sqlserver", "isDefault": True},
+                ],
+            },
+        )
+        response.raise_for_status()
+        payload = response.json()
+
+    solution_path = Path(payload["solutionPath"])
+    assert solution_path.exists()
+    content = json.loads(solution_path.read_text(encoding="utf-8"))
+    assert len(content["generatorTargets"]) == 2
+    assert content["generatorTargets"][1]["name"] == "sqlserver"
+    assert content["generatorTargets"][1]["isDefault"] is True
+
+
+def test_solution_new_project_accepts_multipart_target_zip(tmp_path: Path, api_client) -> None:
+    token = "solution-new-project-multipart-token"
+    zip_bytes = _build_zip({"__modules/payloads.py": "def payload():\n    return []\n"})
+
+    payload = {
+        "solutionName": "ApiZipTarget",
+        "projectRoot": str(tmp_path),
+        "basePath": "Base",
+        "modelPath": "Model",
+        "targets": [
+            {"name": "ziptarget", "zipField": "zip_target_0"},
+        ],
+    }
+
+    with api_client(token=token) as client:
+        response = client.post(
+            "/solution/new-project",
+            headers={"Authorization": f"Bearer {token}"},
+            data={"payload": json.dumps(payload)},
+            files={"zip_target_0": ("ziptarget.zip", zip_bytes, "application/zip")},
+        )
+        response.raise_for_status()
+        body = response.json()
+
+    solution_path = Path(body["solutionPath"])
+    assert solution_path.exists()
+    assert (solution_path.parent / "Generate" / "ziptarget" / "__modules" / "payloads.py").exists()
+
+
+def test_solution_new_project_accepts_json_base64_target_zip(tmp_path: Path, api_client) -> None:
+    token = "solution-new-project-json-zip-token"
+    zip_bytes = _build_zip({"scripts/run.sql": "select 1;"})
+
+    with api_client(token=token) as client:
+        response = client.post(
+            "/solution/new-project",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "solutionName": "ApiZipTargetJson",
+                "projectRoot": str(tmp_path),
+                "basePath": "Base",
+                "modelPath": "Model",
+                "targets": [{"name": "ziptarget"}],
+                "targetArchives": {"0": base64.b64encode(zip_bytes).decode("ascii")},
+            },
+        )
+        response.raise_for_status()
+        body = response.json()
+
+    solution_path = Path(body["solutionPath"])
+    assert solution_path.exists()
+    assert (solution_path.parent / "Generate" / "ziptarget" / "scripts" / "run.sql").exists()
+
+
+def test_solution_new_project_requires_at_least_one_target(tmp_path: Path, api_client) -> None:
+    token = "solution-new-project-no-target-token"
+
+    with api_client(token=token) as client:
+        response = client.post(
+            "/solution/new-project",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "solutionName": "ApiNoTarget",
+                "projectRoot": str(tmp_path),
+                "basePath": "Base",
+                "modelPath": "Model",
+            },
+        )
+
+    assert response.status_code == 400
+    payload = response.json()
+    assert payload["message"] == "At least one target is required."
+
+
+def test_solution_new_project_keeps_legacy_target_field(tmp_path: Path, api_client) -> None:
+    token = "solution-new-project-legacy-token"
+
+    with api_client(token=token) as client:
+        response = client.post(
+            "/solution/new-project",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "solutionName": "ApiLegacyTarget",
+                "projectRoot": str(tmp_path),
+                "target": "legacy",
+            },
+        )
+        response.raise_for_status()
+        payload = response.json()
+
+    solution_path = Path(payload["solutionPath"])
+    content = json.loads(solution_path.read_text(encoding="utf-8"))
+    assert len(content["generatorTargets"]) == 1
+    assert content["generatorTargets"][0]["name"] == "legacy"

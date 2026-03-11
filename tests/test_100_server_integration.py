@@ -188,3 +188,36 @@ def test_generate_sync_can_run_twice_in_same_server_process(
         )
         response2.raise_for_status()
         assert response2.json().get("status") == "succeeded"
+
+
+def test_generate_sync_target_none_returns_selected_target_name(
+    fixture_job_solution_dir: Path,
+    tmp_path: Path,
+    api_client,
+) -> None:
+    token = "test-token"
+    source_solution_path = fixture_job_solution_dir / "TestSolution.dm8s"
+    target, _output_path = _select_target(source_solution_path)
+
+    work = tmp_path / "solution"
+    copied_solution_path = _copy_solution_subset(
+        source_solution_path=source_solution_path,
+        destination_root=work,
+        target_name=target,
+    )
+
+    with api_client(token=token, solution_path=copied_solution_path) as client:
+        response = client.post(
+            "/generate",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "solutionPath": str(copied_solution_path),
+                "target": "none",
+                "logLevel": "info",
+                "cleanOutput": True,
+            },
+        )
+        response.raise_for_status()
+        result = response.json()
+        assert result.get("status") == "succeeded"
+        assert result.get("target") == target

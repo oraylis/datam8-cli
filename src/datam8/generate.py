@@ -27,8 +27,6 @@ from typing import Protocol
 import jinja2
 from pydantic import BaseModel
 
-from datam8_model.solution import GeneratorTarget
-
 from . import config, factory, model, model_exceptions, opts, utils
 from .core.paths import resolve_solution
 from .utils import cache, importer
@@ -83,13 +81,13 @@ def run_generation(
 
     try:
         if target == "none":
-
-            def filter_targets(_target: GeneratorTarget) -> bool:
-                if _target.isDefault is None:
-                    return False
-                return _target.isDefault
-
-            generator_target = [_t for _t in parsed_model.solution.generatorTargets if filter_targets(_t)].pop()
+            defaults = [_t for _t in parsed_model.solution.generatorTargets if _t.isDefault is True]
+            if defaults:
+                generator_target = defaults[0]
+            elif parsed_model.solution.generatorTargets:
+                generator_target = parsed_model.solution.generatorTargets[0]
+            else:
+                raise model_exceptions.InvalidGeneratorTargetError("default")
         else:
             generator_target = parsed_model.get_generator_target(target)
 
@@ -134,7 +132,7 @@ def run_generation(
 
     return GenerateResult(
         status="succeeded",
-        target=target if target != "none" else "default",
+        target=generator_target.name,
         outputPath=str(output_path_abs),
     )
 

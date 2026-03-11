@@ -18,18 +18,30 @@
 
 from __future__ import annotations
 
+import io
 import json
+import zipfile
 from pathlib import Path
 
+import pytest
 from pytest_cases import parametrize_with_cases
 from test_080_workspace_io_cases import CasesWorkspaceIo
 
+from datam8.core.errors import Datam8ValidationError
 from datam8.core import workspace_io
 
 
 def _write_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def _build_zip(entries: dict[str, str]) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for path, content in entries.items():
+            archive.writestr(path, content)
+    return buffer.getvalue()
 
 
 def _create_solution(
@@ -181,3 +193,107 @@ def test_create_new_project_writes_data_types_targets_for_target(tmp_path: Path)
     by_name = {row["name"]: row for row in rows}
     assert by_name["datetime"]["targets"]["sqlserver"] == "datetime2"
     assert by_name["boolean"]["targets"]["sqlserver"] == "bit"
+
+
+def test_create_new_project_supports_multiple_targets_and_default_assignment(tmp_path: Path) -> None:
+    solution_path = workspace_io.create_new_project(
+        solution_name="MultiTargetSolution",
+        project_root=str(tmp_path),
+        base_path="Base",
+        model_path="Model",
+        targets=[
+            {"name": "databricks", "sourcePath": "Generate/databricks"},
+            {"name": "sqlserver", "outputPath": "Output/sqlserver/custom"},
+        ],
+    )
+
+    solution_payload = json.loads(Path(solution_path).read_text(encoding="utf-8"))
+    targets = solution_payload["generatorTargets"]
+    assert len(targets) == 2
+    assert targets[0]["name"] == "databricks"
+    assert targets[0]["isDefault"] is True
+    assert targets[1]["name"] == "sqlserver"
+    assert targets[1]["isDefault"] is False
+    assert targets[1]["sourcePath"] == "Generate/sqlserver"
+    assert targets[1]["outputPath"] == "Output/sqlserver/custom"
+
+    data_types_payload = json.loads((tmp_path / "MultiTargetSolution" / "Base" / "DataTypes.json").read_text(encoding="utf-8"))
+    assert data_types_payload["dataTypes"]
+    for row in data_types_payload["dataTypes"]:
+        assert sorted((row.get("targets") or {}).keys()) == ["databricks", "sqlserver"]
+
+
+def test_create_new_project_rejects_empty_targets(tmp_path: Path) -> None:
+    with pytest.raises(Datam8ValidationError, match="At least one target is required"):
+        workspace_io.create_new_project(
+            solution_name="NoTargetsSolution",
+            project_root=str(tmp_path),
+            base_path="Base",
+            model_path="Model",
+            targets=[],
+        )
+
+
+def test_create_new_project_extracts_target_zip_to_source_path(tmp_path: Path) -> None:
+    zip_bytes = _build_zip(
+        {
+            "templates/entity.jinja2": "template",
+            "__modules/payloads.py": "def run():\n    return True\n",
+        }
+    )
+
+    solution_path = workspace_io.create_new_project(
+        solution_name="ZipTargetSolution",
+        project_root=str(tmp_path),
+        base_path="Base",
+        model_path="Model",
+        targets=[{"name": "ziptarget", "sourcePath": "Generate/ziptarget"}],
+        target_archives={0: zip_bytes},
+    )
+
+    assert Path(solution_path).exists()
+    target_root = tmp_path / "ZipTargetSolution" / "Generate" / "ziptarget"
+    assert (target_root / "templates" / "entity.jinja2").read_text(encoding="utf-8") == "template"
+    assert (target_root / "__modules" / "payloads.py").exists()
+
+
+def test_create_new_project_rejects_absolute_target_source_path(tmp_path: Path) -> None:
+    with pytest.raises(Datam8ValidationError):
+        workspace_io.create_new_project(
+            solution_name="InvalidTargetPath",
+            project_root=str(tmp_path),
+            base_path="Base",
+            model_path="Model",
+            targets=[{"name": "bad", "sourcePath": "C:/Temp/Generate"}],
+        )
+
+
+def test_create_new_project_invalid_zip_does_not_create_project_dir(tmp_path: Path) -> None:
+    solution_name = "InvalidZipSolution"
+    with pytest.raises(Datam8ValidationError, match="Invalid ZIP archive"):
+        workspace_io.create_new_project(
+            solution_name=solution_name,
+            project_root=str(tmp_path),
+            base_path="Base",
+            model_path="Model",
+            targets=[{"name": "ziptarget"}],
+            target_archives={0: b"not-a-zip"},
+        )
+
+    assert not (tmp_path / solution_name).exists()
+
+
+def test_create_new_project_archive_index_out_of_bounds_does_not_create_project_dir(tmp_path: Path) -> None:
+    solution_name = "OutOfBoundsArchiveSolution"
+    zip_bytes = _build_zip({"templates/entity.jinja2": "template"})
+    with pytest.raises(Datam8ValidationError, match="Archive target index is out of bounds"):
+        workspace_io.create_new_project(
+            solution_name=solution_name,
+            project_root=str(tmp_path),
+            base_path="Base",
+            model_path="Model",
+            targets=[{"name": "ziptarget"}],
+            target_archives={1: zip_bytes},
+        )
+
+    assert not (tmp_path / solution_name).exists()
