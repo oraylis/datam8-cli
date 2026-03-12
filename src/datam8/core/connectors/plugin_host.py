@@ -45,14 +45,18 @@ class ConnectorPlugin:
     entrypoint: str
     capabilities: list[str]
     root: Path
+    data_type_mapping: list[dict[str, str]] | None = None
 
     def to_summary(self) -> dict[str, Any]:
-        return {
+        summary: dict[str, Any] = {
             "id": self.id,
             "displayName": self.display_name,
             "version": self.version,
             "capabilities": list(self.capabilities),
         }
+        if self.data_type_mapping is not None:
+            summary["dataTypeMapping"] = [dict(row) for row in self.data_type_mapping]
+        return summary
 
 
 def _connectors_root(plugin_dir: Path) -> Path:
@@ -67,6 +71,46 @@ def _read_json(path: Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise Datam8ValidationError(message="Expected JSON object.", details={"path": str(path)})
     return data
+
+
+def _parse_data_type_mapping(*, raw: Any, connector_id: str) -> list[dict[str, str]] | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, list):
+        raise Datam8ValidationError(
+            message="plugin.json dataTypeMapping must be a list.",
+            details={"id": connector_id},
+        )
+
+    out: list[dict[str, str]] = []
+    seen_sources: set[str] = set()
+    for idx, item in enumerate(raw):
+        if not isinstance(item, dict):
+            raise Datam8ValidationError(
+                message="plugin.json dataTypeMapping entries must be objects.",
+                details={"id": connector_id, "index": idx},
+            )
+        source_type = item.get("sourceType")
+        target_type = item.get("targetType")
+        if not isinstance(source_type, str) or not source_type.strip():
+            raise Datam8ValidationError(
+                message="plugin.json dataTypeMapping sourceType must be a non-empty string.",
+                details={"id": connector_id, "index": idx},
+            )
+        if not isinstance(target_type, str) or not target_type.strip():
+            raise Datam8ValidationError(
+                message="plugin.json dataTypeMapping targetType must be a non-empty string.",
+                details={"id": connector_id, "index": idx},
+            )
+        normalized_source = source_type.strip().lower()
+        if normalized_source in seen_sources:
+            raise Datam8ValidationError(
+                message="plugin.json dataTypeMapping contains duplicate sourceType entries.",
+                details={"id": connector_id, "sourceType": source_type.strip()},
+            )
+        seen_sources.add(normalized_source)
+        out.append({"sourceType": source_type.strip(), "targetType": target_type.strip()})
+    return out
 
 
 def _parse_plugin_json(*, plugin_root: Path) -> ConnectorPlugin:
@@ -97,6 +141,10 @@ def _parse_plugin_json(*, plugin_root: Path) -> ConnectorPlugin:
         raise Datam8ValidationError(message="Invalid entrypoint (expected 'pkg.module:Class').", details={"id": cid, "entrypoint": entrypoint})
     if not isinstance(capabilities, list) or not all(isinstance(x, str) and x.strip() for x in capabilities):
         raise Datam8ValidationError(message="plugin.json capabilities must be a list of strings.", details={"id": cid})
+    data_type_mapping = _parse_data_type_mapping(
+        raw=data.get("dataTypeMapping"),
+        connector_id=cid.strip(),
+    )
 
     return ConnectorPlugin(
         id=cid.strip(),
@@ -104,6 +152,7 @@ def _parse_plugin_json(*, plugin_root: Path) -> ConnectorPlugin:
         version=version.strip(),
         entrypoint=entrypoint.strip(),
         capabilities=[x.strip() for x in capabilities],
+        data_type_mapping=data_type_mapping,
         root=plugin_root,
     )
 

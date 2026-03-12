@@ -184,6 +184,13 @@ class ScriptListResponse(BaseModel):
     scripts: list[str]
 
 
+class DataTypeMappingItemResponse(BaseModel):
+    """Connector-provided source->target data type mapping row."""
+
+    sourceType: str
+    targetType: str
+
+
 class ConnectorSummaryResponse(BaseModel):
     """Stable connector summary fields used by frontend clients."""
 
@@ -193,6 +200,7 @@ class ConnectorSummaryResponse(BaseModel):
     displayName: str | None = None
     version: str | None = None
     capabilities: list[str] | None = None
+    dataTypeMapping: list[DataTypeMappingItemResponse] | None = None
 
 
 class ConnectorsResponse(BaseModel):

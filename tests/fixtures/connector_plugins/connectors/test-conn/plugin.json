@@ -4,6 +4,9 @@
   "displayName": "Test Connector",
   "version": "0.1.0",
   "entrypoint": "datam8_plugins.test_conn.connector:Connector",
-  "capabilities": ["uiSchema", "validateConnection", "metadata"]
+  "capabilities": ["uiSchema", "validateConnection", "metadata"],
+  "dataTypeMapping": [
+    { "sourceType": "int", "targetType": "int" },
+    { "sourceType": "varchar", "targetType": "string" }
+  ]
 }
-

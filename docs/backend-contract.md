@@ -55,6 +55,9 @@ All non-readiness logs are written to stderr.
 - Index/refactor: `POST /index/regenerate`, `GET /index/show`, `GET /index/validate`, `POST /refactor/properties`, `POST /refactor/keys`, `POST /refactor/values`, `POST /refactor/entity-id`
 - Search: `GET /search/entities`, `GET /search/text`
 - Connectors/plugins/secrets under `/connectors/*`, `/plugins/*`, `/datasources/*`, `/http/datasources/*`, `/secrets/*`
+  - `GET /connectors` returns connector summaries with:
+    - `id`, `displayName`, `version`, `capabilities`
+    - optional `dataTypeMapping`: list of `{ "sourceType": "...", "targetType": "..." }`
   - Datasource parity endpoint: `POST /datasources/{dataSourceId}/test`
   - Plugin parity endpoints: `GET /plugins/{pluginId}/info`, `POST /plugins/{pluginId}/verify`, `POST /plugins/verify`
   - Secrets parity endpoints: `GET /secrets/runtime/list`, `GET /secrets/runtime/key`

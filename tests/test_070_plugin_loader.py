@@ -21,10 +21,16 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from pytest_cases import parametrize_with_cases
 from test_070_plugin_loader_cases import CasesVendoredPlugin
 
-from datam8.core.connectors.plugin_host import get_connector, load_connector_class
+from datam8.core.errors import Datam8ValidationError
+from datam8.core.connectors.plugin_host import (
+    get_connector,
+    load_connector_class,
+    parse_connector_plugin,
+)
 
 
 def _write(path: Path, content: str) -> None:
@@ -118,3 +124,50 @@ def test_plugin_methods_support_lazy_vendored_imports(case_data, tmp_path: Path)
     connector_cls = load_connector_class(plugin)
     connector_cls.test_connection({}, None)
     assert connector_cls.validate_connection({}, None) == []
+
+
+def test_plugin_json_rejects_invalid_data_type_mapping_shape(tmp_path: Path) -> None:
+    plugin_root = tmp_path / "plugins" / "connectors" / "bad-mapping"
+    plugin_root.mkdir(parents=True, exist_ok=True)
+    _write(
+        plugin_root / "plugin.json",
+        json.dumps(
+            {
+                "pluginType": "connector",
+                "id": "bad-mapping",
+                "displayName": "bad-mapping",
+                "version": "0.1.0",
+                "entrypoint": "datam8_plugins.bad_mapping.connector:Connector",
+                "capabilities": ["uiSchema", "validateConnection", "metadata"],
+                "dataTypeMapping": "invalid",
+            }
+        ),
+    )
+
+    with pytest.raises(Datam8ValidationError, match="dataTypeMapping"):
+        parse_connector_plugin(plugin_root=plugin_root)
+
+
+def test_plugin_json_rejects_duplicate_data_type_mapping_sources(tmp_path: Path) -> None:
+    plugin_root = tmp_path / "plugins" / "connectors" / "duplicate-mapping"
+    plugin_root.mkdir(parents=True, exist_ok=True)
+    _write(
+        plugin_root / "plugin.json",
+        json.dumps(
+            {
+                "pluginType": "connector",
+                "id": "duplicate-mapping",
+                "displayName": "duplicate-mapping",
+                "version": "0.1.0",
+                "entrypoint": "datam8_plugins.duplicate_mapping.connector:Connector",
+                "capabilities": ["uiSchema", "validateConnection", "metadata"],
+                "dataTypeMapping": [
+                    {"sourceType": "varchar", "targetType": "string"},
+                    {"sourceType": "VARCHAR", "targetType": "string"},
+                ],
+            }
+        ),
+    )
+
+    with pytest.raises(Datam8ValidationError, match="duplicate sourceType"):
+        parse_connector_plugin(plugin_root=plugin_root)

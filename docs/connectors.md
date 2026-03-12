@@ -36,6 +36,12 @@ The `plugin.json` manifest must include:
 - `entrypoint` (`module.path:ClassName`)
 - `capabilities` (at least `uiSchema` and `metadata`)
 
+Optional fields:
+
+- `dataTypeMapping`: list of source/target mappings
+  - shape: `{ "sourceType": "<source>", "targetType": "<canonical>" }`
+  - used by Neon to prefill `DataSourceType.dataTypeMapping` when linking a connector
+
 ## API (Neon consumes)
 
 - `GET /connectors`
