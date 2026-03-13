@@ -24,7 +24,7 @@ from typing import Any
 from fastapi import APIRouter, Body, HTTPException, Query
 from pydantic import BaseModel, Field, ValidationError
 
-from datam8 import config, factory, generate, logging, model, opts, parser
+from datam8 import config, factory, generate, logging, model, opts
 from datam8.core import refactor as refactor_core
 from datam8.core import search as search_core
 from datam8.core import workspace_io, workspace_service
@@ -119,10 +119,10 @@ class RefactorPropertiesBody(BaseModel):
     """Request body for property/value refactoring."""
 
     solutionPath: str | None = None
-    propertyRenames: list[dict[str, str]] = Field(default_factory=list)
-    valueRenames: list[dict[str, str]] = Field(default_factory=list)
+    propertyRenames: list[dict[str, str]] = Field(default_factory=dict)
+    valueRenames: list[dict[str, str]] = Field(default_factory=dict)
     deletedProperties: list[str] = Field(default_factory=list)
-    deletedValues: list[dict[str, str]] = Field(default_factory=list)
+    deletedValues: list[dict[str, str]] = Field(default_factory=dict)
     lockTimeout: str | None = None
     noLock: bool | None = None
 
@@ -574,9 +574,7 @@ async def get_entities(locator: str = "/") -> list[model.EntityWrapperVariant]:
 
 
 @router.patch("/entities/{locator:path}")
-async def patch_entity(
-    locator: str, patch: dict[str, Any]
-) -> model.EntityWrapper[b.BaseEntityType]:
+async def patch_entity(locator: str, patch: dict[str, Any]) -> model.EntityWrapperVariant:
     wrapper = factory.get_model().get_entity_by_locator(locator)
     wrapper.update(**patch)
     return wrapper
@@ -600,7 +598,7 @@ async def create_entity(
     return entity
 
 
-@router.post("/entities/move", response_model=None)
+@router.post("/entities/move")
 async def move_entities(body: dict[str, str]) -> list[model.EntityWrapperVariant]:
     # note sure how to validate in fast api that these to parameters are set in the body
     _from = body["from"]

@@ -17,9 +17,9 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 from collections.abc import Iterator, Sequence
 from pathlib import Path
-from typing import Annotated, Any, Self
+from typing import Annotated, Any, Self, TypeAlias, cast
 
-from pydantic import BaseModel, ConfigDict, Field, SkipValidation, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from datam8_model import attribute as a
 from datam8_model import base as b
@@ -43,22 +43,8 @@ MODEL_DUMP_OPTIONS: dict[str, Any] = {
     "exclude_none": True,
 }
 
-
 type BaseEntityDict[T: b.BaseEntityType] = dict[b.EntityType, list[T]]
 type EntityDict[T: b.BaseEntityType] = dict[Locator, EntityWrapper[T]]
-type EntityWrapperVariant = (
-    EntityWrapper[a.AttributeType]
-    | EntityWrapper[dp.DataProduct]
-    | EntityWrapper[dp.DataModule]
-    | EntityWrapper[ds.DataSource]
-    | EntityWrapper[ds.DataSourceType]
-    | EntityWrapper[dt.DataTypeDefinition]
-    | EntityWrapper[f.Folder]
-    | EntityWrapper[m.ModelEntity]
-    | EntityWrapper[p.Property]
-    | EntityWrapper[p.PropertyValue]
-    | EntityWrapper[z.Zone]
-)
 
 
 def class_from_type(_type: b.EntityType) -> type[b.BaseEntityType]:
@@ -116,11 +102,13 @@ def wrap_base_entity[T: b.BaseEntityType](
         entityName=getattr(entity, "name"),  # noqa: B009
     )
 
-    return EntityWrapper[T](
+    new_wrapper = EntityWrapper[T](
         locator=locator,
         entity=entity,
         source_file=source_file,
     )
+
+    return new_wrapper
 
 
 def new_empty_entity_type_dict() -> dict[b.EntityType, "list[EntityWrapper[b.BaseEntityType]]"]:
@@ -258,8 +246,11 @@ class Locator(m.Locator):
     def parent(self) -> "Locator | None":
         "Get the parent folder of this entity."
 
-        if len(self.folders) < 1:
+        if len(self.folders) == 0 and self.entityName is None:
             return None
+
+        if len(self.folders) == 0:
+            return Locator(entityType=self.entityType, folders=[])
 
         new_folders = self.folders[:-1]
         entity_name = self.folders[-1]
@@ -550,6 +541,21 @@ class EntityWrapper[T: b.BaseEntityType](BaseModel):
         self._changed = True
 
 
+EntityWrapperVariant: TypeAlias = (  # noqa: UP040
+    EntityWrapper[a.AttributeType]
+    | EntityWrapper[dp.DataProduct]
+    | EntityWrapper[dp.DataModule]
+    | EntityWrapper[ds.DataSource]
+    | EntityWrapper[ds.DataSourceType]
+    | EntityWrapper[dt.DataTypeDefinition]
+    | EntityWrapper[f.Folder]
+    | EntityWrapper[m.ModelEntity]
+    | EntityWrapper[p.Property]
+    | EntityWrapper[p.PropertyValue]
+    | EntityWrapper[z.Zone]
+)
+
+
 class Model:
     """
     The main class that all data from the datam8 solution will be stored in.
@@ -562,17 +568,17 @@ class Model:
         arbitrary_types_allowed=True,
     )
     solution: Annotated[s.Solution, Field(frozen=True)]
-    properties: Annotated[EntityDict[p.Property], SkipValidation]
-    propertyValues: Annotated[EntityDict[p.PropertyValue], SkipValidation]
-    zones: Annotated[EntityDict[z.Zone], SkipValidation]
-    dataTypes: Annotated[EntityDict[dt.DataTypeDefinition], SkipValidation]
-    dataSources: Annotated[EntityDict[ds.DataSource], SkipValidation]
-    dataSourceTypes: Annotated[EntityDict[ds.DataSourceType], SkipValidation]
-    dataProducts: Annotated[EntityDict[dp.DataProduct], SkipValidation]
-    dataModules: Annotated[EntityDict[dp.DataModule], SkipValidation]
-    attributeTypes: Annotated[EntityDict[a.AttributeType], SkipValidation]
-    folders: Annotated[EntityDict[f.Folder], SkipValidation]
-    modelEntities: Annotated[EntityDict[m.ModelEntity], SkipValidation]
+    properties: EntityDict[p.Property]
+    propertyValues: EntityDict[p.PropertyValue]
+    zones: EntityDict[z.Zone]
+    dataTypes: EntityDict[dt.DataTypeDefinition]
+    dataSources: EntityDict[ds.DataSource]
+    dataSourceTypes: EntityDict[ds.DataSourceType]
+    dataProducts: EntityDict[dp.DataProduct]
+    dataModules: EntityDict[dp.DataModule]
+    attributeTypes: EntityDict[a.AttributeType]
+    folders: EntityDict[f.Folder]
+    modelEntities: EntityDict[m.ModelEntity]
 
     def __init__(self, solution: s.Solution, **kwargs: EntityDict):
         self.solution = solution
@@ -769,7 +775,7 @@ class Model:
         else:
             return True
 
-    def get_entity_by_locator(self, locator: str | Locator) -> EntityWrapper[b.BaseEntityType]:
+    def get_entity_by_locator(self, locator: str | Locator) -> EntityWrapperVariant:
         """
         Retrieve a single entity by its locator.
 
@@ -886,7 +892,7 @@ class Model:
 
     def move_entity(
         self, _from: Locator, _to: Locator, force: bool = False
-    ) -> EntityWrapper[b.BaseEntityType]:
+    ) -> EntityWrapperVariant:
         if _from.entityName is None:
             raise utils.create_error(
                 Exception(
@@ -929,17 +935,21 @@ class Model:
 
         return to_wrapper
 
-    def get_entity_by_selector(
-        self, selector: str, by: opts.Selectors
-    ) -> EntityWrapper[b.BaseEntityType]:
+    def get_entity_by_selector(self, selector: str, by: opts.Selectors) -> EntityWrapperVariant:
         match by:
             case opts.Selectors.NAME:
                 for wrapper in self.modelEntities.values():
                     if wrapper.entity.name == selector:
-                        return wrapper  # pyright: ignore [reportReturnType]
+                        return wrapper
                 raise errors.EntityNotFoundError(selector)
             case opts.Selectors.ID:
-                return self.get_model_entity_by_id(int(selector))  # pyright: ignore [reportReturnType]
+                try:
+                    id = int(selector)
+                except ValueError as err:
+                    raise utils.create_error(
+                        ValueError(f"Model ID '{selector}' is not a valid number")
+                    ) from err
+                return self.get_model_entity_by_id(id)
             case opts.Selectors.LOCATOR:
                 return self.get_entity_by_locator(selector)
             case _:
@@ -1151,9 +1161,7 @@ class EntityFileRef:
         )
 
         utils.mkdir(self.file_path.parent, recursive=True)
-
-        with open(self.file_path, "x") as _file:
-            _file.write(_model.model_dump_json(**MODEL_DUMP_OPTIONS))
+        _model.to_json_file(self.file_path, "x", MODEL_DUMP_OPTIONS)
 
     def delete(self, wrappers: list[EntityWrapperVariant]) -> bool:
         """
@@ -1219,7 +1227,7 @@ class EntityFileRef:
                     utils.create_error(
                         "Only one wrapper to update allowed when updateing single model file"
                     )
-                current_content = wrappers[0].entity
+                current_content = cast(m.ModelEntity, wrappers[0].entity)
             case _:
                 current_content = b.BaseEntities.from_json_file(self.file_path)
                 entities: b.BaseEntityType = getattr(current_content.root, self._type.value)
@@ -1233,7 +1241,6 @@ class EntityFileRef:
 
         utils.mkdir(self.file_path.parent, recursive=True)
 
-        with open(self.file_path, "w") as _file:
-            _file.write(current_content.model_dump_json(**MODEL_DUMP_OPTIONS))
+        current_content.to_json_file(self.file_path, "w", MODEL_DUMP_OPTIONS)
 
         logger.info("Saved %s entities to %s", len(wrappers), self.file_path)

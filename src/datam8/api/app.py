@@ -19,16 +19,21 @@
 from __future__ import annotations
 
 import os
+import socket
 
+import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from datam8 import config, factory, logging
 from datam8.api.routes.api import router as api_router
 from datam8.api.routes.system import router as system_router
 from datam8.core.errors import Datam8Error, Datam8ValidationError
 from datam8.core.runtime_meta import get_version, new_trace_id
+
+logger = logging.getLogger(__name__)
 
 
 def _status_for_error(err: Datam8Error) -> int:
@@ -53,8 +58,21 @@ def _is_exempt_path(path: str) -> bool:
     return path in {"/health", "/version"}
 
 
-def create_app(*, token: str | None = None, enable_openapi: bool = False) -> FastAPI:
+def _bind(host: str, port: int) -> tuple[socket.socket, int]:
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind((host, port))
+    sock.listen(128)
+    actual_port = int(sock.getsockname()[1])
+    return sock, actual_port
+
+
+def create_server(
+    host: str, port: int, token: str | None = None, enable_openapi: bool = False
+) -> uvicorn.Server:
     """Create and configure the HTTP API application."""
+    base_url = f"http://{host}:{port}"
+
     if enable_openapi:
         app = FastAPI(title="DataM8 API", version=get_version())
     else:
@@ -137,13 +155,9 @@ def create_app(*, token: str | None = None, enable_openapi: bool = False) -> Fas
         return JSONResponse(status_code=_status_for_error(exc), content=env.model_dump())
 
     @app.exception_handler(RequestValidationError)
-    async def request_validation_error_handler(
-        request: Request, exc: RequestValidationError
-    ):
+    async def request_validation_error_handler(request: Request, exc: RequestValidationError):
         trace_id = getattr(request.state, "trace_id", None)
-        err = Datam8ValidationError(
-            message="Invalid request.", details={"errors": exc.errors()}
-        )
+        err = Datam8ValidationError(message="Invalid request.", details={"errors": exc.errors()})
         env = err.to_envelope(trace_id=trace_id)
         return JSONResponse(status_code=400, content=env.model_dump())
 
@@ -161,4 +175,21 @@ def create_app(*, token: str | None = None, enable_openapi: bool = False) -> Fas
 
     app.include_router(system_router)
     app.include_router(api_router)
-    return app
+
+    @app.on_event("startup")
+    async def _emit_ready() -> None:
+        logger.info(
+            f"API ready at `{base_url}`, schemaVersion: {factory.get_model().solution.schemaVersion}"
+        )
+
+    server = uvicorn.Server(
+        uvicorn.Config(
+            app,
+            host=host,
+            port=port,
+            log_level=config.log_level.value,
+            access_log=False,
+        )
+    )
+
+    return server

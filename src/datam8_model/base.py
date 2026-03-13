@@ -21,7 +21,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from enum import Enum
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel
 
@@ -97,6 +97,10 @@ class AttributeTypes(BaseModel):
 
         return model
 
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode) as file:
+            file.write(self.model_dump_json(**dump_options))
+
 
 class PropertyValues(BaseModel):
     """
@@ -152,6 +156,10 @@ class PropertyValues(BaseModel):
             model = PropertyValues.model_validate_json(file.read())
 
         return model
+
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode) as file:
+            file.write(self.model_dump_json(**dump_options))
 
 
 class Zones(BaseModel):
@@ -209,6 +217,10 @@ class Zones(BaseModel):
 
         return model
 
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode) as file:
+            file.write(self.model_dump_json(**dump_options))
+
 
 class DataTypes(BaseModel):
     """
@@ -264,6 +276,10 @@ class DataTypes(BaseModel):
             model = DataTypes.model_validate_json(file.read())
 
         return model
+
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode) as file:
+            file.write(self.model_dump_json(**dump_options))
 
 
 class DataSourceTypes(BaseModel):
@@ -321,6 +337,10 @@ class DataSourceTypes(BaseModel):
 
         return model
 
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode) as file:
+            file.write(self.model_dump_json(**dump_options))
+
 
 class Folders(BaseModel):
     """
@@ -376,6 +396,10 @@ class Folders(BaseModel):
             model = Folders.model_validate_json(file.read())
 
         return model
+
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode) as file:
+            file.write(self.model_dump_json(**dump_options))
 
 
 class Properties(BaseModel):
@@ -433,6 +457,10 @@ class Properties(BaseModel):
 
         return model
 
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode) as file:
+            file.write(self.model_dump_json(**dump_options))
+
 
 class DataModules(BaseModel):
     """
@@ -488,6 +516,10 @@ class DataModules(BaseModel):
             model = DataModules.model_validate_json(file.read())
 
         return model
+
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode) as file:
+            file.write(self.model_dump_json(**dump_options))
 
 
 class DataSources(BaseModel):
@@ -545,6 +577,10 @@ class DataSources(BaseModel):
 
         return model
 
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode) as file:
+            file.write(self.model_dump_json(**dump_options))
+
 
 class DataProducts(BaseModel):
     """
@@ -600,6 +636,10 @@ class DataProducts(BaseModel):
             model = DataProducts.model_validate_json(file.read())
 
         return model
+
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode) as file:
+            file.write(self.model_dump_json(**dump_options))
 
 
 class ModelEntities(BaseModel):
@@ -657,8 +697,15 @@ class ModelEntities(BaseModel):
 
         return model
 
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode) as file:
+            file.write(self.model_dump_json(**dump_options))
 
-type BaseEntitiesType = (
+
+# ruff: disable[UP040]
+# HACK: pydantic is not able to probably validate a PEP 695 type alias declaration, only seems to work with
+# the legacy TypeAlias from typing
+BaseEntitiesType: TypeAlias = (
     ModelEntities
     | Folders
     | Properties
@@ -674,6 +721,7 @@ type BaseEntitiesType = (
 """
 Defines the layout of entity files within the `Base` folder.
 """
+# ruff: enable[UP040]
 
 
 class BaseEntities(
@@ -716,8 +764,15 @@ class BaseEntities(
 
         return model
 
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode) as file:
+            file.write(self.model_dump_json(**dump_options))
 
-type BaseEntityType = (
+
+# ruff: disable[UP040]
+# HACK: pydantic is not able to probably validate a PEP 695 type alias declaration, only seems to work with
+# the legacy TypeAlias from typing
+BaseEntityType: TypeAlias = (
     property.Property
     | property.PropertyValue
     | zone.Zone
@@ -733,6 +788,7 @@ type BaseEntityType = (
 """
 A union type for all internal objects.
 """
+# ruff: enable[UP040]
 
 
 class BaseEntity(
@@ -773,3 +829,7 @@ class BaseEntity(
             model = BaseEntity.model_validate_json(file.read())
 
         return model
+
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode) as file:
+            file.write(self.model_dump_json(**dump_options))

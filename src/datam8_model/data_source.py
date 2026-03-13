@@ -78,6 +78,10 @@ class SourceDataTypeMapping(BaseModel):
 
         return model
 
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode) as file:
+            file.write(self.model_dump_json(**dump_options))
+
 
 class ConnectionProperty(BaseModel):
     """
@@ -118,6 +122,10 @@ class ConnectionProperty(BaseModel):
             model = ConnectionProperty.model_validate_json(file.read())
 
         return model
+
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode) as file:
+            file.write(self.model_dump_json(**dump_options))
 
 
 class DataSourceType(BaseModel):
@@ -183,6 +191,10 @@ class DataSourceType(BaseModel):
 
         return model
 
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode) as file:
+            file.write(self.model_dump_json(**dump_options))
+
 
 class DataSource(BaseModel):
     """
@@ -240,3 +252,7 @@ class DataSource(BaseModel):
             model = DataSource.model_validate_json(file.read())
 
         return model
+
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode) as file:
+            file.write(self.model_dump_json(**dump_options))
