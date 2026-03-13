@@ -201,14 +201,12 @@ SelectBy = Annotated[
 
 ApiPort = Annotated[
     int,
-    typer.Option(
-        "-p", "--port", min=0, max=65535, help="Port where the fastapi app will listen on"
-    ),
+    typer.Option("--port", min=0, max=65535, help="Port where the fastapi app will listen on"),
 ]
 
 ApiHost = Annotated[
     str,
-    typer.Option("-h", "--host", help="Host where the fastapi will listen on"),
+    typer.Option("--host", help="Host where the fastapi will listen on"),
 ]
 
 ApiToken = Annotated[

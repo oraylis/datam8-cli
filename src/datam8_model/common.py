@@ -19,14 +19,18 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, TypeAlias
 
 from pydantic import Field, RootModel
 
-type CommonType = Any
+# ruff: disable[UP040]
+# HACK: pydantic is not able to probably validate a PEP 695 type alias declaration, only seems to work with
+# the legacy TypeAlias from typing
+CommonType: TypeAlias = Any
 """
 An attribute of a model entity.
 """
+# ruff: enable[UP040]
 
 
 class Common(RootModel[Any]):
@@ -41,3 +45,7 @@ class Common(RootModel[Any]):
             model = Common.model_validate_json(file.read())
 
         return model
+
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode) as file:
+            file.write(self.model_dump_json(**dump_options))

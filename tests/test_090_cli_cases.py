@@ -25,23 +25,12 @@ class CasesCli:
     @parametrize(
         "command_name",
         [
-            "solution",
-            "base",
-            "model",
-            "script",
-            "index",
-            "refactor",
-            "search",
-            "connector",
-            "plugin",
-            "secret",
-            "datasource",
-            "config",
-            "migration",
-            "fs",
             "generate",
             "validate",
             "serve",
+            "list",
+            "show",
+            "init"
         ],
     )
     def case_top_level_commands(self, command_name):

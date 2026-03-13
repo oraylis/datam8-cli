@@ -80,6 +80,10 @@ class Locator(BaseModel):
 
         return model
 
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode) as file:
+            file.write(self.model_dump_json(**dump_options))
+
 
 class ModelParameter(BaseModel):
     """
@@ -125,6 +129,10 @@ class ModelParameter(BaseModel):
             model = ModelParameter.model_validate_json(file.read())
 
         return model
+
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode) as file:
+            file.write(self.model_dump_json(**dump_options))
 
 
 class TransformationKind(Enum):
@@ -180,6 +188,10 @@ class TransformationFunction(BaseModel):
 
         return model
 
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode) as file:
+            file.write(self.model_dump_json(**dump_options))
+
 
 class ModelAttributeMapping(BaseModel):
     """
@@ -226,6 +238,10 @@ class ModelAttributeMapping(BaseModel):
 
         return model
 
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode) as file:
+            file.write(self.model_dump_json(**dump_options))
+
 
 class SourceAttributeMapping(ModelAttributeMapping):
     """
@@ -271,6 +287,10 @@ class SourceAttributeMapping(ModelAttributeMapping):
             model = SourceAttributeMapping.model_validate_json(file.read())
 
         return model
+
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode) as file:
+            file.write(self.model_dump_json(**dump_options))
 
 
 class ModelTransformation(BaseModel):
@@ -327,6 +347,10 @@ class ModelTransformation(BaseModel):
 
         return model
 
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode) as file:
+            file.write(self.model_dump_json(**dump_options))
+
 
 class ModelRelationship(BaseModel):
     """
@@ -374,6 +398,10 @@ class ModelRelationship(BaseModel):
 
         return model
 
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode) as file:
+            file.write(self.model_dump_json(**dump_options))
+
 
 class InternalModelSource(BaseModel):
     """
@@ -420,6 +448,10 @@ class InternalModelSource(BaseModel):
             model = InternalModelSource.model_validate_json(file.read())
 
         return model
+
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode) as file:
+            file.write(self.model_dump_json(**dump_options))
 
 
 class ExternalModelSource(BaseModel):
@@ -469,6 +501,10 @@ class ExternalModelSource(BaseModel):
             model = ExternalModelSource.model_validate_json(file.read())
 
         return model
+
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode) as file:
+            file.write(self.model_dump_json(**dump_options))
 
 
 class ModelEntity(BaseModel):
@@ -532,3 +568,7 @@ class ModelEntity(BaseModel):
             model = ModelEntity.model_validate_json(file.read())
 
         return model
+
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode) as file:
+            file.write(self.model_dump_json(**dump_options))

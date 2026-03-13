@@ -31,7 +31,7 @@ from pytest_cases import fixture
 from datam8 import config as datam8_config
 from datam8 import migration_v1, parser_v1
 from datam8 import model as datam8_model
-from datam8.api.app import create_app
+from datam8.api.app import create_server
 from datam8.parser import parse_full_solution_async
 
 solution_file_path_key = pytest.StashKey[pathlib.Path | None]()

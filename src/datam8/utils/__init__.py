@@ -44,6 +44,7 @@ from typing import Any
 
 import fastapi
 import rich
+import typer
 from pydantic import BaseModel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
@@ -69,14 +70,14 @@ def emit_result(
     pretty: bool = False,
 ) -> None:
     if json and models:
-        print(*[model.model_dump_json(indent=4) for model in models], sep="\n")
+        typer.echo("\n".join([model.model_dump_json(indent=4) for model in models]))
         return
 
     for msg in messages:
         if pretty:
             rich.print(msg)
         else:
-            print(msg)
+            typer.echo(msg)
 
 
 def none_if[T](input: T | None, value: T) -> T | None:

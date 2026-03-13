@@ -9,13 +9,16 @@
 {{ decorator }}
 {% endfor -%}
 
-type {{ class_name }}Type = {{ get_type_hint(fields) }}
+# ruff: disable[UP040]
+# HACK: pydantic is not able to probably validate a PEP 695 type alias declaration, only seems to work with
+# the legacy TypeAlias from typing
+{{ class_name }}Type: TypeAlias = {{ get_type_hint(fields) }}
 {%- if fields[0].docstring %}
 """
 {{ fields[0].docstring | indent(4) }}
 """
 {%- endif %}
-
+# ruff: enable[UP040]
 
 class {{ class_name }}({{ base_class }}{%- if fields -%}[{{get_type_hint(fields)}}]{%- endif -%}):{% if comment is defined %}  # {{ comment }}{% endif %}
 {%- if description %}
@@ -56,4 +59,8 @@ class {{ class_name }}({{ base_class }}{%- if fields -%}[{{get_type_hint(fields)
           model = {{ class_name }}.model_validate_json(file.read())
 
         return model
+
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode) as file:
+            file.write(self.model_dump_json(**dump_options))
 {%- endif %}
