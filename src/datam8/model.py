@@ -37,6 +37,12 @@ from . import model_exceptions as errors
 
 logger = logging.getLogger(__name__)
 
+MODEL_DUMP_OPTIONS: dict[str, Any] = {
+    "indent": 2,
+    "exclude_defaults": True,
+    "exclude_none": True,
+}
+
 
 type BaseEntityDict[T: b.BaseEntityType] = dict[b.EntityType, list[T]]
 type EntityDict[T: b.BaseEntityType] = dict[Locator, EntityWrapper[T]]
@@ -577,7 +583,10 @@ class Model:
         self._model_files: dict[Path, EntityFileRef] = {}
         """Internal dictionary to allow easy mapping of files and their entities"""
 
-        self.__next_model_id = max([w.entity.id for w in self.modelEntities.values()])
+        if len(self.modelEntities) == 0:
+            self.__next_model_id = 1
+        else:
+            self.__next_model_id = max([w.entity.id for w in self.modelEntities.values()])
 
     def get_next_model_id(self) -> int:
         next = self.__next_model_id
@@ -1144,13 +1153,7 @@ class EntityFileRef:
         utils.mkdir(self.file_path.parent, recursive=True)
 
         with open(self.file_path, "x") as _file:
-            _file.write(
-                _model.model_dump_json(
-                    indent=4,
-                    exclude_defaults=True,
-                    exclude_none=True,
-                )
-            )
+            _file.write(_model.model_dump_json(**MODEL_DUMP_OPTIONS))
 
     def delete(self, wrappers: list[EntityWrapperVariant]) -> bool:
         """
@@ -1182,13 +1185,7 @@ class EntityFileRef:
                 setattr(current_content.root, self._type.value, entities)
 
                 with open(self.file_path, "w") as _file:
-                    _file.write(
-                        current_content.model_dump_json(
-                            indent=4,
-                            exclude_defaults=True,
-                            exclude_none=True,
-                        )
-                    )
+                    _file.write(current_content.model_dump_json(**MODEL_DUMP_OPTIONS))
 
                 self.locators = [
                     loc for loc in self.locators if loc not in [w.locator for w in wrappers]
@@ -1237,12 +1234,6 @@ class EntityFileRef:
         utils.mkdir(self.file_path.parent, recursive=True)
 
         with open(self.file_path, "w") as _file:
-            _file.write(
-                current_content.model_dump_json(
-                    indent=4,
-                    exclude_defaults=True,
-                    exclude_none=True,
-                )
-            )
+            _file.write(current_content.model_dump_json(**MODEL_DUMP_OPTIONS))
 
         logger.info("Saved %s entities to %s", len(wrappers), self.file_path)

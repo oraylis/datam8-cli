@@ -23,13 +23,13 @@ from datam8.core.runtime_meta import get_version
 
 from .cmd import (
     base,
-    common,
     config_cmd,
     connector,
     datasource,
     fs,
     generate,
     index,
+    init,
     migration,
     model,
     plugin,
@@ -79,6 +79,7 @@ app.add_typer(fs.app)
 app.add_typer(generate.app)
 app.add_typer(validate.app)
 app.add_typer(serve.app)
+app.add_typer(init.app)
 
 
 if __name__ == "__main__":

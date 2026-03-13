@@ -79,6 +79,10 @@ SolutionPath = Annotated[
     ),
 ]
 
+SolutionName = Annotated[
+    str, typer.Argument(help="Name for the new solution. Will mainly influence the dm8s file name.")
+]
+
 SolutionPathOptional = Annotated[Path | None, typer.Option()]
 
 JsonOutput = Annotated[
