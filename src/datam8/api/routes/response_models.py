@@ -28,6 +28,12 @@ from datam8_model.model import Locator, ModelEntity
 from datam8_model.solution import Solution
 
 
+class HealthResponse(BaseModel):
+    """Health endpoint response."""
+
+    status: str
+
+
 class ConfigResponse(BaseModel):
     """Current backend runtime mode."""
 
@@ -37,7 +43,8 @@ class ConfigResponse(BaseModel):
 class VersionResponse(BaseModel):
     """Version payload."""
 
-    version: str
+    schema_version: str
+    app_version: str
 
 
 class ResolvedPathsResponse(BaseModel):

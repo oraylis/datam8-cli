@@ -17,7 +17,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Self, TypeAlias
+from typing import Any, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
@@ -59,7 +59,7 @@ class PropertyReference(p.PropertyReference):
         return hash((self.property, self.value))
 
     @staticmethod
-    def from_model_ref(ref: p.PropertyReference):
+    def from_model_ref(ref: p.PropertyReference, /):
         """
         Converts a PropertyReference parsed from a json file into the
         internally used one.
@@ -149,7 +149,7 @@ class EntityWrapper[T: b.BaseEntityType](BaseModel):
 
         return self._properties
 
-    def reset(self, locator: Locator, source_file: Path | None = None) -> None:
+    def reset(self, locator: Locator, /, *, source_file: Path | None = None) -> None:
         self.locator = locator
         self._properties = {}
         self.resolved = False
@@ -157,7 +157,7 @@ class EntityWrapper[T: b.BaseEntityType](BaseModel):
         self._deleted = False
         self.source_file = source_file or self.source_file
 
-    def has_property(self, property_name: str) -> bool:
+    def has_property(self, property_name: str, /) -> bool:
         """
         Indicates if this entity has a given property assigned.
 
@@ -177,7 +177,7 @@ class EntityWrapper[T: b.BaseEntityType](BaseModel):
 
         return False
 
-    def _resolve_model_attributes(self, model: "Model") -> None:
+    def _resolve_model_attributes(self, model: "Model", /) -> None:
         if not isinstance(self.entity, m.ModelEntity):
             return
 
@@ -185,7 +185,7 @@ class EntityWrapper[T: b.BaseEntityType](BaseModel):
             pass
             # logger.error(attr.properties)
 
-    def get_inherited_property_references(self, model: "Model") -> list[p.PropertyReference]:
+    def get_inherited_property_references(self, model: "Model", /) -> list[p.PropertyReference]:
         """
         Get a distinct list of properties of parent Entities (most likely foldres).
 
@@ -212,7 +212,7 @@ class EntityWrapper[T: b.BaseEntityType](BaseModel):
         return parent_properties
 
     def _resolve_properties(
-        self, model: "Model", properties: Sequence[p.PropertyReference]
+        self, model: "Model", /, properties: Sequence[p.PropertyReference]
     ) -> None:
         """
         Recursivly resolve properties assigned to this entity, directly or indirectly via
@@ -241,7 +241,7 @@ class EntityWrapper[T: b.BaseEntityType](BaseModel):
         )
 
         for ref in converted_properties:
-            property_value = model.get_property_value(ref.property, ref.value)
+            property_value = model.get_property_value(ref.value, ref.property)
             self._properties[property_value.locator] = property_value.entity
 
             # NOTE: break recursion

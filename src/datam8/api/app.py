@@ -16,8 +16,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-from __future__ import annotations
-
 import os
 import socket
 
@@ -28,10 +26,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from datam8 import config, factory, logging
-from datam8.api.routes.api import router as api_router
-from datam8.api.routes.system import router as system_router
 from datam8.core.errors import Datam8Error, Datam8ValidationError
-from datam8.core.runtime_meta import get_version, new_trace_id
+from datam8.core.runtime_meta import new_trace_id
+
+from .routes import router
 
 logger = logging.getLogger(__name__)
 
@@ -74,11 +72,11 @@ def create_server(
     base_url = f"http://{host}:{port}"
 
     if enable_openapi:
-        app = FastAPI(title="DataM8 API", version=get_version())
+        app = FastAPI(title="DataM8 API", version=config.get_version())
     else:
         app = FastAPI(
             title="DataM8 API",
-            version=get_version(),
+            version=config.get_version(),
             docs_url=None,
             redoc_url=None,
             openapi_url=None,
@@ -173,8 +171,7 @@ def create_server(
         ).to_envelope(trace_id=trace_id)
         return JSONResponse(status_code=500, content=env.model_dump())
 
-    app.include_router(system_router)
-    app.include_router(api_router)
+    app.include_router(router)
 
     @app.on_event("startup")
     async def _emit_ready() -> None:

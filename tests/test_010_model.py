@@ -104,7 +104,7 @@ def test_get_entity_dict(input: tuple[str, list[str]], model: Model):
                 entity = model.get_property(entity_name)
             case EntityType.PROPERTY_VALUES:
                 property, name = entity_name.split("/")
-                entity = model.get_property_value(property, name)
+                entity = model.get_property_value(name, property)
             case EntityType.DATA_SOURCES:
                 entity = model.get_data_source(entity_name)
             case EntityType.DATA_SOURCE_TYPES:
@@ -115,7 +115,7 @@ def test_get_entity_dict(input: tuple[str, list[str]], model: Model):
                 # NOTE: data modules are currently not being wrapped which results
                 # in a different behaviour / class, which needs to be handlered differntly
                 data_product, data_module = entity_name.split("/")
-                entity = model.get_data_module(data_product, data_module)
+                entity = model.get_data_module(data_module, data_product)
                 assert isinstance(entity, DataModule), f"Wrong type {type(entity)}"
                 return
             case _:

@@ -22,7 +22,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from enum import Enum, StrEnum
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 

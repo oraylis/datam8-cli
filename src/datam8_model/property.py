@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -199,7 +199,7 @@ class Property(BaseModel):
     name: str
     displayName: str
     schema_: Annotated[str | None, Field(alias="schema")] = None
-    scopes: Annotated[Sequence[PropertyScope] | None, Field(default_factory=list)] = []
+    scopes: Sequence[PropertyScope] | None = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
