@@ -23,10 +23,9 @@ from collections.abc import Callable, Sequence
 from concurrent import futures
 from enum import Enum
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 import jinja2
-from pydantic import BaseModel
 
 from datam8 import config, logging, model, model_exceptions, utils
 from datam8.utils import cache, importer
@@ -39,13 +38,19 @@ type PayloadFunction = Callable[[model.Model, cache.Cache], Sequence[IPayload]]
 type PayloadOrder = int
 
 
+def _get_function_name(callable: Callable[..., Any], /) -> str:
+    return callable.__name__  # type: ignore
+
+
 def generate_output(
     model: model.Model,
+    /,
     target: str,
     payloads: Sequence[str],
+    *,
     generate_all: bool,
     clean_output: bool,
-) -> "GenerateResult":
+) -> Path:
     """
     Runs the output generation in a terminal context, which causes the cli to exit when a "known" error
     occures.
@@ -75,8 +80,9 @@ def generate_output(
 
 def __generate_output_unsafe(
     model: model.Model,
+    /,
     _config: "GeneratorConfig",
-) -> "GenerateResult":
+) -> Path:
     payload_cache = cache.Cache()
 
     importer.enable_target_modules(_config.module_path)
@@ -102,7 +108,7 @@ def __generate_output_unsafe(
         executor = futures.ThreadPoolExecutor()
 
         def render_payload_for_order(payload: PayloadDefinition) -> Exception | None:
-            return asyncio.run(render_payload(payload, model, payload_cache, _config))
+            return asyncio.run(render_payload(payload, model, payload_cache, _config=_config))
 
         results = executor.map(render_payload_for_order, selected_payloads[order])
         executor.shutdown()
@@ -110,17 +116,11 @@ def __generate_output_unsafe(
         if errors:
             raise RenderError()
 
-    result = GenerateResult(
-        status=GenerateStatus.SUCCESS,
-        target=_config.target.name,
-        output_path=_config.output_path.as_posix(),
-    )
-
-    return result
+    return _config.output_path
 
 
 def register_payload(
-    template: Path | str, order: int = 1
+    template: Path | str, /, *, order: int = 1
 ) -> Callable[[PayloadFunction], PayloadFunction]:
     """Register payload.
 
@@ -142,19 +142,20 @@ def register_payload(
         Raised when validation or runtime execution fails."""
 
     def register_payload(func: PayloadFunction) -> PayloadFunction:
-        logger.debug(f"Registering payload {func.__module__}:{func.__name__}")
+        func_name = _get_function_name(func)
+        logger.debug(f"Registering payload {func.__module__}:{func_name}")
 
-        if func.__name__ in [
+        if func.__name__ in [  # type: ignore
             payload.name for payloads in payload_functions.values() for payload in payloads
         ]:
-            raise PayloadRegisteredMultipleTimesError(func.__name__)
+            raise PayloadRegisteredMultipleTimesError(func_name)
 
         if order not in payload_functions:
             payload_functions[order] = []
 
         payload_functions[order].append(
             PayloadDefinition(
-                name=func.__name__,
+                name=func_name,
                 _function=func,
                 template_path=template if isinstance(template, Path) else Path(template),
                 order=order,
@@ -165,11 +166,12 @@ def register_payload(
     return register_payload
 
 
-# @utils.print_progress_async("Rendering templates...")
 async def render_payload(
     payload: "PayloadDefinition",
+    /,
     model: model.Model,
     cache: cache.Cache,
+    *,
     _config: "GeneratorConfig",
 ) -> Exception | None:
     """Render payload.
@@ -192,7 +194,7 @@ async def render_payload(
     ------
     Exception
         Raised when validation or runtime execution fails."""
-    logger.debug(f"Render payload: {payload._function.__name__}")
+    logger.debug(f"Render payload: {payload.name}")
 
     try:
         payloads: Sequence[IPayload] = payload._function(model, cache)
@@ -216,7 +218,9 @@ async def render_payload(
         return err
 
     coros = [
-        render_template(payload.name, _p.get_data(), template, _p.get_output_path(), _config)
+        render_template(
+            payload.name, _p.get_data(), template, _p.get_output_path(), _config=_config
+        )
         for _p in payloads
     ]
     results = [
@@ -234,9 +238,11 @@ async def render_payload(
 
 async def render_template(
     payload_name: str,
+    /,
     data: object,
     template: jinja2.Template,
     output_path: Path,
+    *,
     _config: "GeneratorConfig",
 ) -> None | Exception:
     """Render template.
@@ -315,9 +321,7 @@ class GenerateStatus(Enum):
     FAILURE = 1
 
 
-class GenerateResult(BaseModel):
-    """Typed result of a synchronous generation run."""
-
+class GenerateResult(Protocol):
     status: GenerateStatus
     target: str | None
     output_path: str | None = None
@@ -330,7 +334,7 @@ class IPayload(Protocol):
 
 
 class PayloadRegisteredMultipleTimesError(Exception):
-    def __init__(self, payload_name):
+    def __init__(self, payload_name, /):
         super().__init__(f"Payload [{payload_name}] already registered.")
 
 

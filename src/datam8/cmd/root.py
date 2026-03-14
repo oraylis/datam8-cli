@@ -125,7 +125,7 @@ def show(
     entity_wrapper = None
 
     try:
-        entity_wrapper = _model.get_entity_by_selector(selector, by)
+        entity_wrapper = _model.get_entity_by_selector(selector, by=by)
     except model_exceptions.EntityNotFoundError as err:
         typer.echo(err)
         suggestions = []

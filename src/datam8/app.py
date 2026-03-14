@@ -18,6 +18,11 @@
 
 from .cmd import root
 
+import warnings
+
+# Only crash on warnings coming from pydantic
+warnings.filterwarnings("error", module="pydantic.*")
+
 app = root.app
 
 

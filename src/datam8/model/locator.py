@@ -83,6 +83,9 @@ class Locator(m.Locator):
         parts = [self.entityType, *self.folders, self.entityName or ""]
         return "/".join(parts)
 
+    def __repr__(self) -> str:
+        return f"Locator(entityType={self.entityType} folder={self.folders} entityName={self.entityName})"
+
     def clone(self) -> "Locator":
         return Locator(
             entityType=self.entityType,
@@ -91,7 +94,7 @@ class Locator(m.Locator):
         )
 
     @staticmethod
-    def from_path(path: str) -> "Locator":
+    def from_path(path: str, /) -> "Locator":
         """
         Creates a Locator object based on the given path.
         Trailing `.json` suffixes will be removed.

@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 
 
 # @utils.print_progress_async("Parsing files...")
-async def parse_full_solution_async(solution_path: pathlib.Path) -> Model:
+async def parse_full_solution_async(solution_path: pathlib.Path, /) -> Model:
     """Load and parses all json files in a solution into generator internal objects.
 
     Executes loading & parsing of json files via multi threading.
@@ -77,7 +77,7 @@ async def parse_full_solution_async(solution_path: pathlib.Path) -> Model:
     model_entities = worker_model.result()
 
     model = Model(
-        solution=solution,
+        solution,
         modelEntities=model_entities,
         **base_entities,
     )
@@ -89,11 +89,11 @@ async def parse_full_solution_async(solution_path: pathlib.Path) -> Model:
     return model
 
 
-def __parse_base_entity_type(entity_type: str) -> b.EntityType:
+def __parse_base_entity_type(entity_type: str, /) -> b.EntityType:
     return {e.value: e for e in b.EntityType}[entity_type]
 
 
-def __parse_solution_file(path: pathlib.Path) -> s.Solution:
+def __parse_solution_file(path: pathlib.Path, /) -> s.Solution:
     solution = s.Solution.from_json_file(path)
 
     if solution.schemaVersion not in config.supported_model_versions:
@@ -108,6 +108,7 @@ def __parse_solution_file(path: pathlib.Path) -> s.Solution:
 
 def __parse_model_entities(
     path: pathlib.Path,
+    *,
     executor: futures.ThreadPoolExecutor | None = None,
 ) -> EntityDict[m.ModelEntity]:
     model_entities: EntityDict[m.ModelEntity] = {}
@@ -156,7 +157,7 @@ def __parse_model_entities(
 
 
 def __parse_model_entity_file(
-    path: pathlib.Path,
+    path: pathlib.Path, /
 ) -> tuple[pathlib.Path, m.ModelEntity | ValidationError]:
     rel_path = path.relative_to(config.solution_folder_path)
 
@@ -173,7 +174,9 @@ def __parse_model_entity_file(
 
 def __parse_base_entities(
     base_path: pathlib.Path,
+    /,
     model_path: pathlib.Path,
+    *,
     executor: futures.ThreadPoolExecutor | None = None,
 ) -> dict[str, EntityDict[Any]]:
     logger.debug(f"Scanning {base_path} for base entities")
@@ -244,7 +247,7 @@ def __parse_base_entities(
 
 
 def __parse_base_entity_file(
-    path: pathlib.Path,
+    path: pathlib.Path, /
 ) -> tuple[pathlib.Path, tuple[b.EntityType, list[b.BaseEntityType]] | ValidationError]:
     rel_path = path.relative_to(config.solution_folder_path)
 
@@ -263,7 +266,7 @@ def __parse_base_entity_file(
 
 
 def __validate_folder_product_module(
-    base_entities: dict[str, EntityDict[Any]],
+    base_entities: dict[str, EntityDict[Any]], /
 ) -> None:
     data_products: EntityDict[Any] = base_entities.get(b.EntityType.DATA_PRODUCTS.value, {})
     folders: EntityDict[Any] = base_entities.get(b.EntityType.FOLDERS.value, {})

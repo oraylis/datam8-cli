@@ -52,7 +52,7 @@ from .response_models import (
     UsagesResponse,
 )
 
-router = APIRouter()
+connector_router = APIRouter()
 
 
 class ValidateConnectionBody(BaseModel):
@@ -160,7 +160,7 @@ class RuntimeSecretValueResponse(BaseModel):
     secret: dict[str, Any]
 
 
-@router.get("/connectors")
+@connector_router.get("/connectors")
 async def connectors() -> ConnectorsResponse:
     """List discovered connector plugins."""
     connectors, _errors = plugin_host.discover_connectors(plugin_dir=plugin_dir())
@@ -172,7 +172,7 @@ async def connectors() -> ConnectorsResponse:
     )
 
 
-@router.get("/connectors/{connectorId}/ui-schema")
+@connector_router.get("/connectors/{connectorId}/ui-schema")
 async def connector_ui_schema(connectorId: str) -> ConnectorSchemaResponse:
     """Load connector UI schema for editor rendering."""
     plugin = plugin_host.get_connector(plugin_dir=plugin_dir(), connector_id=connectorId)
@@ -184,7 +184,7 @@ async def connector_ui_schema(connectorId: str) -> ConnectorSchemaResponse:
     )
 
 
-@router.post("/connectors/{connectorId}/validate-connection")
+@connector_router.post("/connectors/{connectorId}/validate-connection")
 async def connector_validate_connection(
     connectorId: str,
     body: ValidateConnectionBody,
@@ -200,19 +200,19 @@ async def connector_validate_connection(
     return ConnectorValidateResponse.model_validate(result)
 
 
-@router.get("/plugins")
+@connector_router.get("/plugins")
 async def plugins_state() -> PluginStateResponse:
     """Return current plugin registry state."""
     return PluginStateResponse.model_validate(plugin_manager.reload(plugin_dir()))
 
 
-@router.post("/plugins/reload")
+@connector_router.post("/plugins/reload")
 async def plugins_reload() -> PluginStateResponse:
     """Reload plugin registry and return updated state."""
     return PluginStateResponse.model_validate(plugin_manager.reload(plugin_dir()))
 
 
-@router.post("/plugins/install")
+@connector_router.post("/plugins/install")
 async def plugins_install(req: Request) -> PluginStateResponse:
     """Install a plugin from zip payload or git URL."""
     configured_plugin_dir = plugin_dir()
@@ -245,7 +245,7 @@ async def plugins_install(req: Request) -> PluginStateResponse:
     )
 
 
-@router.post("/plugins/enable")
+@connector_router.post("/plugins/enable")
 async def plugins_enable(body: PluginIdBody) -> PluginStateResponse:
     """Enable a plugin by ID."""
     configured_plugin_dir = plugin_dir()
@@ -253,7 +253,7 @@ async def plugins_enable(body: PluginIdBody) -> PluginStateResponse:
     return PluginStateResponse.model_validate(plugin_manager.reload(configured_plugin_dir))
 
 
-@router.post("/plugins/disable")
+@connector_router.post("/plugins/disable")
 async def plugins_disable(body: PluginIdBody) -> PluginStateResponse:
     """Disable a plugin by ID."""
     configured_plugin_dir = plugin_dir()
@@ -261,7 +261,7 @@ async def plugins_disable(body: PluginIdBody) -> PluginStateResponse:
     return PluginStateResponse.model_validate(plugin_manager.reload(configured_plugin_dir))
 
 
-@router.post("/plugins/uninstall")
+@connector_router.post("/plugins/uninstall")
 async def plugins_uninstall(body: PluginIdBody) -> PluginStateResponse:
     """Uninstall a plugin by ID."""
     configured_plugin_dir = plugin_dir()
@@ -269,7 +269,7 @@ async def plugins_uninstall(body: PluginIdBody) -> PluginStateResponse:
     return PluginStateResponse.model_validate(plugin_manager.reload(configured_plugin_dir))
 
 
-@router.get("/plugins/{pluginId}/info")
+@connector_router.get("/plugins/{pluginId}/info")
 async def plugin_info(pluginId: str) -> PluginInfoEnvelope:
     """Return metadata for one installed plugin."""
     state = plugin_manager.reload(plugin_dir())
@@ -286,7 +286,7 @@ async def plugin_info(pluginId: str) -> PluginInfoEnvelope:
     return PluginInfoEnvelope(plugin=plugin)
 
 
-@router.post("/plugins/{pluginId}/verify")
+@connector_router.post("/plugins/{pluginId}/verify")
 async def plugin_verify(pluginId: str) -> PluginVerifyResponse:
     """Verify metadata of one installed plugin."""
     state = plugin_manager.reload(plugin_dir())
@@ -304,7 +304,7 @@ async def plugin_verify(pluginId: str) -> PluginVerifyResponse:
     return PluginVerifyResponse(verified=verified, plugin=plugin)
 
 
-@router.post("/plugins/verify")
+@connector_router.post("/plugins/verify")
 async def plugins_verify(req: Request) -> PluginVerifyResponse:
     """Verify plugin metadata or validate a ZIP plugin bundle."""
     content_type = (req.headers.get("content-type") or "").lower()
@@ -317,7 +317,7 @@ async def plugins_verify(req: Request) -> PluginVerifyResponse:
     )
 
 
-@router.post("/datasources/{dataSourceId}/list-tables")
+@connector_router.post("/datasources/{dataSourceId}/list-tables")
 async def datasources_list_tables(
     dataSourceId: str,
     body: DataSourceAuthBody,
@@ -343,7 +343,7 @@ async def datasources_list_tables(
     return TablesResponse(tables=tables)
 
 
-@router.post("/datasources/{dataSourceId}/test")
+@connector_router.post("/datasources/{dataSourceId}/test")
 async def datasources_test(
     dataSourceId: str,
     body: DataSourceAuthBody,
@@ -369,7 +369,7 @@ async def datasources_test(
     )
 
 
-@router.post("/datasources/{dataSourceId}/table-metadata")
+@connector_router.post("/datasources/{dataSourceId}/table-metadata")
 async def datasources_table_metadata(
     dataSourceId: str,
     body: TableMetadataBody,
@@ -400,7 +400,7 @@ async def datasources_table_metadata(
     return MetadataResponse(metadata=metadata)
 
 
-@router.post("/http/datasources/{dataSourceId}/virtual-table-metadata")
+@connector_router.post("/http/datasources/{dataSourceId}/virtual-table-metadata")
 async def http_virtual_table_metadata(
     dataSourceId: str,
     body: HttpVirtualTableBody,
@@ -443,7 +443,7 @@ async def http_virtual_table_metadata(
     )  # type: ignore[attr-defined]
 
 
-@router.get("/datasources/{dataSourceId}/usages")
+@connector_router.get("/datasources/{dataSourceId}/usages")
 async def datasources_usages(
     dataSourceId: str,
     path: str | None = Query(None, alias="path"),
@@ -458,7 +458,7 @@ async def datasources_usages(
     return UsagesResponse(usages=usages)
 
 
-@router.post("/datasources/{dataSourceId}/refresh-external-schemas/preview")
+@connector_router.post("/datasources/{dataSourceId}/refresh-external-schemas/preview")
 async def datasources_refresh_preview(
     dataSourceId: str,
     body: RefreshPreviewBody,
@@ -493,7 +493,7 @@ async def datasources_refresh_preview(
     return DiffsResponse(diffs=diffs)
 
 
-@router.post("/datasources/{dataSourceId}/refresh-external-schemas/apply")
+@connector_router.post("/datasources/{dataSourceId}/refresh-external-schemas/apply")
 async def datasources_refresh_apply(
     dataSourceId: str,
     body: RefreshApplyBody,
@@ -528,13 +528,13 @@ async def datasources_refresh_apply(
     return UpdatedEntitiesResponse(updatedEntities=updated_entities)
 
 
-@router.get("/secrets/available")
+@connector_router.get("/secrets/available")
 async def secrets_available() -> AvailableResponse:
     """Return whether runtime secret storage is available."""
     return AvailableResponse(available=bool(secrets_core.is_keyring_available()))
 
 
-@router.get("/secrets/runtime")
+@connector_router.get("/secrets/runtime")
 async def secrets_runtime_get(
     solutionPath: str | None = Query(None),
     dataSourceName: str = Query(...),
@@ -554,7 +554,7 @@ async def secrets_runtime_get(
     return RuntimeSecretsResponse(runtimeSecrets=refs or None)
 
 
-@router.get("/secrets/runtime/list")
+@connector_router.get("/secrets/runtime/list")
 async def secrets_runtime_list(
     solutionPath: str | None = Query(None),
     dataSourceName: str = Query(...),
@@ -568,7 +568,7 @@ async def secrets_runtime_list(
     )
 
 
-@router.get("/secrets/runtime/key")
+@connector_router.get("/secrets/runtime/key")
 async def secrets_runtime_get_key(
     solutionPath: str | None = Query(None),
     dataSourceName: str = Query(...),
@@ -588,7 +588,7 @@ async def secrets_runtime_get_key(
     )
 
 
-@router.put("/secrets/runtime")
+@connector_router.put("/secrets/runtime")
 async def secrets_runtime_put(body: SecretsRuntimePutBody) -> Response:
     """Upsert runtime secrets for a datasource."""
     if not secrets_core.is_keyring_available():
@@ -614,7 +614,7 @@ async def secrets_runtime_put(body: SecretsRuntimePutBody) -> Response:
     return Response(status_code=204)
 
 
-@router.delete("/secrets/runtime")
+@connector_router.delete("/secrets/runtime")
 async def secrets_runtime_delete(body: SecretsRuntimeDeleteBody) -> Response:
     """Delete all runtime secrets for a datasource."""
     if not secrets_core.is_keyring_available():
@@ -634,7 +634,7 @@ async def secrets_runtime_delete(body: SecretsRuntimeDeleteBody) -> Response:
     return Response(status_code=204)
 
 
-@router.delete("/secrets/runtime/key")
+@connector_router.delete("/secrets/runtime/key")
 async def secrets_runtime_delete_key(body: SecretsRuntimeDeleteKeyBody) -> Response:
     """Delete one runtime secret key for a datasource."""
     if not secrets_core.is_keyring_available():

@@ -10,7 +10,7 @@ dependencies = [
   "autopep8==2.3.1",
   "Jinja2==3.1.6",
   "jsonschema==4.23.0",
-  "pydantic==2.8.2",
+  "pydantic==2.12.5",
   "rich==13.9.4",
   "sqlparse==0.5.1",
   "typer==0.19.1",
@@ -37,7 +37,7 @@ Issues = "https://github.com/oraylis/datam8/issues"
 dev = [
   "pytest>=8.3.4",
   "pytest-cases>=3.8.6",
-  "datamodel-code-generator>=0.33.0",
+  "datamodel-code-generator>=0.55.0",
   "hatchling == 1.27.0",
   "deepdiff ~=8.6",
 ]

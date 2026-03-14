@@ -15,14 +15,15 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
-
-from collections.abc import Sequence
+from importlib.metadata import version
 from pathlib import Path
 
 from datam8 import opts
 from datam8.core import errors
 
-supported_model_versions: Sequence = ("2.0.0",)
+supported_model_versions: list[str] = [
+    "2.0.0",
+]
 
 log_level: opts.LogLevels = opts.LogLevels.WARNING
 
@@ -37,6 +38,14 @@ errors.
 """
 lazy: bool = False
 """ If set to true only resolves references when entity is looked up """
+
+
+def latest_schema_version() -> str:
+    return supported_model_versions[0]
+
+
+def get_version() -> str:
+    return version("datam8")
 
 
 def set_solution(path: str | Path) -> None:

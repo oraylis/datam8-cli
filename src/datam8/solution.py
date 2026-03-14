@@ -24,7 +24,7 @@ from datam8_model import solution as s
 
 def init_solution(solution_path: Path) -> None:
     solution = s.Solution(
-        schemaVersion=config.supported_model_versions[0],  # take newest/left version
+        schemaVersion=config.latest_schema_version(),  # take newest/left version
         modelPath=Path("model"),
         basePath=Path("base"),
         generatorTargets=[

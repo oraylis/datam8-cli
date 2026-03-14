@@ -44,7 +44,7 @@ def get_model() -> model.Model:
     return _model
 
 
-def create_model(solution_path: pathlib.Path | None = None) -> model.Model:
+def create_model(solution_path: pathlib.Path | None = None, /) -> model.Model:
     """
     Create model from a provided solution path. If no path is provided it will fall back to the
     global configuration.
@@ -70,7 +70,7 @@ def create_model(solution_path: pathlib.Path | None = None) -> model.Model:
     return _model
 
 
-async def load_model(solution_path: pathlib.Path) -> model.Model:
+async def load_model(solution_path: pathlib.Path, /) -> model.Model:
     _model = await parser.parse_full_solution_async(solution_path)
     create_undefined_folders(_model)
     _model.init_file_references()
@@ -81,7 +81,7 @@ async def load_model(solution_path: pathlib.Path) -> model.Model:
     return _model
 
 
-def create_model_or_exit(solution_path: pathlib.Path | None = None) -> model.Model:
+def create_model_or_exit(solution_path: pathlib.Path | None = None, /) -> model.Model:
     """
     Create model and exit the program in case of a known error. This function is mainly provided
     to be used in the context of a CLI.
@@ -98,7 +98,7 @@ def create_model_or_exit(solution_path: pathlib.Path | None = None) -> model.Mod
     """
 
     try:
-        return create_model(solution_path=solution_path)
+        return create_model(solution_path)
     except FileNotFoundError as err:
         logger.error(f"Solution file does not exist: {err}")
         sys.exit(1)
@@ -127,7 +127,7 @@ def create_model_or_exit(solution_path: pathlib.Path | None = None) -> model.Mod
         sys.exit(1)
 
 
-def resolve_property(model: model.Model, reference: PropertyReference) -> list[PropertyValue]:
+def resolve_property(model: model.Model, /, reference: PropertyReference) -> list[PropertyValue]:
     """
     Lookup and Resolve a single PropertyReference. Useful to resolve properties that are not
     set directly on the entity, e.g. a property on an attribute.
@@ -163,7 +163,7 @@ def resolve_property(model: model.Model, reference: PropertyReference) -> list[P
     return properties
 
 
-def create_undefined_folders(_model: model.Model):
+def create_undefined_folders(_model: model.Model, /):
     """
     Goes through all model entities and adds folder wrappers for every parent locator
     of an entity that does not exist yet.

@@ -18,7 +18,7 @@
 
 from __future__ import annotations
 
-from datam8.app import main as datam8_main
+from datam8.app import app
 
 
 def main() -> None:
@@ -28,8 +28,8 @@ def main() -> None:
     -------
     None
         Computed return value."""
-    datam8_main()
+    app()
 
 
 if __name__ == "__main__":
-    main()
+    app()

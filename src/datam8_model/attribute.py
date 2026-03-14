@@ -21,7 +21,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from enum import Enum, StrEnum
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 

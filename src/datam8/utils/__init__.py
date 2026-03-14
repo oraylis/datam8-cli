@@ -139,7 +139,7 @@ def delete_path(path: Path, recursive: bool = False) -> None:
 
 
 def mkdir(path: Path, recursive: bool = False) -> None:
-    """Mkdir.
+    """Mkdir but silent, no errors when paths do not exist
 
     Parameters
     ----------
@@ -148,17 +148,16 @@ def mkdir(path: Path, recursive: bool = False) -> None:
     recursive : bool
         recursive parameter value.
 
-    Returns
+    Raises
     -------
-    None
-        Computed return value."""
+    FileNotFound
+        If a parent does not exist and recursive is set to `False`
+    """
     if not path.parent.exists() and recursive:
         mkdir(path.parent, recursive=recursive)
 
-    if path.exists():
-        return
-
-    os.mkdir(path)
+    if not path.exists():
+        os.mkdir(path)
 
 
 def print_progress_async(msg: str):

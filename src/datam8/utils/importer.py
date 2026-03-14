@@ -41,7 +41,7 @@ def enable_target_modules(module_path: pathlib.Path) -> None:
         TargetModuleFinder._path.append(module_path.absolute().as_posix())
 
     if TargetModuleFinder not in sys.meta_path:
-        sys.meta_path.append(TargetModuleFinder)
+        sys.meta_path.append(TargetModuleFinder)  # type: ignore
 
     logger.debug("Configured module paths: %s", TargetModuleFinder._path)
 
@@ -62,9 +62,7 @@ def load_modules(module_path: pathlib.Path) -> dict[str, ModuleType]:
     module_files = list(module_path.glob("**/*.py"))
 
     for i in range(0, len(module_files)):
-        module_name = (
-            module_files[i].relative_to(module_path).as_posix().removesuffix(".py")
-        )
+        module_name = module_files[i].relative_to(module_path).as_posix().removesuffix(".py")
         try:
             modules[module_name] = load_module(module_files[i], module_name)
         except generate.PayloadRegisteredMultipleTimesError as err:
@@ -85,9 +83,7 @@ def load_modules(module_path: pathlib.Path) -> dict[str, ModuleType]:
             logger.error(msg, err, code_filename, line)
             sys.exit(1)
 
-    logger.info(
-        f"Loaded {len(modules)} modules with {len(generate.payload_functions)} payload(s)"
-    )
+    logger.info(f"Loaded {len(modules)} modules with {len(generate.payload_functions)} payload(s)")
 
     if len(generate.payload_functions) == 0:
         logger.warning("No payloads where founds!")
