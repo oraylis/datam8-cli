@@ -23,7 +23,12 @@ entities.
 *Subcommands*
 - list
 - show
+
+Not every part of datam8 is pre-imported, some parts, e.g. die api is only imported when commands  related
+to those imports are executed. This reduces startup time.
 """
+
+# ruff: noqa: I001
 
 import sys
 
@@ -31,16 +36,12 @@ import typer
 
 from datam8 import (
     config,
-    factory,
-    generate,
     logging,
     model,
     model_exceptions,
     opts,
-    solution,
     utils,
 )
-from datam8.api import app as api_app
 
 from . import common
 
@@ -67,6 +68,8 @@ def __setup_model_for_cli(
 ) -> model.Model:
     config.lazy = True
     common.main_callback(solution_path, log_level, version)
+
+    from datam8 import factory
 
     return factory.create_model_or_exit()
 
@@ -118,8 +121,6 @@ def show(
     log_level: opts.LogLevel = opts.LogLevels.WARNING,
 ) -> None:
     """Get and display a model entity"""
-    common.main_callback(solution_path, log_level, version)
-
     _model = __setup_model_for_cli(solution_path, log_level, version)
     entity_wrapper = None
 
@@ -160,11 +161,7 @@ def validate(
     version: opts.Version = False,
 ):
     """Validate solution model"""
-    common.main_callback(solution_path, log_level, version)
-
-    factory.create_model_or_exit(
-        solution_path=config.solution_path,
-    )
+    _model = __setup_model_for_cli(solution_path, log_level, version)
 
     typer.echo("Validation successfull")
 
@@ -181,13 +178,14 @@ def generate_cmd(
     version: opts.Version = False,
 ):
     """Generate a jinja2 template configured in the solution file"""
-    common.main_callback(solution_path, log_level, version)
-    config.lazy = lazy
 
     if generate_all:
         logger.warning("The --all option is set, but is currently ignored.")
 
-    model = factory.create_model_or_exit(config.solution_path)
+    model = __setup_model_for_cli(solution_path, log_level, version)
+
+    from datam8 import generate
+
     _ = generate.generate_output(
         model,
         target=target,
@@ -217,6 +215,8 @@ def init(
         logger.error("Solution file aready exists at %s", new_solution_path)
         sys.exit(1)
 
+    from datam8 import solution
+
     solution.init_solution(new_solution_path)
 
     typer.echo("Initialisation successfull")
@@ -233,6 +233,9 @@ def serve(
     version: opts.Version = False,
 ):
     "Starts the DataM8 fastapi backend"
+    from datam8.api import app as api_app  # for performance only import when needed
+    from datam8 import factory
+
     config.run_as_api = True
     common.main_callback(solution_path, log_level, version)
 
