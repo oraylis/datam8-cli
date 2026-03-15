@@ -110,7 +110,7 @@ class Solution(BaseModel):
     """
     tbd
     """
-    pluginsPath: Path | None = None
+    pluginsPath: Path
     """
     Path where connector plugins are stored.
     """

@@ -27,7 +27,7 @@ from typing import Any, Protocol
 
 import jinja2
 
-from datam8 import config, logging, model, model_exceptions, utils
+from datam8 import config, exceptions, logging, model, model_exceptions, utils
 from datam8.utils import cache, importer
 from datam8_model.solution import GeneratorTarget
 
@@ -86,7 +86,9 @@ def __generate_output_unsafe(
     payload_cache = cache.Cache()
 
     importer.enable_target_modules(_config.module_path)
-    _ = importer.load_modules(_config.module_path)
+    modules = importer.load_modules(_config.module_path)
+
+    logger.info(f"Loaded {len(modules)} modules with {len(payload_functions)} payload(s)")
 
     if _config.clean_output and _config.output_path.exists():
         logger.warning("Cleaning output...")
@@ -148,7 +150,7 @@ def register_payload(
         if func.__name__ in [  # type: ignore
             payload.name for payloads in payload_functions.values() for payload in payloads
         ]:
-            raise PayloadRegisteredMultipleTimesError(func_name)
+            raise exceptions.PayloadRegisteredMultipleTimesError(func_name)
 
         if order not in payload_functions:
             payload_functions[order] = []
@@ -331,11 +333,6 @@ class GenerateResult(Protocol):
 class IPayload(Protocol):
     def get_data(self) -> object: ...
     def get_output_path(self) -> Path: ...
-
-
-class PayloadRegisteredMultipleTimesError(Exception):
-    def __init__(self, payload_name, /):
-        super().__init__(f"Payload [{payload_name}] already registered.")
 
 
 class RenderError(Exception):

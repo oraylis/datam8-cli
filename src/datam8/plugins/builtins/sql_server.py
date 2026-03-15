@@ -16,16 +16,26 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-from .cmd import root, plugin
+from datam8.plugins import Plugin
+from datam8_model.plugin import Capability, PluginManifest, PluginType
 
-import warnings
+manifest = PluginManifest(
+    id="builtin:SQLServer",
+    displayName="SQL Server (built-in)",
+    type=PluginType.CONNECTOR,
+    version="0.1.0",
+    entryPoint="datam8.plugins.sql_server:SqlServer",
+    capabilities=[
+        Capability.METADATA,
+        Capability.UI_SCHEMA,
+        Capability.VALIDATION_CONNECTION,
+    ],
+)
 
-# Only crash on warnings coming from pydantic
-warnings.filterwarnings("error", module="pydantic.*")
 
-app = root.app
-app.add_typer(plugin.app)
+class SqlServer(Plugin):
+    def list_schemas(self) -> list[str]:
+        return ["dbo"]
 
-
-if __name__ == "__main__":
-    app()
+    def get_ui_schema(self) -> None:
+        pass

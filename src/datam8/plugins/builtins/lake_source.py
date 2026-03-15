@@ -16,16 +16,23 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-from .cmd import root, plugin
+from datam8.plugins import Plugin
+from datam8_model.plugin import Capability, PluginManifest, PluginType
 
-import warnings
+manifest_azure = PluginManifest(
+    id="builtin:AzureDataLake",
+    displayName="Azure Data Lake (built-in)",
+    type=PluginType.CONNECTOR,
+    version="0.1.0",
+    entryPoint="datam8.plugins.lake_source:AzureDataLake",
+    capabilities=[
+        Capability.METADATA,
+        Capability.UI_SCHEMA,
+        Capability.VALIDATION_CONNECTION,
+    ],
+)
 
-# Only crash on warnings coming from pydantic
-warnings.filterwarnings("error", module="pydantic.*")
 
-app = root.app
-app.add_typer(plugin.app)
-
-
-if __name__ == "__main__":
-    app()
+class AzureDataLake(Plugin):
+    def get_ui_schema(self) -> None:
+        print("Getting ui schema")

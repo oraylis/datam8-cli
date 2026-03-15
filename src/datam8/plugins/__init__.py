@@ -16,16 +16,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-from .cmd import root, plugin
+# ruff: noqa: F401
 
-import warnings
+from .base import Plugin
+from .builtins import lake_source, sql_server
+from .manager import PluginManager
 
-# Only crash on warnings coming from pydantic
-warnings.filterwarnings("error", module="pydantic.*")
-
-app = root.app
-app.add_typer(plugin.app)
-
-
-if __name__ == "__main__":
-    app()
+PluginManager.register_builtin_plugin("AzureDataLake", lake_source.manifest_azure)
+PluginManager.register_builtin_plugin("SQLServer", sql_server.manifest)

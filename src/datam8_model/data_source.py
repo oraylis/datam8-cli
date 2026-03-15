@@ -155,6 +155,10 @@ class DataSourceType(BaseModel):
     """
     Default data type mappings for this source type
     """
+    pluginId: str | None = None
+    """
+    ID of the plugin used to connect to the source type. If not provided falls back to builtin plugins matching the  name
+    """
     connectionProperties: Sequence[ConnectionProperty] | None = None
     """
     Required connection properties for this source type

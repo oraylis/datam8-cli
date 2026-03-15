@@ -15,3 +15,8 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+
+class PayloadRegisteredMultipleTimesError(Exception):
+    def __init__(self, payload_name, /):
+        super().__init__(f"Payload [{payload_name}] already registered.")

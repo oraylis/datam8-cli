@@ -25,6 +25,7 @@ from datam8 import config, factory
 
 from .entities import entities_router
 from .model import model_router
+from .plugins import plugins_router
 from .refactor import refactor_router
 from .solution import solution_router
 
@@ -33,6 +34,7 @@ router.include_router(solution_router)
 router.include_router(entities_router)
 router.include_router(model_router)
 router.include_router(refactor_router)
+router.include_router(plugins_router)
 
 
 class HealthResponse(BaseModel):
