@@ -27,6 +27,7 @@ def init_solution(solution_path: Path) -> None:
         schemaVersion=config.latest_schema_version(),  # take newest/left version
         modelPath=Path("model"),
         basePath=Path("base"),
+        pluginsPath=Path("plugins"),
         generatorTargets=[
             s.GeneratorTarget(
                 name="default",

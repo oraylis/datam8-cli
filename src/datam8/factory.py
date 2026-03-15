@@ -23,12 +23,28 @@ import sys
 from pydantic_core import ValidationError
 
 from datam8 import config, logging, model, model_exceptions, parser, parser_exceptions
+from datam8.plugins import Plugin, PluginManager
+from datam8_model import data_source as ds
 from datam8_model import folder as f
+from datam8_model import solution as s
 from datam8_model.property import PropertyReference, PropertyValue
 
 logger = logging.getLogger(__name__)
 
 _model: model.Model | None = None
+
+
+def get_plugin_manager(solution: s.Solution | None = None) -> PluginManager:
+    pm = PluginManager(solution or get_model().solution)
+
+    return pm
+
+
+def get_plugin_for_data_source(data_source: ds.DataSource) -> Plugin:
+    _model = get_model()
+    _type = _model.get_data_source_type(data_source.type)
+    plugin = get_plugin_manager(_model.solution).get_plugin_instantiator(_type.entity)(data_source)
+    return plugin
 
 
 def get_model() -> model.Model:

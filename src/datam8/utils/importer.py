@@ -20,7 +20,7 @@ import sys
 from importlib import machinery, util
 from types import ModuleType
 
-from datam8 import config, generate, logging
+from datam8 import config, exceptions, logging, utils
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +65,7 @@ def load_modules(module_path: pathlib.Path) -> dict[str, ModuleType]:
         module_name = module_files[i].relative_to(module_path).as_posix().removesuffix(".py")
         try:
             modules[module_name] = load_module(module_files[i], module_name)
-        except generate.PayloadRegisteredMultipleTimesError as err:
+        except exceptions.PayloadRegisteredMultipleTimesError as err:
             logger.error(f"{err}\n{module_files[i]}")
             sys.exit(1)
         except ModuleNotFoundError as err:
@@ -82,11 +82,6 @@ def load_modules(module_path: pathlib.Path) -> dict[str, ModuleType]:
 
             logger.error(msg, err, code_filename, line)
             sys.exit(1)
-
-    logger.info(f"Loaded {len(modules)} modules with {len(generate.payload_functions)} payload(s)")
-
-    if len(generate.payload_functions) == 0:
-        logger.warning("No payloads where founds!")
 
     return modules
 
@@ -111,6 +106,12 @@ def load_module(path: pathlib.Path, module_name: str) -> ModuleType:
     Exception
         Raised when validation or runtime execution fails."""
     logger.debug(f"Loaded module {path.relative_to(config.solution_folder_path)}")
+
+    if path.is_dir():
+        path = path / "__init__.py"
+
+    if not path.exists():
+        raise utils.create_error(f"Module to be loaded does not exist: {path}")
 
     spec = util.spec_from_file_location(module_name, path)
     if spec is None:

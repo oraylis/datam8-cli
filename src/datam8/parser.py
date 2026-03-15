@@ -68,8 +68,7 @@ async def parse_full_solution_async(solution_path: pathlib.Path, /) -> Model:
 
     executor = futures.ThreadPoolExecutor()
 
-    solution = __parse_solution_file(solution_path)
-
+    solution = parse_solution_file(solution_path)
     worker_model = executor.submit(__parse_model_entities, solution.modelPath)
     worker_base = executor.submit(__parse_base_entities, solution.basePath, solution.modelPath)
 
@@ -93,7 +92,7 @@ def __parse_base_entity_type(entity_type: str, /) -> b.EntityType:
     return {e.value: e for e in b.EntityType}[entity_type]
 
 
-def __parse_solution_file(path: pathlib.Path, /) -> s.Solution:
+def parse_solution_file(path: pathlib.Path, /) -> s.Solution:
     solution = s.Solution.from_json_file(path)
 
     if solution.schemaVersion not in config.supported_model_versions:

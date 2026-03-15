@@ -21,7 +21,7 @@ from typing import Annotated, Any, cast
 
 from pydantic import ConfigDict, Field, ValidationError
 
-from datam8 import config, logging, opts, utils
+from datam8 import config, logging, opts, plugins, utils
 from datam8 import model_exceptions as errors
 from datam8_model import attribute as a
 from datam8_model import base as b
@@ -145,6 +145,8 @@ class Model:
             self.__next_model_id = 1
         else:
             self.__next_model_id = max([w.entity.id for w in self.modelEntities.values()])
+
+        self.plugin_manager = plugins.PluginManager()
 
     def get_next_model_id(self) -> int:
         next = self.__next_model_id
@@ -500,9 +502,7 @@ class Model:
 
     def delete_entity(self, locator: Locator, /) -> None:
         if locator.entityName is None:
-            raise utils.create_error(
-                err=Exception("When deleting an entity, the locator must point to an entity")
-            )
+            raise utils.create_error("When deleting an entity, the locator must point to an entity")
 
         self.delete_entities(locator)
 

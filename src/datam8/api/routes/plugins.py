@@ -16,16 +16,13 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-from .cmd import root, plugin
+from fastapi import APIRouter, HTTPException
 
-import warnings
+from datam8_model import plugin as pl
 
-# Only crash on warnings coming from pydantic
-warnings.filterwarnings("error", module="pydantic.*")
-
-app = root.app
-app.add_typer(plugin.app)
+plugins_router = APIRouter(prefix="/plugins")
 
 
-if __name__ == "__main__":
-    app()
+@plugins_router.get("/")
+async def get_plugins() -> pl.PluginManifest:
+    raise HTTPException(status_code=501)

@@ -53,7 +53,7 @@ from datam8 import config, logging, opts
 logger = logging.getLogger(__name__)
 
 
-def create_error(err: Exception | str, code: int = 500) -> Exception:
+def create_error(err: Exception | str, /, code: int = 500) -> Exception:
     if config.run_as_api:
         return fastapi.HTTPException(status_code=code, detail=str(err).splitlines())
 
