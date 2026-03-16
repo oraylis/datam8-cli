@@ -1,6 +1,6 @@
 # Connectors
 
-DataM8 v2 uses Python connector plugins only. There are no built-in connectors.
+DataM8 v2 uses Python connector plugins distributed as wheels. There are no built-in connectors.
 
 ## Binding
 
@@ -25,7 +25,7 @@ Secrets must never be stored plaintext in solution JSON.
 
 ## Plugin loading
 
-The backend discovers connector plugins under `DATAM8_PLUGIN_DIR`:
+The backend installs connector wheels into `DATAM8_PLUGIN_DIR` and discovers them under:
 
 `$DATAM8_PLUGIN_DIR/connectors/<connector_id>/plugin.json`
 
@@ -33,20 +33,22 @@ The `plugin.json` manifest must include:
 
 - `pluginType: "connector"`
 - `id`, `displayName`, `version`
+- `manifestVersion` (integer, current: `1`)
 - `entrypoint` (`module.path:ClassName`)
-- `capabilities` (at least `uiSchema` and `metadata`)
-
-Optional fields:
-
-- `dataTypeMapping`: list of source/target mappings
-  - shape: `{ "sourceType": "<source>", "targetType": "<canonical>" }`
-  - used by Neon to prefill `DataSourceType.dataTypeMapping` when linking a connector
+- `capabilities` as object:
+  - `uiSchema`
+  - `validateConnection`
+  - `metadata.listTables`
+  - `metadata.getTableMetadata`
+  - `runtimeQuery.sql`
+  - `runtimeQuery.dataFrame`
 
 ## API (Neon consumes)
 
 - `GET /connectors`
 - `GET /connectors/{connectorId}/ui-schema`
 - `POST /connectors/{connectorId}/validate-connection`
+- `POST /plugins/install` (wheel-only)
 
 ## Dev notes
 

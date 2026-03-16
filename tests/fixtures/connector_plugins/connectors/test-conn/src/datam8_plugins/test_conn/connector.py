@@ -1,4 +1,4 @@
-# DataM8
+﻿# DataM8
 # Copyright (C) 2024-2025 ORAYLIS GmbH
 #
 # This file is part of DataM8.
@@ -20,6 +20,8 @@ from __future__ import annotations
 
 from typing import Any
 
+DATA_TYPE_MAPPING = [{"sourceType": "string", "targetType": "string"}]
+
 
 class Connector:
     @staticmethod
@@ -28,7 +30,13 @@ class Connector:
             "id": "test-conn",
             "displayName": "Test Connector",
             "version": "0.1.0",
-            "capabilities": ["uiSchema", "validateConnection", "metadata"],
+            "capabilities": {
+                "uiSchema": True,
+                "validateConnection": True,
+                "metadata": {"listTables": True, "getTableMetadata": True},
+                "runtimeQuery": {"sql": False, "dataFrame": False},
+            },
+            "dataTypeMapping": DATA_TYPE_MAPPING,
         }
 
     @staticmethod
@@ -74,4 +82,3 @@ class Connector:
     @staticmethod
     def get_table_metadata(extended_properties: dict[str, str], secret_resolver, schema: str, table: str) -> dict[str, Any]:
         return {"schema": schema, "name": table, "type": "BASE TABLE", "columns": [{"name": "id", "dataType": "int"}]}
-

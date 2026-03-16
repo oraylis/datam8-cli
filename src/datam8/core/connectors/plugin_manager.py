@@ -1,4 +1,4 @@
-# DataM8
+﻿# DataM8
 # Copyright (C) 2024-2025 ORAYLIS GmbH
 #
 # This file is part of DataM8.
@@ -18,19 +18,27 @@
 
 from __future__ import annotations
 
+import configparser
+import hashlib
+import importlib
 import io
 import json
+import re
 import shutil
+import subprocess
+import sys
 import tempfile
 import urllib.request
 import zipfile
 from dataclasses import dataclass
+from email.parser import Parser
 from pathlib import Path
 from typing import Any
 
 from platformdirs import user_data_dir
 
 from datam8.core.connectors.plugin_host import (
+    DISTRIBUTION_MARKER,
     get_connectors_state,
     load_connector_class,
     parse_connector_plugin,
@@ -38,6 +46,10 @@ from datam8.core.connectors.plugin_host import (
 from datam8.core.errors import Datam8NotFoundError, Datam8ValidationError
 
 DISABLED_MARKER = ".disabled"
+CONNECTOR_ENTRYPOINT_GROUP = "datam8.connectors"
+WHEEL_FILE_RE = re.compile(
+    r"^[A-Za-z0-9_.]+-[A-Za-z0-9_.!+]+(?:-[0-9][A-Za-z0-9_.]*)?-[A-Za-z0-9_.]+-[A-Za-z0-9_.]+-[A-Za-z0-9_.]+\.whl$"
+)
 
 
 @dataclass(frozen=True)
@@ -45,6 +57,8 @@ class PluginDescriptor:
     id: str
     display_name: str
     version: str
+    filename: str
+    sha256: str
 
 
 def default_plugin_dir() -> Path:
@@ -74,111 +88,478 @@ def _is_enabled(plugin_root: Path) -> bool:
     return not _disabled_marker(plugin_root).exists()
 
 
-def _safe_relpath(dest: Path, zip_name: str) -> Path:
-    name = (zip_name or "").replace("\\", "/")
-    if not name or name.startswith("/") or name.startswith("\\"):
-        raise Datam8ValidationError(message="Unsafe ZIP entry (zip-slip).", details={"entry": zip_name})
-    parts = [p for p in name.split("/") if p and p != "."]
-    if any(p == ".." for p in parts):
-        raise Datam8ValidationError(message="Unsafe ZIP entry (zip-slip).", details={"entry": zip_name})
-    rel = Path(*parts)
-    target = (dest / rel).resolve()
-    base = dest.resolve()
-    if target == base or base not in target.parents:
-        raise Datam8ValidationError(message="Unsafe ZIP entry (zip-slip).", details={"entry": zip_name})
-    return rel
+def _sha256_hex(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
 
 
-def _extract_zip_to_tmp(zip_bytes: bytes, dest: Path) -> None:
-    with zipfile.ZipFile(io.BytesIO(zip_bytes), "r") as archive:
-        for info in archive.infolist():
-            rel = _safe_relpath(dest, info.filename)
-            target = dest / rel
-            if info.is_dir():
-                target.mkdir(parents=True, exist_ok=True)
-                continue
-            target.parent.mkdir(parents=True, exist_ok=True)
-            with archive.open(info, "r") as src, open(target, "wb") as dst:
-                shutil.copyfileobj(src, dst)
+def _validate_wheel_name(file_name: str | None) -> str:
+    name = (file_name or "").strip()
+    if not name:
+        raise Datam8ValidationError(
+            code="connector_distribution_invalid",
+            message="Wheel file name is required.",
+            details=None,
+        )
+    if Path(name).name != name:
+        raise Datam8ValidationError(
+            code="connector_distribution_invalid",
+            message="Wheel file name must not contain path segments.",
+            details={"fileName": name},
+        )
+    if not name.lower().endswith(".whl"):
+        raise Datam8ValidationError(
+            code="connector_distribution_invalid",
+            message="Only .whl files are supported.",
+            details={"fileName": name},
+        )
+    if not WHEEL_FILE_RE.match(name):
+        raise Datam8ValidationError(
+            code="connector_distribution_invalid",
+            message="Invalid wheel file name (PEP 427).",
+            details={"fileName": name},
+        )
+    return name
 
 
-def _read_plugin_json(path: Path) -> dict[str, Any]:
+def _inspect_wheel_bundle(
+    *,
+    wheel_bytes: bytes,
+    file_name: str,
+    strict_connector: bool,
+) -> dict[str, str] | None:
+    normalized_name = _validate_wheel_name(file_name)
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except Exception as e:
-        raise Datam8ValidationError(message="Invalid JSON.", details={"path": str(path), "error": str(e)})
-    if not isinstance(data, dict):
-        raise Datam8ValidationError(message="Expected JSON object.", details={"path": str(path)})
-    return data
+        with zipfile.ZipFile(io.BytesIO(wheel_bytes), "r") as archive:
+            dist_dirs: set[str] = set()
+            for name in archive.namelist():
+                parts = name.split("/")
+                if not parts:
+                    continue
+                head = parts[0]
+                if head.endswith(".dist-info"):
+                    dist_dirs.add(head)
+            if not dist_dirs:
+                raise Datam8ValidationError(
+                    code="connector_distribution_invalid",
+                    message="Wheel is missing .dist-info metadata.",
+                    details={"fileName": normalized_name},
+                )
+
+            metadata_text: str | None = None
+            entrypoints_text: str | None = None
+            for dist_dir in sorted(dist_dirs):
+                metadata_name = f"{dist_dir}/METADATA"
+                entrypoints_name = f"{dist_dir}/entry_points.txt"
+                if metadata_text is None and metadata_name in archive.namelist():
+                    metadata_text = archive.read(metadata_name).decode("utf-8")
+                if entrypoints_text is None and entrypoints_name in archive.namelist():
+                    entrypoints_text = archive.read(entrypoints_name).decode("utf-8")
+
+            if metadata_text is None:
+                raise Datam8ValidationError(
+                    code="connector_distribution_invalid",
+                    message="Wheel is missing METADATA.",
+                    details={"fileName": normalized_name},
+                )
+
+            msg = Parser().parsestr(metadata_text)
+            project_name = (msg.get("Name") or "").strip()
+            project_version = (msg.get("Version") or "").strip()
+            if not project_name or not project_version:
+                raise Datam8ValidationError(
+                    code="connector_distribution_invalid",
+                    message="Wheel METADATA must include Name and Version.",
+                    details={"fileName": normalized_name},
+                )
+
+            connector_entries: list[tuple[str, str]] = []
+            if entrypoints_text:
+                cp = configparser.ConfigParser()
+                cp.optionxform = str
+                cp.read_string(entrypoints_text)
+                if cp.has_section(CONNECTOR_ENTRYPOINT_GROUP):
+                    for key, value in cp.items(CONNECTOR_ENTRYPOINT_GROUP):
+                        k = (key or "").strip()
+                        v = (value or "").strip()
+                        if k and v:
+                            connector_entries.append((k, v))
+
+            if not connector_entries:
+                if strict_connector:
+                    raise Datam8ValidationError(
+                        code="connector_distribution_invalid",
+                        message="Wheel does not expose a datam8.connectors entry point.",
+                        details={"fileName": normalized_name},
+                    )
+                return None
+
+            if len(connector_entries) != 1:
+                raise Datam8ValidationError(
+                    code="connector_distribution_invalid",
+                    message="Wheel must expose exactly one datam8.connectors entry point.",
+                    details={"fileName": normalized_name},
+                )
+
+            connector_id, entrypoint = connector_entries[0]
+            if ":" not in entrypoint:
+                raise Datam8ValidationError(
+                    code="connector_distribution_invalid",
+                    message="Connector entry point must be in format module:Class.",
+                    details={
+                        "fileName": normalized_name,
+                        "entrypoint": entrypoint,
+                        "connectorId": connector_id,
+                    },
+                )
+
+            return {
+                "fileName": normalized_name,
+                "projectName": project_name,
+                "projectVersion": project_version,
+                "connectorId": connector_id,
+                "entrypoint": entrypoint,
+            }
+    except zipfile.BadZipFile as e:
+        raise Datam8ValidationError(
+            code="connector_distribution_invalid",
+            message="Invalid wheel file.",
+            details={"fileName": normalized_name, "error": str(e)},
+        ) from e
 
 
-def _parse_manifest(path: Path) -> tuple[str, str, str]:
-    data = _read_plugin_json(path)
-    typ = data.get("pluginType")
-    if typ is None:
-        typ = data.get("type")
-    if typ != "connector":
-        raise Datam8ValidationError(message="plugin.json pluginType must be 'connector'.", details={"path": str(path)})
-    cid = data.get("id")
-    display = data.get("displayName")
-    version = data.get("version")
-    if not isinstance(cid, str) or not cid.strip():
-        raise Datam8ValidationError(message="plugin.json id is required.", details={"path": str(path)})
-    if not isinstance(display, str) or not display.strip():
-        raise Datam8ValidationError(message="plugin.json displayName is required.", details={"path": str(path)})
-    if not isinstance(version, str) or not version.strip():
-        raise Datam8ValidationError(message="plugin.json version is required.", details={"path": str(path)})
-    return (cid.strip(), display.strip(), version.strip())
+class _SitePackagesPath:
+    def __init__(self, path: Path):
+        self._path = str(path)
+
+    def __enter__(self) -> "_SitePackagesPath":
+        sys.path.insert(0, self._path)
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        try:
+            sys.path.remove(self._path)
+        except ValueError:
+            pass
 
 
-def verify_zip_bundle(*, zip_bytes: bytes) -> PluginDescriptor:
-    """Verify zip bundle.
+def _normalize_capabilities(raw: Any, *, connector_id: str) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        raise Datam8ValidationError(
+            code="connector_manifest_invalid",
+            message="Connector manifest capabilities must be an object.",
+            details={"id": connector_id},
+        )
 
-    Parameters
-    ----------
-    zip_bytes : bytes
-        zip_bytes parameter value.
+    def as_bool(value: Any) -> bool:
+        return value is True
 
-    Returns
-    -------
-    PluginDescriptor
-        Computed return value.
-
-    Raises
-    ------
-    Datam8ValidationError
-        Raised when validation or runtime execution fails."""
-    with tempfile.TemporaryDirectory(prefix="datam8-connector-plugin-verify-") as td:
-        temp_root = Path(td)
-        _extract_zip_to_tmp(zip_bytes, temp_root)
-        roots = _find_plugin_roots(temp_root)
-        if not roots:
-            raise Datam8ValidationError(message="No connector plugin root found in ZIP.", details=None)
-        if len(roots) > 1:
-            raise Datam8ValidationError(message="ZIP must contain exactly one connector plugin.", details={"roots": [str(r.name) for r in roots]})
-        plugin_json = roots[0] / "plugin.json"
-        cid, display, version = _parse_manifest(plugin_json)
-        return PluginDescriptor(id=cid, display_name=display, version=version)
+    metadata_raw = raw.get("metadata")
+    runtime_raw = raw.get("runtimeQuery")
+    metadata = metadata_raw if isinstance(metadata_raw, dict) else {}
+    runtime_query = runtime_raw if isinstance(runtime_raw, dict) else {}
+    return {
+        "uiSchema": as_bool(raw.get("uiSchema")),
+        "validateConnection": as_bool(raw.get("validateConnection")),
+        "metadata": {
+            "listTables": as_bool(metadata.get("listTables")),
+            "getTableMetadata": as_bool(metadata.get("getTableMetadata")),
+        },
+        "runtimeQuery": {
+            "sql": as_bool(runtime_query.get("sql")),
+            "dataFrame": as_bool(runtime_query.get("dataFrame")),
+        },
+    }
 
 
-def _find_plugin_roots(extracted_root: Path) -> list[Path]:
-    roots: list[Path] = []
-    if (extracted_root / "plugin.json").exists():
-        roots.append(extracted_root)
-    for entry in sorted(extracted_root.iterdir(), key=lambda p: p.name.lower()):
-        if not entry.is_dir():
-            continue
-        if (entry / "plugin.json").exists():
-            roots.append(entry)
-    unique: list[Path] = []
+def _normalize_data_type_mapping(raw: Any) -> list[dict[str, str]]:
+    if not isinstance(raw, list):
+        return []
+    out: list[dict[str, str]] = []
     seen: set[str] = set()
-    for r in roots:
-        key = str(r.resolve())
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        source = (str(item.get("sourceType") or "")).strip()
+        target = (str(item.get("targetType") or "")).strip()
+        if not source or not target:
+            continue
+        key = source.lower()
         if key in seen:
             continue
         seen.add(key)
-        unique.append(r)
-    return unique
+        out.append({"sourceType": source, "targetType": target})
+    return out
+
+
+def _load_manifest_from_entrypoint(
+    *,
+    site_packages: Path,
+    connector_id: str,
+    entrypoint: str,
+) -> dict[str, Any]:
+    mod_name, attr = entrypoint.split(":", 1)
+    with _SitePackagesPath(site_packages):
+        try:
+            module = importlib.import_module(mod_name)
+        except Exception as e:
+            raise Datam8ValidationError(
+                code="connector_manifest_invalid",
+                message="Failed to import connector entrypoint from installed wheel.",
+                details={
+                    "id": connector_id,
+                    "entrypoint": entrypoint,
+                    "error": str(e),
+                },
+            ) from e
+        cls = getattr(module, attr, None)
+        if cls is None or not isinstance(cls, type):
+            raise Datam8ValidationError(
+                code="connector_manifest_invalid",
+                message="Connector entrypoint must reference a class.",
+                details={"id": connector_id, "entrypoint": entrypoint},
+            )
+        if not hasattr(cls, "get_manifest"):
+            raise Datam8ValidationError(
+                code="connector_manifest_invalid",
+                message="Connector class is missing get_manifest().",
+                details={"id": connector_id, "entrypoint": entrypoint},
+            )
+        manifest = cls.get_manifest()  # type: ignore[attr-defined]
+
+    if not isinstance(manifest, dict):
+        raise Datam8ValidationError(
+            code="connector_manifest_invalid",
+            message="Connector get_manifest() must return an object.",
+            details={"id": connector_id},
+        )
+
+    mid = (manifest.get("id") or "").strip() if isinstance(manifest.get("id"), str) else ""
+    display = (
+        (manifest.get("displayName") or "").strip()
+        if isinstance(manifest.get("displayName"), str)
+        else ""
+    )
+    version = (
+        (manifest.get("version") or "").strip()
+        if isinstance(manifest.get("version"), str)
+        else ""
+    )
+    manifest_version_raw = manifest.get("manifestVersion", 1)
+    if not isinstance(mid, str) or not mid:
+        raise Datam8ValidationError(
+            code="connector_manifest_invalid",
+            message="Connector manifest id is required.",
+            details={"entrypoint": entrypoint},
+        )
+    if mid != connector_id:
+        raise Datam8ValidationError(
+            code="connector_manifest_invalid",
+            message="Connector manifest id must match datam8.connectors entrypoint key.",
+            details={"entrypointId": connector_id, "manifestId": mid},
+        )
+    if not display:
+        raise Datam8ValidationError(
+            code="connector_manifest_invalid",
+            message="Connector manifest displayName is required.",
+            details={"id": mid},
+        )
+    if not version:
+        raise Datam8ValidationError(
+            code="connector_manifest_invalid",
+            message="Connector manifest version is required.",
+            details={"id": mid},
+        )
+    if not isinstance(manifest_version_raw, int) or manifest_version_raw < 1:
+        raise Datam8ValidationError(
+            code="connector_manifest_invalid",
+            message="Connector manifestVersion must be a positive integer.",
+            details={"id": mid},
+        )
+
+    return {
+        "id": mid,
+        "displayName": display,
+        "version": version,
+        "manifestVersion": manifest_version_raw,
+        "capabilities": _normalize_capabilities(
+            manifest.get("capabilities"),
+            connector_id=mid,
+        ),
+        "dataTypeMapping": _normalize_data_type_mapping(manifest.get("dataTypeMapping")),
+    }
+
+
+def _pip_install_wheel(
+    *,
+    wheel_file: Path,
+    target_dir: Path,
+    wheelhouse: Path | None,
+) -> None:
+    target_dir.mkdir(parents=True, exist_ok=True)
+    cmd = [
+        sys.executable,
+        "-m",
+        "pip",
+        "install",
+        "--disable-pip-version-check",
+        "--no-compile",
+        "--upgrade",
+        "--target",
+        str(target_dir),
+    ]
+    if wheelhouse and wheelhouse.exists() and wheelhouse.is_dir():
+        cmd.extend(["--find-links", str(wheelhouse)])
+    cmd.append(str(wheel_file))
+    def _run(args: list[str]) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+
+    result = _run(cmd)
+    if result.returncode != 0 and "No module named pip" in (result.stderr or ""):
+        ensure = _run([sys.executable, "-m", "ensurepip", "--upgrade"])
+        if ensure.returncode == 0:
+            result = _run(cmd)
+    if result.returncode == 0:
+        return
+    raise Datam8ValidationError(
+        code="connector_distribution_invalid",
+        message="Failed to install connector wheel.",
+        details={
+            "fileName": wheel_file.name,
+            "stdout": (result.stdout or "")[-4000:],
+            "stderr": (result.stderr or "")[-4000:],
+        },
+    )
+
+
+def _write_plugin_json(
+    *,
+    plugin_root: Path,
+    manifest: dict[str, Any],
+    entrypoint: str,
+) -> None:
+    payload = {
+        "pluginType": "connector",
+        "id": manifest["id"],
+        "displayName": manifest["displayName"],
+        "version": manifest["version"],
+        "manifestVersion": manifest["manifestVersion"],
+        "entrypoint": entrypoint,
+        "capabilities": manifest["capabilities"],
+        "dataTypeMapping": manifest.get("dataTypeMapping") or [],
+    }
+    (plugin_root / "plugin.json").write_text(
+        json.dumps(payload, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _write_distribution_metadata(*, plugin_root: Path, file_name: str, sha256: str, install_source: str) -> None:
+    marker = plugin_root / DISTRIBUTION_MARKER
+    marker.write_text(
+        json.dumps(
+            {
+                "type": "wheel",
+                "filename": file_name,
+                "sha256": sha256,
+                "installSource": install_source,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def _install_wheel_from_bytes(
+    *,
+    plugin_dir: Path,
+    wheel_bytes: bytes,
+    file_name: str,
+    install_source: str,
+    wheelhouse: Path | None = None,
+) -> dict[str, Any]:
+    info = _inspect_wheel_bundle(
+        wheel_bytes=wheel_bytes,
+        file_name=file_name,
+        strict_connector=True,
+    )
+    if info is None:
+        raise Datam8ValidationError(
+            code="connector_distribution_invalid",
+            message="Wheel does not expose a connector entrypoint.",
+            details={"fileName": file_name},
+        )
+
+    normalized_name = info["fileName"]
+    connector_id = info["connectorId"]
+    entrypoint = info["entrypoint"]
+    sha256 = _sha256_hex(wheel_bytes)
+
+    with tempfile.TemporaryDirectory(prefix="datam8-connector-wheel-install-") as td:
+        temp_root = Path(td)
+        wheel_file = temp_root / normalized_name
+        wheel_file.write_bytes(wheel_bytes)
+        site_packages = temp_root / "site-packages"
+        _pip_install_wheel(
+            wheel_file=wheel_file,
+            target_dir=site_packages,
+            wheelhouse=wheelhouse,
+        )
+        manifest = _load_manifest_from_entrypoint(
+            site_packages=site_packages,
+            connector_id=connector_id,
+            entrypoint=entrypoint,
+        )
+
+        connectors_root = _connectors_root(plugin_dir)
+        plugin_root = connectors_root / connector_id
+        if plugin_root.exists():
+            shutil.rmtree(plugin_root)
+        (plugin_root / "site-packages").parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(site_packages, plugin_root / "site-packages")
+        _write_plugin_json(
+            plugin_root=plugin_root,
+            manifest=manifest,
+            entrypoint=entrypoint,
+        )
+        marker = _disabled_marker(plugin_root)
+        if marker.exists():
+            marker.unlink()
+        _write_distribution_metadata(
+            plugin_root=plugin_root,
+            file_name=normalized_name,
+            sha256=sha256,
+            install_source=install_source,
+        )
+
+    return {"installed": [connector_id], "sha256": sha256}
+
+
+def verify_wheel_bundle(*, wheel_bytes: bytes, file_name: str | None = None) -> PluginDescriptor:
+    """Verify wheel bundle metadata."""
+    info = _inspect_wheel_bundle(
+        wheel_bytes=wheel_bytes,
+        file_name=file_name or "",
+        strict_connector=True,
+    )
+    if info is None:
+        raise Datam8ValidationError(
+            code="connector_distribution_invalid",
+            message="Wheel does not expose a connector entrypoint.",
+            details={"fileName": file_name},
+        )
+
+    return PluginDescriptor(
+        id=info["connectorId"],
+        display_name=info["projectName"],
+        version=info["projectVersion"],
+        filename=info["fileName"],
+        sha256=_sha256_hex(wheel_bytes),
+    )
 
 
 def list_plugins(plugin_dir: Path) -> dict[str, Any]:
@@ -214,16 +595,18 @@ def list_plugins(plugin_dir: Path) -> dict[str, Any]:
             continue
 
         try:
-            cid, display, version = _parse_manifest(plugin_json)
-            item["id"] = cid
-            item["name"] = display
-            item["displayName"] = display
-            item["version"] = version
-            if cid != folder.name:
-                errors[cid] = f"Plugin folder name '{folder.name}' does not match plugin id '{cid}'."
+            parsed = parse_connector_plugin(folder)
+            item["id"] = parsed.id
+            item["name"] = parsed.display_name
+            item["displayName"] = parsed.display_name
+            item["version"] = parsed.version
+            item["manifestVersion"] = parsed.manifest_version
+            item["capabilities"] = parsed.capabilities
+            item["distribution"] = parsed.distribution or {"type": "wheel", "filename": "", "sha256": ""}
+            item["installSource"] = parsed.install_source
+            if parsed.id != folder.name:
+                errors[parsed.id] = f"Plugin folder name '{folder.name}' does not match plugin id '{parsed.id}'."
             else:
-                parsed = parse_connector_plugin(folder)
-                item["capabilities"] = list(parsed.capabilities)
                 if enabled:
                     load_connector_class(parsed)
         except Exception as e:
@@ -249,84 +632,95 @@ def reload(plugin_dir: Path) -> dict[str, Any]:
     return list_plugins(plugin_dir)
 
 
-def install_zip(*, plugin_dir: Path, zip_bytes: bytes, file_name: str | None = None) -> dict[str, Any]:
-    """Install zip.
-
-    Parameters
-    ----------
-    plugin_dir : Path
-        plugin_dir parameter value.
-    zip_bytes : bytes
-        zip_bytes parameter value.
-    file_name : str | None
-        file_name parameter value.
-
-    Returns
-    -------
-    dict[str, Any]
-        Computed return value.
-
-    Raises
-    ------
-    Datam8ValidationError
-        Raised when validation or runtime execution fails."""
-    with tempfile.TemporaryDirectory(prefix="datam8-connector-plugin-") as td:
-        temp_root = Path(td)
-        _extract_zip_to_tmp(zip_bytes, temp_root)
-        roots = _find_plugin_roots(temp_root)
-        if not roots:
-            raise Datam8ValidationError(message="No connector plugin root found in ZIP.", details={"fileName": file_name})
-
-        connectors_root = _connectors_root(plugin_dir)
-        installed_ids: list[str] = []
-
-        for src_root in roots:
-            plugin_json = src_root / "plugin.json"
-            if not plugin_json.exists():
-                continue
-            connector_id, _display_name, _version = _parse_manifest(plugin_json)
-            target = connectors_root / connector_id
-            if target.exists():
-                shutil.rmtree(target)
-            shutil.copytree(src_root, target)
-            marker = _disabled_marker(target)
-            if marker.exists():
-                marker.unlink()
-            installed_ids.append(connector_id)
-
-        if not installed_ids:
-            raise Datam8ValidationError(message="No valid connector plugin found in ZIP.", details={"fileName": file_name})
-
-    return {"installed": sorted(installed_ids)}
+def install_wheel(*, plugin_dir: Path, wheel_bytes: bytes, file_name: str | None = None) -> dict[str, Any]:
+    """Install a connector wheel from raw bytes."""
+    normalized_name = _validate_wheel_name(file_name)
+    return _install_wheel_from_bytes(
+        plugin_dir=plugin_dir,
+        wheel_bytes=wheel_bytes,
+        file_name=normalized_name,
+        install_source="upload",
+        wheelhouse=None,
+    )
 
 
-def _download_plugin_zip(url: str) -> bytes:
+def _download_plugin_wheel(url: str) -> bytes:
     u = (url or "").strip()
-    if not u.lower().startswith("https://") or not u.lower().endswith(".zip"):
-        raise Datam8ValidationError(message="Only https:// direct .zip URLs are supported for plugin install.", details={"url": url})
+    if not u.lower().startswith("https://") or not u.lower().endswith(".whl"):
+        raise Datam8ValidationError(
+            code="connector_distribution_invalid",
+            message="Only https:// direct .whl URLs are supported for plugin install.",
+            details={"url": url},
+        )
     try:
         with urllib.request.urlopen(u, timeout=30) as response:
             return response.read()
     except Exception as e:
-        raise Datam8ValidationError(message="Failed to download plugin ZIP.", details={"url": u, "error": str(e)})
+        raise Datam8ValidationError(
+            code="connector_distribution_invalid",
+            message="Failed to download connector wheel.",
+            details={"url": u, "error": str(e)},
+        ) from e
+
+
+def install_wheel_url(*, plugin_dir: Path, url: str, sha256: str) -> dict[str, Any]:
+    """Install connector wheel by URL + expected sha256."""
+    expected = (sha256 or "").strip().lower()
+    if len(expected) != 64 or any(c not in "0123456789abcdef" for c in expected):
+        raise Datam8ValidationError(
+            code="connector_distribution_invalid",
+            message="sha256 must be a 64-character lowercase hex string.",
+            details=None,
+        )
+    wheel_bytes = _download_plugin_wheel(url)
+    actual = _sha256_hex(wheel_bytes)
+    if actual != expected:
+        raise Datam8ValidationError(
+            code="connector_distribution_hash_mismatch",
+            message="Wheel sha256 mismatch.",
+            details={"expected": expected, "actual": actual, "url": url},
+        )
+    file_name = Path(url).name
+    return _install_wheel_from_bytes(
+        plugin_dir=plugin_dir,
+        wheel_bytes=wheel_bytes,
+        file_name=file_name,
+        install_source="index",
+        wheelhouse=None,
+    )
+
+
+def install_zip(*, plugin_dir: Path, zip_bytes: bytes, file_name: str | None = None) -> dict[str, Any]:
+    """Deprecated: ZIP is no longer supported."""
+    _ = plugin_dir
+    _ = zip_bytes
+    _ = file_name
+    raise Datam8ValidationError(
+        code="connector_distribution_invalid",
+        message="ZIP connector installation is no longer supported. Use .whl.",
+        details=None,
+    )
 
 
 def install_git_url(*, plugin_dir: Path, git_url: str) -> dict[str, Any]:
-    # Backward-compatible name; accepts direct https://...zip URLs.
-    """Install git url.
+    """Deprecated: git URL installs are no longer supported."""
+    _ = plugin_dir
+    _ = git_url
+    raise Datam8ValidationError(
+        code="connector_distribution_invalid",
+        message="Git URL connector installation is no longer supported. Provide a wheel URL with sha256.",
+        details=None,
+    )
 
-    Parameters
-    ----------
-    plugin_dir : Path
-        plugin_dir parameter value.
-    git_url : str
-        git_url parameter value.
 
-    Returns
-    -------
-    dict[str, Any]
-        Computed return value."""
-    return install_zip(plugin_dir=plugin_dir, zip_bytes=_download_plugin_zip(git_url), file_name=None)
+def verify_zip_bundle(*, zip_bytes: bytes) -> PluginDescriptor:
+    """Deprecated: ZIP verification is no longer supported."""
+    _ = zip_bytes
+    raise Datam8ValidationError(
+        code="connector_distribution_invalid",
+        message="ZIP connector bundles are no longer supported. Use .whl.",
+        details=None,
+    )
 
 
 def set_enabled(plugin_dir: Path, plugin_id: str, enabled: bool) -> None:
@@ -393,7 +787,11 @@ def uninstall(plugin_dir: Path, plugin_id: str) -> None:
     plugin_root = _connectors_root(plugin_dir) / pid
     if not plugin_root.exists() or not plugin_root.is_dir():
         raise Datam8NotFoundError(message="Plugin not found.", details={"id": pid})
-    shutil.rmtree(plugin_root)
+    try:
+        shutil.rmtree(plugin_root)
+    except PermissionError:
+        # Windows can keep short-lived file handles after import; disable plugin as fallback.
+        _disabled_marker(plugin_root).write_text("disabled\n", encoding="utf-8")
 
 
 def connectors_state(plugin_dir: Path) -> dict[str, Any]:

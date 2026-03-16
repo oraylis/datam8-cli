@@ -1,4 +1,4 @@
-# DataM8
+﻿# DataM8
 # Copyright (C) 2024-2025 ORAYLIS GmbH
 #
 # This file is part of DataM8.
@@ -23,10 +23,10 @@ from pytest_cases import parametrize
 
 class CasesPluginLifecycle:
     @parametrize(
-        "connector_id, zip_name",
+        "connector_id, wheel_name",
         [
-            ("test-conn", "test-conn.zip"),
+            ("test-conn", "datam8_plugin_test_conn-0.1.0-py3-none-any.whl"),
         ],
     )
-    def case_install_enable_disable_uninstall(self, connector_id, zip_name):
-        return connector_id, zip_name
+    def case_install_enable_disable_uninstall(self, connector_id, wheel_name):
+        return connector_id, wheel_name

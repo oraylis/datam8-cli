@@ -1,4 +1,4 @@
-# DataM8
+﻿# DataM8
 # Copyright (C) 2024-2025 ORAYLIS GmbH
 #
 # This file is part of DataM8.
@@ -26,7 +26,12 @@ class Connector:
             "id": "lazydep",
             "displayName": "Lazydep",
             "version": "0.1.0",
-            "capabilities": ["uiSchema", "validateConnection", "metadata"],
+            "capabilities": {
+                "uiSchema": True,
+                "validateConnection": True,
+                "metadata": {"listTables": True, "getTableMetadata": True},
+                "runtimeQuery": {"sql": False, "dataFrame": False},
+            },
         }
 
     @staticmethod

@@ -1,4 +1,4 @@
-# DataM8
+﻿# DataM8
 # Copyright (C) 2024-2025 ORAYLIS GmbH
 #
 # This file is part of DataM8.
@@ -51,11 +51,10 @@ def test_connectors_list_and_ui_schema(
         payload = response.json()
         assert "test-conn" in _connector_ids(payload)
         connector = next((c for c in (payload.get("connectors") or []) if isinstance(c, dict) and c.get("id") == "test-conn"), None)
-        assert connector is not None
-        assert connector.get("dataTypeMapping") == [
-            {"sourceType": "int", "targetType": "int"},
-            {"sourceType": "varchar", "targetType": "string"},
-        ]
+        assert isinstance(connector, dict)
+        assert isinstance(connector.get("capabilities"), dict)
+        assert connector.get("manifestVersion") == 1
+        assert connector.get("dataTypeMapping") == [{"sourceType": "string", "targetType": "string"}]
 
         response = client.get("/connectors/test-conn/ui-schema", headers=headers)
         response.raise_for_status()

@@ -1,4 +1,4 @@
-# DataM8
+﻿# DataM8
 # Copyright (C) 2024-2025 ORAYLIS GmbH
 #
 # This file is part of DataM8.
@@ -27,6 +27,7 @@ from typing import Any
 import httpx
 
 from datam8.core.connectors.resolve import resolve_and_validate
+from datam8.core.connectors.plugin_host import require_capability
 from datam8.core.errors import (
     Datam8ExternalSystemError,
     Datam8PermissionError,
@@ -309,6 +310,7 @@ def fetch_source_metadata(
         runtime_secrets=runtime_secrets,
     )
 
+    require_capability(manifest, "metadata.getTableMetadata")
     if hasattr(connector_cls, "get_table_metadata"):
         schema, table = _split_source_location(source_location)
         md = connector_cls.get_table_metadata(cfg, resolver, schema, table)  # type: ignore[attr-defined]
@@ -334,9 +336,9 @@ def fetch_source_metadata(
     if manifest.get("id") == "http-api":
         return _fetch_http_api_virtual_table_metadata_columns(cfg=cfg, resolver=resolver, source_location=source_location)
 
-    raise Datam8ExternalSystemError(
-        code="metadata_unavailable",
-        message=f"No metadata connector available for data source '{data_source_name}'.",
+    raise Datam8ValidationError(
+        code="connector_manifest_invalid",
+        message=f"Connector '{manifest.get('id')}' advertises metadata.getTableMetadata but no metadata method is available.",
         details={"connector": manifest.get("id")},
     )
 

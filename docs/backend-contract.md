@@ -56,10 +56,12 @@ All non-readiness logs are written to stderr.
 - Search: `GET /search/entities`, `GET /search/text`
 - Connectors/plugins/secrets under `/connectors/*`, `/plugins/*`, `/datasources/*`, `/http/datasources/*`, `/secrets/*`
   - `GET /connectors` returns connector summaries with:
-    - `id`, `displayName`, `version`, `capabilities`
-    - optional `dataTypeMapping`: list of `{ "sourceType": "...", "targetType": "..." }`
+    - `id`, `displayName`, `version`, `manifestVersion`, `capabilities`, `dataTypeMapping`, `distribution`, `installSource`
   - Datasource parity endpoint: `POST /datasources/{dataSourceId}/test`
   - Plugin parity endpoints: `GET /plugins/{pluginId}/info`, `POST /plugins/{pluginId}/verify`, `POST /plugins/verify`
+  - Plugin install is wheel-only via `POST /plugins/install`
+    - Binary upload: `Content-Type: application/octet-stream` + header `x-file-name: <name>.whl`
+    - URL install: JSON body `{ "url": "https://...whl", "sha256": "<64-hex>" }`
   - Secrets parity endpoints: `GET /secrets/runtime/list`, `GET /secrets/runtime/key`
 
 ### Generation
@@ -103,6 +105,31 @@ All non-readiness logs are written to stderr.
 - All JSON responses are object payloads with stable top-level fields per endpoint.
 - No endpoint returns a bare JSON array or untyped ad-hoc dictionary contract.
 - `204 No Content` is used for mutation endpoints that intentionally return no body (e.g. secrets upsert/delete).
+
+### Connector capability contract
+
+`capabilities` is a normalized object (not `string[]`):
+
+```json
+{
+  "uiSchema": true,
+  "validateConnection": true,
+  "metadata": { "listTables": true, "getTableMetadata": true },
+  "runtimeQuery": { "sql": false, "dataFrame": false }
+}
+```
+
+Capability enforcement is strict on connector/datasource routes.
+
+Stable capability/runtime error codes:
+
+- `connector_capability_missing`
+- `connector_manifest_invalid`
+- `connector_dependency_missing`
+- `connector_runtime_context_missing`
+- `connector_secret_resolution_failed`
+- `connector_distribution_invalid`
+- `connector_distribution_hash_mismatch`
 
 ### Typing policy
 
