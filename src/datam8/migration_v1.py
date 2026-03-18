@@ -58,7 +58,7 @@ def data_source(old: ds_legacy.DataSource) -> ds.DataSource:
         description=old.purpose,
         connectionString=old.connectionString,
         dataTypeMapping=new_mapping,
-        extendedProperties=utils.none_if(getattr(old, "ExtendedProperties", None), {})
+        extendedProperties=utils.none_if(getattr(old, "ExtendedProperties", None), {}),
     )
 
     return new
@@ -228,6 +228,8 @@ def attribute(old: core_legacy.Attribute | stage_legacy.Attribute) -> a.Attribut
 
 
 def attribute_stage(old: stage_legacy.Attribute) -> a.Attribute:
+    is_pk = "BK" in (old.tags or [])
+
     new = a.Attribute(
         ordinalNumber=1,
         name=old.name,
@@ -242,6 +244,13 @@ def attribute_stage(old: stage_legacy.Attribute) -> a.Attribute:
         dateAdded=datetime.datetime.now(datetime.UTC),
         dateDeleted=None,
         dateModified=None,
+        properties=[
+            p.PropertyReference(property="tags", value=t)
+            for t in old.tags or []
+            if t not in ["BK"]
+        ],
+        isBusinessKey=is_pk,
+        history=a.HistoryType.SCD0 if is_pk else a.HistoryType.SCD1,
     )
 
     return new
@@ -385,29 +394,9 @@ class MigrationV1:
             ].dateDeleted
 
             try:
-                new_date_modified = (
-                    datetime.datetime.fromisoformat(old_date_modified).astimezone(
-                        datetime.UTC
-                    )
-                    if old_date_modified is not None
-                    else None
-                )
-
-                new_date_added = (
-                    datetime.datetime.fromisoformat(old_date_added).astimezone(
-                        datetime.UTC
-                    )
-                    if old_date_added is not None
-                    else None
-                )
-
-                new_date_deleted = (
-                    datetime.datetime.fromisoformat(old_date_deleted).astimezone(
-                        datetime.UTC
-                    )
-                    if old_date_deleted is not None
-                    else None
-                )
+                new_date_modified = timestamp(old_date_modified)
+                new_date_added = timestamp(old_date_added)
+                new_date_deleted = timestamp(old_date_deleted)
             except Exception as err:
                 logger.error(
                     "Could not convert existing timestamp for %s:%s - %s (%s)",
@@ -428,6 +417,25 @@ class MigrationV1:
 
             attributes.append(new_attribute)
 
+            # combine raw and stage parameter
+        parameters = [
+            m.ModelParameter(name=t.name, value=t.value)
+            for t in raw_entity.entity.parameters or []
+        ] + [
+            m.ModelParameter(name=t.name, value=t.value)
+            for t in old.entity.parameters or []
+            if t.name not in (p.name for p in raw_entity.entity.parameters or [])
+        ]
+
+        properties = [
+            p.PropertyReference(property="tags", value=tag)
+            for tag in old.entity.tags or []
+        ] + [
+            p.PropertyReference(property="tags", value=tag)
+            for tag in raw_entity.entity.tags or []
+            if tag not in (old.entity.tags or [])
+        ]
+
         new = m.ModelEntity(
             id=self.model_file_references[stage_locator].id,
             name=old.entity.name,
@@ -436,6 +444,8 @@ class MigrationV1:
             sources=[new_source],
             transformations=[],
             relationships=[],
+            parameters=parameters,
+            properties=properties,
         )
 
         return new
@@ -807,6 +817,31 @@ class MigrationV1:
 
                     with open(module_path / ".properties.json", "w") as _file:
                         _file.write(module_folder.model_dump_json(**MODEL_DUMP_OPTIONS))
+
+
+def timestamp(old: str | None) -> datetime.datetime | None:
+    if old is None:
+        return None
+    err: Exception | None = None
+
+    try:
+        return datetime.datetime.fromisoformat(old).astimezone(datetime.UTC)
+    except Exception as err_:
+        err = err_
+    try:
+        return datetime.datetime.strptime(old, "%Y-%m-%d %H:%M:%S").astimezone(
+            datetime.UTC
+        )
+    except Exception as err_:
+        err = err_
+    try:
+        return datetime.datetime.strptime(old, "%Y-%M-%d %H:%m:%S").astimezone(
+            datetime.UTC
+        )
+    except Exception as err_:
+        err = err_
+
+    raise err
 
 
 class MigrationError(Exception):
