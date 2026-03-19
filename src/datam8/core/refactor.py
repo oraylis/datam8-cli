@@ -65,7 +65,7 @@ def _run_refactor(
         if changes:
             changed_files.append(str(path))
             if apply:
-                atomic_write_json(path, next_data, indent=4)
+                atomic_write_json(path, next_data, indent=2)
         results.append(RefactorChange(file=str(path), changed=changes > 0, changes=changes))
 
     return {

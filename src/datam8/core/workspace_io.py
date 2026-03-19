@@ -414,7 +414,7 @@ def write_model_entity(rel_path: str, content: Any, solution_path: str | None) -
     else:
         validated_folders = _coerce_folder_metadata_for_write(content, path=rel_path)
         serialized = _dump_sparse_json(validated_folders)
-    atomic_write_json(abs_path, serialized, indent=4)
+    atomic_write_json(abs_path, serialized, indent=2)
     if validated is not None:
         legacy_function_sources.migrate_legacy_function_sources(root=root, rel_path=rel_path, content=validated)
     return str(abs_path)
@@ -469,7 +469,7 @@ def create_model_entity(rel_path: str, *, name: str | None, solution_path: str |
         transformations=[],
         relationships=[],
     )
-    atomic_write_json(abs_path, _dump_sparse_json(template), indent=4)
+    atomic_write_json(abs_path, _dump_sparse_json(template), indent=2)
     return str(abs_path)
 
 
@@ -611,7 +611,7 @@ def duplicate_model_entity(
     if new_id is not None:
         content.id = new_id
     to_abs.parent.mkdir(parents=True, exist_ok=True)
-    atomic_write_json(to_abs, _dump_sparse_json(content), indent=4)
+    atomic_write_json(to_abs, _dump_sparse_json(content), indent=2)
 
     entity_name = legacy_function_sources.read_model_entity_name(from_abs)
     from_folder = legacy_function_sources.derive_function_source_folder_name(from_rel_path, entity_name)
@@ -647,7 +647,7 @@ def write_base_entity(rel_path: str, content: Any, solution_path: str | None) ->
     root = resolved.root_dir
     abs_path = safe_join(root, rel_path)
     validated = _validate_base_entities(content, path=rel_path)
-    atomic_write_json(abs_path, _dump_sparse_json(validated), indent=4)
+    atomic_write_json(abs_path, _dump_sparse_json(validated), indent=2)
     return str(abs_path)
 
 
@@ -658,7 +658,7 @@ def regenerate_index(solution_path: str | None) -> dict[str, Any]:
     entities = list_model_entities(solution_path)
     index = _build_index(sol=sol, entities=entities)
     index_path = root / "index.json"
-    atomic_write_json(index_path, index, indent=4)
+    atomic_write_json(index_path, index, indent=2)
     return index
 
 
@@ -669,7 +669,7 @@ def regenerate_index_with_entities(solution_path: str | None) -> tuple[dict[str,
     entities = list_model_entities(solution_path)
     index = _build_index(sol=sol, entities=entities)
     index_path = root / "index.json"
-    atomic_write_json(index_path, index, indent=4)
+    atomic_write_json(index_path, index, indent=2)
     return index, entities
 
 
@@ -1310,9 +1310,9 @@ def create_new_project(
         "PropertyValues": {"type": "propertyValues", "propertyValues": []},
     }
 
-    atomic_write_json(solution_file_path, solution_content, indent=4)
+    atomic_write_json(solution_file_path, solution_content, indent=2)
     for name, content in base_files.items():
-        atomic_write_json(base_dir / f"{name}.json", content, indent=4)
+        atomic_write_json(base_dir / f"{name}.json", content, indent=2)
 
     return str(solution_file_path)
 
@@ -1432,7 +1432,7 @@ def refactor_properties(
     for abs_path in candidate_paths:
         changed, value = transform_node(_read_json_file(abs_path))
         if changed:
-            atomic_write_json(abs_path, value, indent=4)
+            atomic_write_json(abs_path, value, indent=2)
             updated += 1
 
     return RefactorPropertiesResult(updatedFiles=updated)
