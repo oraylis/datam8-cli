@@ -129,6 +129,11 @@ def safe_merge_data_type(current: Any, source: Any) -> DataType:
     merged: DataType = {**current_s, **source_s}
     merged["type"] = source_s.get("type")
     merged["nullable"] = source_s.get("nullable")
+    if not _supports_char_len(merged.get("type")):
+        merged.pop("charLen", None)
+    if not _supports_precision_scale(merged.get("type")):
+        merged.pop("precision", None)
+        merged.pop("scale", None)
     return merged
 
 
@@ -146,6 +151,35 @@ def _split_source_location(source_location: str) -> tuple[str, str]:
         return parts[0], parts[1]
 
     return "", src
+
+
+def _normalize_type_key(value: Any) -> str:
+    raw = str(value or "").strip().lower()
+    if not raw:
+        return ""
+    return re.sub(r"\(.*\)\s*$", "", raw).strip()
+
+
+def _supports_precision_scale(value: Any) -> bool:
+    type_key = _normalize_type_key(value)
+    return type_key in {"decimal", "numeric", "number", "dec"}
+
+
+def _supports_char_len(value: Any) -> bool:
+    type_key = _normalize_type_key(value)
+    return type_key in {
+        "char",
+        "nchar",
+        "varchar",
+        "nvarchar",
+        "character",
+        "character varying",
+        "string",
+        "binary",
+        "varbinary",
+        "raw",
+        "bytea",
+    }
 
 
 def _data_type_payload(value: data_type_model.DataType | DataType | str | None) -> DataType | str | None:
@@ -321,13 +355,17 @@ def fetch_source_metadata(
         for c in cols:
             if not isinstance(c, dict):
                 continue
+            data_type_value = c.get("dataType") or "string"
+            char_len_value = c.get("maxLength") if _supports_char_len(data_type_value) else None
+            precision_value = c.get("numericPrecision") if _supports_precision_scale(data_type_value) else None
+            scale_value = c.get("numericScale") if _supports_precision_scale(data_type_value) else None
             dt = sanitize_data_type(
                 {
-                    "type": c.get("dataType") or "string",
+                    "type": data_type_value,
                     "nullable": bool(c.get("isNullable", True)),
-                    "charLen": c.get("maxLength"),
-                    "precision": c.get("numericPrecision"),
-                    "scale": c.get("numericScale"),
+                    "charLen": char_len_value,
+                    "precision": precision_value,
+                    "scale": scale_value,
                 }
             )
             out.append({"name": c.get("name"), "dataType": dt, "isPrimaryKey": bool(c.get("isPrimaryKey", False))})

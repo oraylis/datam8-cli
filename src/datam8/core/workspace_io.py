@@ -1425,7 +1425,7 @@ def refactor_properties(
     root = resolved.root_dir
     candidate_paths = [
         *_iter_json_files(root, str(sol.basePath)),
-        *_iter_json_files(root, str(sol.modelPath), ignore=[".properties.json"]),
+        *_iter_json_files(root, str(sol.modelPath)),
     ]
     updated = 0
 

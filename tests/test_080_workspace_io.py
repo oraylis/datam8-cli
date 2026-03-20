@@ -181,3 +181,41 @@ def test_create_new_project_writes_data_types_targets_for_target(tmp_path: Path)
     by_name = {row["name"]: row for row in rows}
     assert by_name["datetime"]["targets"]["sqlserver"] == "datetime2"
     assert by_name["boolean"]["targets"]["sqlserver"] == "bit"
+
+
+def test_refactor_properties_updates_entity_and_folder_metadata(tmp_path: Path) -> None:
+    solution_path = _create_solution(tmp_path, "Model/010-Stage/Old")
+    entity_path = tmp_path / "Model/010-Stage/Old/Customer.json"
+    folder_props_path = tmp_path / "Model/010-Stage/Old/.properties.json"
+
+    entity_payload = json.loads(entity_path.read_text(encoding="utf-8"))
+    entity_payload["properties"] = [
+        {"property": "SourceSystem", "value": "CRM"},
+        {"property": "Lifecycle", "value": "Bronze"},
+    ]
+    _write_json(entity_path, entity_payload)
+
+    folder_payload = json.loads(folder_props_path.read_text(encoding="utf-8"))
+    folder_payload["properties"] = [
+        {"property": "SourceSystem", "value": "CRM"},
+        {"property": "Lifecycle", "value": "Silver"},
+    ]
+    _write_json(folder_props_path, folder_payload)
+
+    result = workspace_io.refactor_properties(
+        solution_path=str(solution_path),
+        property_renames=[{"oldName": "SourceSystem", "newName": "System"}],
+        value_renames=[{"property": "SourceSystem", "oldValue": "CRM", "newValue": "Dynamics"}],
+        deleted_properties=[],
+        deleted_values=[],
+    )
+
+    assert result.updatedFiles == 2
+
+    updated_entity = json.loads(entity_path.read_text(encoding="utf-8"))
+    assert {"property": "System", "value": "Dynamics"} in updated_entity["properties"]
+    assert {"property": "SourceSystem", "value": "CRM"} not in updated_entity["properties"]
+
+    updated_folder = json.loads(folder_props_path.read_text(encoding="utf-8"))
+    assert {"property": "System", "value": "Dynamics"} in updated_folder["properties"]
+    assert {"property": "SourceSystem", "value": "CRM"} not in updated_folder["properties"]
