@@ -222,7 +222,7 @@ Version = Annotated[
 
 DataSource = Annotated[
     str,
-    typer.Argument(help="Name or locator of a data source"),
+    typer.Argument(help="Name of a data source"),
 ]
 
 Locator = Annotated[
@@ -234,3 +234,8 @@ LocatorOpt = Annotated[
     str,
     typer.Option(help="A locator to finetune search results"),
 ]
+
+Limit = Annotated[int, typer.Option("-n", help="Controls the max limit of rows to display")]
+
+SchemaName = Annotated[str | None, typer.Option(help="Name of a source schema")]
+TableName = Annotated[str, typer.Argument(help="Name of table in source")]

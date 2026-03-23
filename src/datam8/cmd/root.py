@@ -81,7 +81,7 @@ def _callback(
     version: opts.Version = False,
 ):
     if version:
-        typer.echo(common.get_version())
+        typer.echo(config.get_version())
         raise typer.Exit(code=0)
 
 

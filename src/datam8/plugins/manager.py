@@ -1,5 +1,3 @@
-# DataM8
-# Copyright (C) 2024-2025 ORAYLIS GmbH
 #
 # This file is part of DataM8.
 #
@@ -34,7 +32,9 @@ type PluginInstantiator = Callable[[DataSource], Plugin]
 
 
 def _create_plugin_instantiator(cls: type[Plugin], manifest: PluginManifest) -> PluginInstantiator:
-    def instantiator(ds, /) -> Plugin:
+    logger.debug(f"Creating plugin instantiator for {manifest.id}")
+
+    def instantiator(ds: DataSource, /) -> Plugin:
         return cls(manifest, ds)
 
     return instantiator
@@ -65,23 +65,29 @@ class PluginManager:
 
         self.__solution_plugins[name] = plugin
 
+    def reload(self, solution: Solution) -> list[PluginManifest]:
+        self.reset_plugins()
+        self.load_plugins_from_solution(solution)
+
+        return self.get_plugins()
+
     def reset_plugins(self) -> None:
         self.__loaded_plugins = {}
 
-    def remove_plugin(self, plugin: str, /) -> None:
-        if plugin in self.__solution_plugins:
-            del self.__solution_plugins[plugin]
+    def remove_plugin(self, plugin_id: str, /) -> None:
+        if plugin_id in self.__solution_plugins:
+            del self.__solution_plugins[plugin_id]
 
-    def get_plugin_manifest(self, plugin: str, /) -> PluginManifest:
+    def get_plugin_manifest(self, plugin_id: str, /) -> PluginManifest:
         manifest: PluginManifest | None = None
 
-        match plugin:
-            case _ if plugin in self.__solution_plugins:
-                manifest = self.__solution_plugins[plugin]
-            case _ if plugin in PluginManager.__builtin_plugins:
-                manifest = PluginManager.__builtin_plugins[plugin]
+        match plugin_id:
+            case _ if plugin_id in self.__solution_plugins:
+                manifest = self.__solution_plugins[plugin_id]
+            case _ if plugin_id in PluginManager.__builtin_plugins:
+                manifest = PluginManager.__builtin_plugins[plugin_id]
             case _:
-                raise utils.create_error(f"Plugin `{plugin}` is not registered.")
+                raise utils.create_error(f"Plugin `{plugin_id}` is not registered.")
 
         return manifest
 
@@ -93,10 +99,15 @@ class PluginManager:
         To reset all plugins or remove specific ones use `remove_plugin()` and `reset_plugins()` respectivly.
         """
         manifest = self.get_plugin_manifest(data_source_type.name)
+        PluginClass = self.get_plugin(data_source_type.name)
 
-        if data_source_type.name in self.__loaded_plugins:
-            PluginClass = self.__loaded_plugins[data_source_type.name]
-            return _create_plugin_instantiator(PluginClass, manifest)
+        return _create_plugin_instantiator(PluginClass, manifest)
+
+    def get_plugin(self, plugin_id, /) -> type[Plugin]:
+        if plugin_id in self.__loaded_plugins:
+            return self.__loaded_plugins[plugin_id]
+
+        manifest = self.get_plugin_manifest(plugin_id)
 
         if ":" not in manifest.entryPoint:
             raise utils.create_error(
@@ -113,9 +124,9 @@ class PluginManager:
                 module = importlib.import_module(module_name)
 
         PluginClass = getattr(module, class_name)
-        self.__loaded_plugins[data_source_type.name] = PluginClass
+        self.__loaded_plugins[plugin_id] = PluginClass
 
-        return _create_plugin_instantiator(PluginClass, manifest)
+        return PluginClass
 
     def get_plugins(self) -> list[PluginManifest]:
         """

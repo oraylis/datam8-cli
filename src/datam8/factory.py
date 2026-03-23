@@ -32,18 +32,45 @@ from datam8_model.property import PropertyReference, PropertyValue
 logger = logging.getLogger(__name__)
 
 _model: model.Model | None = None
+_plugin_manager: PluginManager | None = None
 
 
-def get_plugin_manager(solution: s.Solution | None = None) -> PluginManager:
-    pm = PluginManager(solution or get_model().solution)
+def get_plugin_manager(
+    solution: s.Solution | None = None, /, *, reset: bool = False
+) -> PluginManager:
+    """
+    Get a plugin manager for the currently loaded solution.
 
-    return pm
+    Parameter
+    ---------
+    solution : :class:`Solution`, optional
+        If not provided the currently loaded / configured Solution will be used
+    reset : `bool`, optional
+        If set a new PluginManager will be created. Defaults to `False`.
+
+    Returns
+    -------
+    A :class:`PluginManager` object, that if newly created has all available Plugins already registered
+    """
+    global _plugin_manager
+
+    if _plugin_manager is None or reset:
+        _plugin_manager = PluginManager(solution or get_model().solution)
+
+    return _plugin_manager
 
 
-def get_plugin_for_data_source(data_source: ds.DataSource) -> Plugin:
+def get_plugin_for_data_source(data_source: ds.DataSource | str) -> Plugin:
     _model = get_model()
-    _type = _model.get_data_source_type(data_source.type)
-    plugin = get_plugin_manager(_model.solution).get_plugin_instantiator(_type.entity)(data_source)
+
+    if isinstance(data_source, str):
+        data_source_ = get_model().get_data_source(data_source).entity
+    else:
+        data_source_ = data_source
+
+    _type = _model.get_data_source_type(data_source_.type)
+    plugin = get_plugin_manager(_model.solution).get_plugin_instantiator(_type.entity)(data_source_)
+    logger.info(f"Lookup {plugin} for {_type}")
     return plugin
 
 

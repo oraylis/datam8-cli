@@ -16,13 +16,31 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-from fastapi import APIRouter, HTTPException
+from typing import Any
 
+from fastapi import APIRouter
+
+from datam8 import factory
 from datam8_model import plugin as pl
 
 plugins_router = APIRouter(prefix="/plugins")
 
 
 @plugins_router.get("/")
-async def get_plugins() -> pl.PluginManifest:
-    raise HTTPException(status_code=501)
+async def get_plugins() -> list[pl.PluginManifest]:
+    return factory.get_plugin_manager().get_plugins()
+
+
+@plugins_router.get("/reload")
+async def reload_olugins() -> list[pl.PluginManifest]:
+    return factory.get_plugin_manager().reload(factory.get_model().solution)
+
+
+@plugins_router.get("/{plugin_id}")
+async def get_plugin(plugin_id: str) -> pl.PluginManifest:
+    return factory.get_plugin_manager().get_plugin_manifest(plugin_id)
+
+
+@plugins_router.get("/{plugin_id}/ui-schema")
+async def get_plugin_ui_schema(plugin_id: str) -> dict[str, Any]:
+    return factory.get_plugin_manager().get_plugin(plugin_id).get_ui_schema()

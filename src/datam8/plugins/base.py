@@ -20,6 +20,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from datam8_model.data_source import DataSource
+from datam8_model.data_type import DataTypeDefinition
 from datam8_model.plugin import Capability, PluginManifest
 
 VALIDATION_CONNECTION = Capability.VALIDATION_CONNECTION
@@ -28,23 +29,17 @@ UI_SCHEMA = Capability.UI_SCHEMA
 
 
 class Plugin(ABC):
-    def __init__(
-        self,
-        manifest: PluginManifest,
-        /,
-        data_source: DataSource,
-    ) -> None:
-        self.__manifest = manifest
-        self.__data_source = data_source
-        self.__type = type
+    def __init__(self, manifest: PluginManifest, /, data_source: DataSource) -> None:
+        self._manifest: PluginManifest = manifest
+        self._data_source: DataSource = data_source
 
     def is_capable_of(self, capability: Capability, /) -> bool:
-        return capability in self.__manifest.capabilities
+        return capability in self._manifest.capabilities
 
     def get_manifest(self) -> PluginManifest:
-        return self.__manifest
+        return self._manifest
 
-    def validate_connection(self) -> Exception | None:
+    def validate_connection(self, /) -> Exception | None:
         if not self.is_capable_of(VALIDATION_CONNECTION):
             return
 
@@ -56,7 +51,7 @@ class Plugin(ABC):
         if not self.is_capable_of(METADATA):
             return
 
-    def list_tables(self, schema: str, /) -> Any:
+    def list_tables(self, schema: str | None = None, /) -> Any:
         if not self.is_capable_of(METADATA):
             return
 
@@ -64,5 +59,18 @@ class Plugin(ABC):
         if not self.is_capable_of(METADATA):
             return
 
+    def preview_data(
+        self, table: str, /, schema: str | None = None, *, limit: int = 10
+    ) -> list[list[str]]:
+        raise NotImplementedError("Plugin does not implement preview_data")
+
+    @staticmethod
     @abstractmethod
-    def get_ui_schema(self) -> Any: ...
+    def get_ui_schema() -> dict[str, Any]: ...
+
+    @staticmethod
+    @abstractmethod
+    def get_data_type_mappings() -> dict[str, DataTypeDefinition]: ...
+
+    def __repr__(self) -> str:
+        return f"Plugin(id='{self._manifest.id}' data_source='{self._data_source.name}')"

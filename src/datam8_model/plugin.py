@@ -36,14 +36,6 @@ class Capability(Enum):
     METADATA = "metadata"
 
 
-class PluginType(Enum):
-    """
-    Available types of plugins
-    """
-
-    CONNECTOR = "connector"
-
-
 class PluginManifest(BaseModel):
     """
     A DataM8 plugin that e.g. provides additional ways to connect to source systems
@@ -61,7 +53,6 @@ class PluginManifest(BaseModel):
     Human-readable display name
     """
     version: str
-    type: PluginType
     entryPoint: str
     """
     Python entrypoint that will be imported as a class of plugin
