@@ -39,6 +39,7 @@ class Selectors(Enum):
     LOCATOR = "locator"
     ID = "id"
     NAME = "name"
+    PROPERTY = "property"
 
 
 Lazy = Annotated[
@@ -219,4 +220,9 @@ DataSource = Annotated[
 Locator = Annotated[
     str,
     typer.Argument(help="A search locator"),
+]
+
+LocatorOpt = Annotated[
+    str,
+    typer.Option(help="A locator to finetune search results"),
 ]

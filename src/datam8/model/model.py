@@ -15,7 +15,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Annotated, Any, cast
 
@@ -208,28 +208,116 @@ class Model:
 
         property_references += [
             pr
-            for pr in wrapper.get_inherited_property_references(self)
+            for pr in self.get_inherited_property_references(wrapper)
             # NOTE: properties set on the entity itself takes precedene to
             # inherited properties
             if pr not in property_references
         ]
 
         if len(property_references) > 0:
-            wrapper._resolve_properties(self, property_references)
+            self._resolve_properties(wrapper, property_references)
 
-        wrapper._resolve_model_attributes(self)
+        self._resolve_model_attributes(wrapper)
         wrapper.resolved = True
 
+        logger.info("Resolved %s", str(wrapper.locator))
+
         return wrapper
+
+    def _resolve_model_attributes[T: b.BaseEntityType](self, wrapper: EntityWrapper[T], /) -> None:
+        if not isinstance(wrapper.entity, m.ModelEntity):
+            return
+
+        for attr in wrapper.entity.attributes:
+            pass
+            # logger.error(attr.properties)
 
     def resolve(self) -> None:
         "Resolve all entities by iterating over them."
         for wrapper in self.get_entity_iterator():
             self.resolve_wrapper(wrapper)
 
+    def get_inherited_property_references[T: b.BaseEntityType](
+        self, wrapper: EntityWrapper[T], /
+    ) -> list[p.PropertyReference]:
+        """
+        Get a distinct list of properties of parent Entities (most likely foldres).
+
+        Returns
+        -------
+        `list[PropertyReference]`
+            A list of PropertyReference of parent locators. They are not yet resolved recursivley.
+        """
+        parent_properties: list[p.PropertyReference] = []
+
+        for parent in wrapper.locator.parents:
+            if parent not in self.folders:
+                continue
+
+            parent_folder = self.folders[parent].entity
+
+            if not parent_folder.properties:
+                continue
+
+            parent_properties.extend(
+                iter([pr for pr in parent_folder.properties if pr not in parent_properties])
+            )
+
+        # in case the entity is a model also get the zones properties
+        if wrapper.locator.entityType == b.EntityType.MODEL_ENTITIES.value:
+            zone = self.get_zone_for_entity(wrapper)  # ty: ignore[invalid-argument-type]
+            if not zone.resolved:
+                self.resolve_wrapper(zone)
+
+            if zone.entity.properties is not None:
+                parent_properties.extend(
+                    iter([pr for pr in zone.entity.properties if pr not in parent_properties])
+                )
+
+        return parent_properties
+
+    def _resolve_properties[T: b.BaseEntityType](
+        self, wrapper: EntityWrapper[T], /, properties: Sequence[p.PropertyReference]
+    ) -> None:
+        """
+        Recursivly resolve properties assigned to this entity, directly or indirectly via
+        folders.
+
+        Parent property references are currently only being resolved for modelEntities.
+
+        Parameters
+        ----------
+        model : `model.model`
+            The DataM8 model to lookup up the property values. This normally is the same
+            model as the one this EntityWrapper resides in, but could technically be a
+            sperate model.
+        properties : `Sequence[PropertyReference]`
+            PropertyReferences that should be looked up recursively.
+        """
+        if len(properties) == 0:
+            return
+
+        converted_properties = [PropertyReference.from_model_ref(pr) for pr in properties]
+
+        logger.debug(
+            "%s - %s",
+            wrapper.locator,
+            [f"{p.property}:{p.value}" for p in converted_properties],
+        )
+
+        for ref in converted_properties:
+            property_value = self.get_property_value(ref.value, ref.property)
+            wrapper._properties[property_value.locator] = property_value.entity
+
+            # NOTE: break recursion
+            if property_value.entity.properties:
+                self._resolve_properties(wrapper, property_value.entity.properties)
+
     def get_entity_iterator(self) -> Iterator[EntityWrapperVariant]:
         for entity_type in b.EntityType:
             entities: EntityDict = getattr(self, entity_type.value)
+            logger.debug(f"Iterating... {entity_type}")
+
             for _, wrapper in entities.items():
                 logger.debug(f"Iterating... {str(wrapper.locator)}")
                 yield wrapper
@@ -269,6 +357,18 @@ class Model:
             self.resolve_wrapper(entity)
 
         return entity
+
+    def get_zone_for_entity(
+        self, wrapper: EntityWrapper[m.ModelEntity], /
+    ) -> EntityWrapper[z.Zone]:
+        if len(wrapper.locator.folders) == 0:
+            raise utils.create_error(errors.InvalidLocatorError(str(wrapper.locator)))
+
+        for zone in self.zones.values():
+            if zone.entity.localFolderName == wrapper.locator.folders[0]:
+                return zone
+
+        raise utils.create_error(errors.EntityNotFoundError(f"zones/{wrapper.locator.folders[0]}"))
 
     def get_zone(self, name: str, /) -> EntityWrapper[z.Zone]:
         """Get a zone by name."""
@@ -571,6 +671,28 @@ class Model:
         logger.debug(f"Moved {_from} to {new_locator}")
 
         return to_wrapper
+
+    def get_entities_by_property(
+        self,
+        property_locator: str | Locator,
+        /,
+        model_locator: str | Locator = "modelEntities/",
+    ):
+        locator = _ensure_locator(property_locator)
+        if locator.entityName is None or locator.entityType not in [
+            b.EntityType.PROPERTIES.value,
+            b.EntityType.PROPERTY_VALUES.value,
+        ]:
+            raise utils.create_error(errors.InvalidLocatorError(str(locator)))
+
+        property_value = self.get_entity_by_locator(locator)
+        results = [
+            wrapper
+            for wrapper in self.get_entities(model_locator)
+            if property_value.locator in wrapper.properties
+        ]
+
+        return results
 
     def get_entity_by_selector(
         self, selector: str, /, *, by: opts.Selectors
