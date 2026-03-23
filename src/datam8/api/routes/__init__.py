@@ -65,6 +65,7 @@ async def get_version() -> VersionResponse:
 
 class ConfigResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
+    name: str
     solution_file_path: Annotated[Path, Field(alias="solutionFilePath")]
     lazy: bool
     supported_model_versions: Annotated[list[str], Field(alias="supportedModelVersions")]
@@ -74,6 +75,7 @@ class ConfigResponse(BaseModel):
 @router.get("/config")
 async def get_config() -> ConfigResponse:
     response = ConfigResponse(
+        name=config.get_name(),
         solution_file_path=config.solution_path,
         lazy=config.lazy,
         supported_model_versions=config.supported_model_versions,

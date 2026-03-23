@@ -19,7 +19,7 @@
 import typer
 
 from datam8 import config, logging, opts
-from datam8.core.runtime_meta import get_version
+from datam8.core import errors
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,12 @@ def main_callback(
     """CLI root callback."""
     version_callback(version)
 
-    config.set_solution(solution_path)
+    try:
+        config.set_solution(solution_path)
+    except errors.Datam8Error as err:
+        typer.echo(err.message)
+        raise typer.Exit(1)
+
     config.log_level = log_level
 
     logging.setup_logger()
@@ -41,5 +46,5 @@ def main_callback(
 def version_callback(value: bool) -> None:
     """Print CLI version when --version is passed."""
     if value:
-        typer.echo(get_version())
+        typer.echo(config.get_version())
         raise typer.Exit(code=0)

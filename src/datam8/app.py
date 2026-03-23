@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-from .cmd import root, plugin
+from .cmd import root, plugin, secret
 
 import warnings
 
@@ -25,6 +25,7 @@ warnings.filterwarnings("error", module="pydantic.*")
 
 app = root.app
 app.add_typer(plugin.app)
+app.add_typer(secret.app)
 
 
 if __name__ == "__main__":

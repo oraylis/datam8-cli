@@ -48,6 +48,10 @@ def get_version() -> str:
     return version("datam8")
 
 
+def get_name() -> str:
+    return solution_path.name.removesuffix(".dm8s")
+
+
 def set_solution(path: str | Path) -> None:
     """
     Configures the solution to be used within the library.
