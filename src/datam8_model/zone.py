@@ -18,10 +18,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict
+
+from . import property
 
 
 class Zone(BaseModel):
@@ -51,6 +54,7 @@ class Zone(BaseModel):
     """
     Local folder name used in file system structure
     """
+    properties: Sequence[property.PropertyReference] | None = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")

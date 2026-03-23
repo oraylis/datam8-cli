@@ -52,7 +52,7 @@ app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
     pretty_exceptions_enable=True,
-    pretty_exceptions_show_locals=True,
+    pretty_exceptions_show_locals=False,
     pretty_exceptions_short=False,
     context_settings={
         "help_option_names": ["-h", "--help"],
@@ -98,6 +98,33 @@ def list(
 
     model = __setup_model_for_cli(solution_path, log_level, version)
     wrappers = model.get_entities(locator)
+
+    if len(wrappers) == 0:
+        utils.emit_result("No entities found for search locator")
+        raise typer.Exit(1)
+
+    utils.emit_result(
+        f"{len(wrappers)} entities in total",
+        *[str(wrapper.locator) for wrapper in wrappers],
+        models=[wrapper.entity for wrapper in wrappers],
+        json=json_output,
+    )
+
+
+@app.command()
+def list_by_property(
+    locator: opts.Locator,
+    solution_path: opts.SolutionPath,
+    model_locator: opts.LocatorOpt = "modelEntities",
+    log_level: opts.LogLevel = opts.LogLevels.WARNING,
+    version: opts.Version = False,
+    json_output: opts.JsonOutput = False,
+) -> None:
+    "List Entities that have a specific property assigned. Searches for model entities by default."
+    common.main_callback(solution_path, log_level, version)
+
+    model = __setup_model_for_cli(solution_path, log_level, version)
+    wrappers = model.get_entities_by_property(locator, model_locator)
 
     if len(wrappers) == 0:
         utils.emit_result("No entities found for search locator")

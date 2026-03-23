@@ -15,7 +15,6 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
-from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, TypeAlias
 
@@ -176,77 +175,6 @@ class EntityWrapper[T: b.BaseEntityType](BaseModel):
                 return True
 
         return False
-
-    def _resolve_model_attributes(self, model: "Model", /) -> None:
-        if not isinstance(self.entity, m.ModelEntity):
-            return
-
-        for attr in self.entity.attributes:
-            pass
-            # logger.error(attr.properties)
-
-    def get_inherited_property_references(self, model: "Model", /) -> list[p.PropertyReference]:
-        """
-        Get a distinct list of properties of parent Entities (most likely foldres).
-
-        Returns
-        -------
-        list[PropertyReference]
-            A list of PropertyReference of parent locators. They are not yet resolved recursivley.
-        """
-        parent_properties: list[p.PropertyReference] = []
-
-        for parent in self.locator.parents:
-            if parent not in model.folders:
-                continue
-
-            parent_folder = model.folders[parent].entity
-
-            if not parent_folder.properties:
-                continue
-
-            parent_properties.extend(
-                iter([pr for pr in parent_folder.properties if pr not in parent_properties])
-            )
-
-        return parent_properties
-
-    def _resolve_properties(
-        self, model: "Model", /, properties: Sequence[p.PropertyReference]
-    ) -> None:
-        """
-        Recursivly resolve properties assigned to this entity, directly or indirectly via
-        folders.
-
-        Parent property references are currently only being resolved for modelEntities.
-
-        Parameters
-        ----------
-        model : `model.model`
-            The DataM8 model to lookup up the property values. This normally is the same
-            model as the one this EntityWrapper resides in, but could technically be a
-            sperate model.
-        properties : `Sequence[PropertyReference]`
-            PropertyReferences that should be looked up recursively.
-        """
-        if len(properties) == 0:
-            return
-
-        converted_properties = [PropertyReference.from_model_ref(pr) for pr in properties]
-
-        logger.debug(
-            "%s - %s",
-            self.locator,
-            [f"{p.property}:{p.value}" for p in converted_properties],
-        )
-
-        for ref in converted_properties:
-            property_value = model.get_property_value(ref.value, ref.property)
-            self._properties[property_value.locator] = property_value.entity
-
-            # NOTE: break recursion
-            if property_value.entity.properties:
-                self._resolve_properties(model, property_value.entity.properties)
 
     def update(self, **kwargs: Any) -> None:
         new_entity = self.entity.model_copy(update=kwargs, deep=True)
