@@ -15,6 +15,9 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+from __future__ import annotations
+
 import asyncio
 import dataclasses
 import os
@@ -27,12 +30,12 @@ from typing import Any, Protocol
 
 import jinja2
 
-from datam8 import config, exceptions, logging, model, model_exceptions, utils
+from datam8 import config, errors, logging, model, utils
 from datam8.utils import cache, importer
 from datam8_model.solution import GeneratorTarget
 
 logger = logging.getLogger(__name__)
-payload_functions: dict["PayloadOrder", list["PayloadDefinition"]] = {}
+payload_functions: dict[PayloadOrder, list[PayloadDefinition]] = {}
 
 type PayloadFunction = Callable[[model.Model, cache.Cache], Sequence[IPayload]]
 type PayloadOrder = int
@@ -68,7 +71,7 @@ def generate_output(
                 clean_output=clean_output,
             ),
         )
-    except model_exceptions.InvalidGeneratorTargetError as err:
+    except errors.InvalidGeneratorTargetError as err:
         logger.error(err)
         sys.exit(1)
     except RenderError as err:
@@ -81,7 +84,7 @@ def generate_output(
 def __generate_output_unsafe(
     model: model.Model,
     /,
-    _config: "GeneratorConfig",
+    _config: GeneratorConfig,
 ) -> Path:
     payload_cache = cache.Cache()
 
@@ -150,7 +153,7 @@ def register_payload(
         if func.__name__ in [  # type: ignore
             payload.name for payloads in payload_functions.values() for payload in payloads
         ]:
-            raise exceptions.PayloadRegisteredMultipleTimesError(func_name)
+            raise errors.PayloadRegisteredMultipleTimesError(func_name)
 
         if order not in payload_functions:
             payload_functions[order] = []
@@ -169,12 +172,12 @@ def register_payload(
 
 
 async def render_payload(
-    payload: "PayloadDefinition",
+    payload: PayloadDefinition,
     /,
     model: model.Model,
     cache: cache.Cache,
     *,
-    _config: "GeneratorConfig",
+    _config: GeneratorConfig,
 ) -> Exception | None:
     """Render payload.
 
@@ -210,7 +213,7 @@ async def render_payload(
         return err
 
     template_loader = jinja2.FileSystemLoader([_config.template_path, config.solution_folder_path])
-    template_env = jinja2.Environment(loader=template_loader)
+    template_env = jinja2.Environment(loader=template_loader, autoescape=True)
     template_path = _config.target.sourcePath / payload.template_path
 
     try:
@@ -245,7 +248,7 @@ async def render_template(
     template: jinja2.Template,
     output_path: Path,
     *,
-    _config: "GeneratorConfig",
+    _config: GeneratorConfig,
 ) -> None | Exception:
     """Render template.
 

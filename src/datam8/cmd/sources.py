@@ -16,9 +16,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+from datetime import UTC, datetime
+
 import typer
 
-from datam8 import factory, logging, opts
+from datam8 import factory, logging, opts, utils
 
 from . import common
 
@@ -48,9 +50,25 @@ def list_tables(
     plugin = factory.get_plugin_for_data_source(data_source_name)
     tables = plugin.list_tables(schema_name)
 
-    typer.echo(f"Found {len(tables)} tables")
-    for tab in tables:
-        typer.echo(tab)
+    typer.echo(f"Found {len(tables.rows())} source objects")
+    tables.show(None, tbl_hide_column_data_types=True, tbl_hide_dataframe_shape=True)
+
+
+@app.command()
+def list_schemas(
+    data_source_name: opts.DataSource,
+    solution_path: opts.SolutionPath,
+    log_level: opts.LogLevel = opts.LogLevels.WARNING,
+    version: opts.Version = False,
+):
+    "List availabe sources schemas"
+    common.main_callback(solution_path, log_level, version)
+
+    plugin = factory.get_plugin_for_data_source(data_source_name)
+    schemas = plugin.list_schemas()
+
+    typer.echo(f"Found {len(schemas.rows())} schemas")
+    schemas.show(None, tbl_hide_column_data_types=True, tbl_hide_dataframe_shape=True)
 
 
 @app.command()
@@ -58,8 +76,9 @@ def preview(
     data_source_name: opts.DataSource,
     table_name: opts.TableName,
     solution_path: opts.SolutionPath,
-    limit: opts.Limit = 10,
     schema_name: opts.SchemaName = None,
+    limit: opts.Limit = 10,
+    col_limit: opts.ColLimit = None,
     log_level: opts.LogLevel = opts.LogLevels.WARNING,
     version: opts.Version = False,
 ):
@@ -67,16 +86,91 @@ def preview(
     common.main_callback(solution_path, log_level, version)
 
     plugin = factory.get_plugin_for_data_source(data_source_name)
-    try:
-        preview = plugin.preview_data(table_name, schema_name, limit=limit)
-    except Exception as err:
-        typer.echo("Error previewing data")
-        typer.echo(err)
-        raise typer.Exit(1)
+    preview = plugin.preview_data(table_name, schema_name, limit=limit)
 
-    typer.echo(f"Showing first {len(preview)} entries")
-    for entry in preview:
-        typer.echo(entry)
+    for df in preview.collect_batches(chunk_size=limit):
+        df.show(
+            limit=limit,
+            tbl_hide_dataframe_shape=True,
+            tbl_cols=col_limit or len(preview.collect_schema().names()),
+        )
+
+        # since the limit is pushed down to the source, there will be only one batch
+        # batches are mostly used to safely get a dataframe from a LazyFrame
+        raise typer.Exit(0)
+
+    typer.echo(f"No data found in {table_name}")
+
+
+@app.command("import")
+def import_(
+    data_source_name: opts.DataSource,
+    table_name: opts.TableName,
+    locator: opts.Locator,
+    solution_path: opts.SolutionPath,
+    schema_name: opts.SchemaName = None,
+    log_level: opts.LogLevel = opts.LogLevels.WARNING,
+    version: opts.Version = False,
+):
+    "Import a table from a source into the model at the provided locator"
+    common.main_callback(solution_path, log_level, version)
+
+    model_ = factory.get_model()
+    if model_.has_locator(locator):
+        raise utils.create_error("Entity already exists for this locator")
+
+    pm = factory.get_plugin_for_data_source(data_source_name)
+    metadata = pm.get_table_metadata(table_name, schema_name)
+    _ = model_.add_entity(
+        locator,
+        content={
+            "sources": [
+                {
+                    "dataSource": data_source_name,
+                    "sourceLocation": f"[{schema_name}].[{table_name}]",
+                }
+            ],
+            "attributes": [
+                {
+                    "ordinalNumber": 1,
+                    "name": row[0],
+                    "attributeType": "Generic String",
+                    "dataType": {
+                        "type": row[4],
+                        "nullable": True if row[2] == "YES" else False,
+                    },
+                    "dateAdded": datetime.now(UTC),
+                }
+                for row in metadata.rows()
+            ],
+            "transformations": [],
+            "relationships": [],
+        },
+    )
+    model_.save(locator)
+
+    typer.echo(f"Source table imported into model at {locator}")
+
+
+@app.command()
+def table_metadata(
+    data_source_name: opts.DataSource,
+    table_name: opts.TableName,
+    solution_path: opts.SolutionPath,
+    schema_name: opts.SchemaName = None,
+    log_level: opts.LogLevel = opts.LogLevels.WARNING,
+    version: opts.Version = False,
+):
+    "Retrieve table metadata from a source"
+    common.main_callback(solution_path, log_level, version)
+
+    plugin = factory.get_plugin_for_data_source(data_source_name)
+    metadata = plugin.get_table_metadata(table_name, schema_name)
+    metadata.show(
+        limit=None,
+        tbl_hide_dataframe_shape=True,
+        tbl_cols=len(metadata.columns),
+    )
 
 
 @app.command()
@@ -90,12 +184,6 @@ def test_connection(
     common.main_callback(solution_path, log_level, version)
 
     plugin = factory.get_plugin_for_data_source(data_source_name)
-    try:
-        plugin.validate_connection()
-        plugin.test_connection()
-    except Exception as err:
-        typer.echo("Connection could not be established")
-        typer.echo(err)
-        raise typer.Exit(1) from err
+    plugin.test_connection()
 
     typer.echo("Datasource tested successfully")

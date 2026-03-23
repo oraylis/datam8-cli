@@ -23,7 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from datam8 import factory, model
 from datam8_model import base as b
 
-entities_router = APIRouter(prefix="/entities")
+entities_router = APIRouter(prefix="/entities", tags=["entities"])
 
 
 @entities_router.get("/{locator:path}")
@@ -71,7 +71,7 @@ class CloneEntityBody(BaseModel):
     new_locator: Annotated[str, Field(alias="newLocator")]
 
 
-@entities_router.post("/clone")
+@entities_router.put("/clone")
 async def clone_entity(body: CloneEntityBody) -> model.EntityWrapper[b.BaseEntityType]:
     return factory.get_model().clone_entity(body.locator, body.new_locator)
 

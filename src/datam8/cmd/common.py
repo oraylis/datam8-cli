@@ -18,8 +18,7 @@
 
 import typer
 
-from datam8 import config, logging, opts
-from datam8.core import errors
+from datam8 import config, errors, logging, opts
 
 logger = logging.getLogger(__name__)
 

@@ -16,18 +16,27 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+from __future__ import annotations
+
 import os
 import socket
+import uuid
 
-import uvicorn
-from fastapi import FastAPI, Request
-from fastapi.exceptions import RequestValidationError
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+import typer
+
+try:
+    import uvicorn
+    from fastapi import FastAPI, Request
+    from fastapi.exceptions import RequestValidationError
+    from fastapi.middleware.cors import CORSMiddleware
+    from fastapi.responses import JSONResponse
+except ModuleNotFoundError as err:
+    typer.echo("Required modules for API not installed - Install the 'api' extra")
+    raise typer.Exit(1) from err
+
 
 from datam8 import config, factory, logging
-from datam8.core.errors import Datam8Error, Datam8ValidationError
-from datam8.core.runtime_meta import new_trace_id
+from datam8.errors import Datam8Error, Datam8ValidationError
 
 from .routes import router
 
@@ -35,21 +44,23 @@ logger = logging.getLogger(__name__)
 
 
 def _status_for_error(err: Datam8Error) -> int:
-    if err.code in {"validation_error"}:
-        return 400
-    if err.code in {"not_found"}:
-        return 404
-    if err.code in {"conflict", "locked"}:
-        return 409
-    if err.code in {"auth"}:
-        return 401
-    if err.code in {"permission"}:
-        return 403
-    if err.code in {"not_implemented"}:
-        return 501
-    if err.exit_code == 5:
-        return 502
-    return 500
+    match [err.code, err.exit_code]:
+        case ["validation_error", _]:
+            return 400
+        case ["not_found", _]:
+            return 404
+        case ["conflict" | "locked", _]:
+            return 409
+        case ["auth", _]:
+            return 401
+        case ["permission", _]:
+            return 403
+        case ["not_implemented", _]:
+            return 501
+        case [_, 5]:
+            return 502
+        case _:
+            return 500
 
 
 def _is_exempt_path(path: str) -> bool:
@@ -98,7 +109,7 @@ def create_server(
 
     @app.middleware("http")
     async def trace_middleware(request: Request, call_next):
-        request.state.trace_id = new_trace_id()
+        request.state.trace_id = str(uuid.uuid4())
         return await call_next(request)
 
     if token is not None:
@@ -175,7 +186,7 @@ def create_server(
 
     @app.on_event("startup")
     async def _emit_ready() -> None:
-        logger.info(
+        print(
             f"API ready at `{base_url}`, schemaVersion: {factory.get_model().solution.schemaVersion}"
         )
 

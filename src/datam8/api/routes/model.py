@@ -19,20 +19,19 @@
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from datam8 import config, factory, generate, model, opts
 
-model_router = APIRouter(prefix="/model")
+model_router = APIRouter(prefix="/model", tags=["model"])
 
 
 class GenerateBody(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
     target: str | None = None
-    logLevel: str | None = None
-    cleanOutput: bool | None = None
+    clean_output: Annotated[bool | None, Field(alias="cleanOutput")] = None
     payloads: list[str] | None = None
-    lazy: bool | None = None
 
 
 class GenerateResponse(BaseModel):
@@ -42,23 +41,27 @@ class GenerateResponse(BaseModel):
 
 
 @model_router.post("/generate")
-async def generator_run(body: GenerateBody) -> GenerateResponse:
+async def generator_run(body: GenerateBody | None = None) -> GenerateResponse:
     """Execute generator synchronously."""
 
     # The API server is long-lived; decorators in target modules would otherwise
     # re-register payloads on subsequent runs and fail with "already registered".
     generate.payload_functions.clear()
 
+    target = body.target if body is not None else None
+    payloads = body.payloads if body is not None else None
+    clean_output = body.clean_output if body is not None else None
+
     output_path = generate.generate_output(
         factory.get_model(),
-        target=body.target or opts.default_target,
-        payloads=body.payloads or [],
-        clean_output=body.cleanOutput or False,
+        target=target or opts.default_target,
+        payloads=payloads or [],
+        clean_output=clean_output or False,
         generate_all=False,
     )
 
     response = GenerateResponse(
-        target=body.target,
+        target=target or opts.default_target,
         output_path=output_path.as_posix(),
     )
 
@@ -70,8 +73,8 @@ class SaveBody(BaseModel):
 
 
 @model_router.post("/save")
-async def model_save(body: SaveBody) -> None:
-    factory.get_model().save(body.locator)
+async def model_save(body: SaveBody | None = None) -> None:
+    factory.get_model().save(body.locator if body is not None else None)
 
 
 class RealoadResponse(BaseModel):
@@ -79,8 +82,8 @@ class RealoadResponse(BaseModel):
     reloaded_at: Annotated[datetime, Field(alias="reloadedAt")]
 
 
-@model_router.get("/reload")
-async def model_reload(force: bool = Query(False)) -> RealoadResponse:
+@model_router.post("/reload")
+async def model_reload(force: bool = False) -> RealoadResponse:
     pending_changes, pending_deletions = factory.get_model().get_unsaved_entities()
     if (len(pending_changes) > 0 or len(pending_deletions) > 0) and not force:
         pending = len(pending_changes) + len(pending_deletions)

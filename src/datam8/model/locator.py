@@ -16,15 +16,17 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+from __future__ import annotations
+
 from collections.abc import Iterator
 from pathlib import Path
 
-from datam8 import model_exceptions as errors
+from datam8 import errors, utils
 from datam8_model import base as b
 from datam8_model import model as m
 
 
-def _ensure_locator(locator: "str | Locator") -> "Locator":
+def _ensure_locator(locator: str | Locator) -> Locator:
     if isinstance(locator, str):
         return Locator.from_path(locator)
 
@@ -42,7 +44,9 @@ class Locator(m.Locator):
             return self.__str__() == other
 
         elif not isinstance(other, Locator):
-            raise TypeError(f"Cannot compare object of type {type(object)} with Locator")
+            raise utils.create_error(
+                TypeError(f"Cannot compare object of type {type(object)} with Locator")
+            )
 
         return all(
             [
@@ -57,7 +61,9 @@ class Locator(m.Locator):
         if isinstance(other, str):
             other = Locator.from_path(other)
         elif not isinstance(other, Locator):
-            raise TypeError(f"Cannot compare object of type {type(object)} with Locator")
+            raise utils.create_error(
+                TypeError(f"Cannot compare object of type {type(object)} with Locator")
+            )
 
         if self == other:
             return True
@@ -86,7 +92,7 @@ class Locator(m.Locator):
     def __repr__(self) -> str:
         return f"Locator(entityType={self.entityType} folder={self.folders} entityName={self.entityName})"
 
-    def clone(self) -> "Locator":
+    def clone(self) -> Locator:
         return Locator(
             entityType=self.entityType,
             folders=self.folders,
@@ -94,7 +100,7 @@ class Locator(m.Locator):
         )
 
     @staticmethod
-    def from_path(path: str, /) -> "Locator":
+    def from_path(path: str, /) -> Locator:
         """
         Creates a Locator object based on the given path.
         Trailing `.json` suffixes will be removed.
@@ -131,7 +137,7 @@ class Locator(m.Locator):
                 parts[0] not in [member.value for member in b.EntityType],
             ]
         ):
-            raise errors.InvalidLocatorError(path)
+            raise utils.create_error(errors.InvalidLocatorError(path))
 
         if len(parts) == 1:
             locator = Locator(entityType=parts[0], folders=[], entityName=None)
@@ -145,7 +151,7 @@ class Locator(m.Locator):
         return locator
 
     @property
-    def parent(self) -> "Locator | None":
+    def parent(self) -> Locator | None:
         "Get the parent folder of this entity."
 
         if len(self.folders) < 1 and self.entityName is None:
@@ -166,7 +172,7 @@ class Locator(m.Locator):
         return ploc
 
     @property
-    def parents(self) -> Iterator["Locator"]:
+    def parents(self) -> Iterator[Locator]:
         "Returns all parent folders for this locator."
 
         current = self

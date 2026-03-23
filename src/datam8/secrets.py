@@ -16,6 +16,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+from __future__ import annotations
+
 import os
 from contextlib import suppress
 from pathlib import PurePosixPath
@@ -28,11 +30,17 @@ from datam8 import config, logging, utils
 logger = logging.getLogger(__name__)
 
 
+def _ensure_path(path: PurePosixPath | str) -> PurePosixPath:
+    if isinstance(path, str):
+        return PurePosixPath(path)
+    return path
+
+
 class SecretResolver:
-    __instance: "SecretResolver | None" = None
+    __instance: SecretResolver | None = None
     __lock = Lock()
 
-    def __new__(cls) -> "SecretResolver":
+    def __new__(cls) -> SecretResolver:
         if cls.__instance is None:
             with cls.__lock:
                 if cls.__instance is None:
@@ -108,29 +116,31 @@ class SecretResolver:
     # public methods - enforcing thread safety
     #
 
-    def set_secret(self, path: PurePosixPath, value: str, /, *, force: bool = False) -> None:
+    def set_secret(self, path: PurePosixPath | str, value: str, /, *, force: bool = False) -> None:
         "Set a new secret or overwrite an existing one"
-        service_name = self.__create_service_name(path)
+        path_ = _ensure_path(path)
+        service_name = self.__create_service_name(path_)
 
         with self.lock:
-            existing_secret = self.get_secret(path)
+            existing_secret = self.get_secret(path_)
 
             if existing_secret is not None and not force:
-                raise utils.create_error(f"Trying to set secret but it already exists: {path}")
+                raise utils.create_error(f"Trying to set secret but it already exists: {path_}")
 
             self.__set_password(service_name, value)
-            self.__register_secret(path)
+            self.__register_secret(path_)
 
-    def unset_secret(self, path: PurePosixPath, /) -> None:
+    def unset_secret(self, path: PurePosixPath | str, /) -> None:
         "Remove a secret from the keyring backend"
-        service_name = self.__create_service_name(path)
+        path_ = _ensure_path(path)
+        service_name = self.__create_service_name(path_)
 
         with self.lock:
-            existing_secret = self.get_secret(path)
-            self.__unregister_secret(path)
+            existing_secret = self.get_secret(path_)
+            self.__unregister_secret(path_)
 
             if existing_secret is None:
-                raise utils.create_error(f"Trying to unset non existing secret: {path}")
+                raise utils.create_error(f"Trying to unset non existing secret: {path_}")
 
             self.__unset_password(service_name)
 
@@ -150,9 +160,11 @@ class SecretResolver:
 
         return [PurePosixPath(p) for p in secret_list]
 
-    def get_secret(self, path: PurePosixPath, /) -> str | None:
-        service_name = self.__create_service_name(path)
-        secret = keyring.get_password(service_name, self.__username)
+    def get_secret(self, path: PurePosixPath | str, /) -> str | None:
+        path_ = _ensure_path(path)
+        service_name = self.__create_service_name(path_)
+        secret = self.__get_password(service_name)
+
         return secret
 
     def clean(self) -> None:

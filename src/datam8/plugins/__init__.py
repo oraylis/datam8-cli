@@ -18,10 +18,40 @@
 
 # ruff: noqa: F401
 
+from datam8_model.data_source import DataSourceType
+
 from .base import Plugin
-from .builtins import file, lake_source, sql_server
+from .builtins.file import CsvFile
 from .manager import PluginManager
 
-PluginManager.register_builtin_plugin("AzureDataLake", lake_source.manifest_azure)
-PluginManager.register_builtin_plugin("SQLServer", sql_server.manifest)
-PluginManager.register_builtin_plugin("CsvFile", file.manifest_csv)
+PluginManager.register_builtin_plugin("CsvFile", CsvFile.manifest)
+
+
+def register_lake_source() -> None:
+    from .builtins.lake_source import AzureDataLake
+
+    PluginManager.register_builtin_plugin("AzureDataLake", AzureDataLake.manifest)
+
+
+def register_sql_server() -> None:
+    from .builtins.sql_server import SqlServer
+
+    PluginManager.register_builtin_plugin("SQLServer", SqlServer.manifest)
+
+
+def init_builtin_plugins(
+    *, data_source_type: DataSourceType | None = None, plugin_id: str | None = None
+) -> None:
+    possible_type_name = None if data_source_type is None else data_source_type.name
+    possible_plugin_id = None if plugin_id is None else plugin_id.removeprefix("builtin:")
+
+    match [possible_type_name, possible_plugin_id]:
+        case ["AzureDataLake", None] | [None, "AzureDataLake"]:
+            register_lake_source()
+
+        case ["SQLServer", None] | [None, "SQLServer"]:
+            register_sql_server()
+
+        case [None, None]:
+            register_lake_source()
+            register_sql_server()

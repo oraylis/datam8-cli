@@ -65,16 +65,12 @@ def add(
     common.main_callback(solution_path, log_level, version)
 
     secret = typer.prompt("New Secret Value", hide_input=True)
-    try:
-        SecretResolver().set_secret(PurePosixPath(path), secret)
-    except Exception as err:
-        typer.echo(err)
-        raise typer.Exit(1)
+    SecretResolver().set_secret(PurePosixPath(path), secret)
 
 
 @app.command()
 def show(
-    path: Annotated[Path, typer.Argument(help="Path to store the secret in the keyring backend")],
+    path: opts.SecretPath,
     solution_path: opts.SolutionPath,
     log_level: opts.LogLevel = opts.LogLevels.WARNING,
     version: opts.Version = False,
@@ -93,20 +89,15 @@ def show(
 
 @app.command()
 def unset(
-    path: Annotated[Path, typer.Argument(help="Path to store the secret in the keyring backend")],
+    path: opts.SecretPath,
     solution_path: opts.SolutionPath,
     log_level: opts.LogLevel = opts.LogLevels.WARNING,
     version: opts.Version = False,
 ):
     "Remove a secret"
     common.main_callback(solution_path, log_level, version)
-    try:
-        SecretResolver().unset_secret(PurePosixPath(path))
-    except Exception as err:
-        typer.echo(err)
-        raise typer.Exit(1)
-    else:
-        typer.echo(f"Successfully uset {path}")
+    SecretResolver().unset_secret(PurePosixPath(path))
+    typer.echo(f"Successfully uset {path}")
 
 
 @app.command()

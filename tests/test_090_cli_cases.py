@@ -16,22 +16,13 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-from __future__ import annotations
-
 from pytest_cases import parametrize
 
 
 class CasesCli:
     @parametrize(
         "command_name",
-        [
-            "generate",
-            "validate",
-            "serve",
-            "list",
-            "show",
-            "init"
-        ],
+        ["generate", "validate", "serve", "list", "show", "init"],
     )
     def case_top_level_commands(self, command_name):
         return command_name

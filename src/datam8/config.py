@@ -15,29 +15,25 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+from __future__ import annotations
+
+from enum import IntEnum
 from importlib.metadata import version
 from pathlib import Path
 
-from datam8 import opts
-from datam8.core import errors
+from datam8 import errors, opts
 
-supported_model_versions: list[str] = [
-    "2.0.0",
-]
-
-log_level: opts.LogLevels = opts.LogLevels.WARNING
-
-solution_folder_path: Path = Path().cwd()
+supported_model_versions: list[str]
+log_level: opts.LogLevels
+solution_folder_path: Path
 """ Path to the directory containing the dm8s file. Typically the repository's root """
-solution_path: Path = Path().cwd()
+solution_path: Path
 """ Path to the dm8s file """
-run_as_api: bool = False
-"""
-Flag to indicate weither datam8 runs in api mode. Some parts of the code will emit different
-errors.
-"""
-lazy: bool = False
-""" If set to true only resolves references when entity is looked up """
+mode: RunMode
+"Indicates in what mode the tool is being run"
+lazy: bool
+""" If set to jrue only resolves references when entity is looked up """
 
 
 def latest_schema_version() -> str:
@@ -95,3 +91,27 @@ def set_solution(path: str | Path) -> None:
             message="Solution file not found.",
             details={"solution": search_path.as_posix()},
         )
+
+
+class RunMode(IntEnum):
+    CLI = 0
+    "Default mode"
+    API = 1
+    """
+    Flag to indicate weither datam8 runs in api mode - Some parts of the code will emit different
+    errors
+    """
+    TEST = 2
+    "Flag to indicate that the library is run in test mode - Changes how errors are thrown"
+
+
+#
+# defaults
+#
+
+supported_model_versions = ["2.0.0"]
+log_level = opts.LogLevels.WARNING
+solution_folder_path = Path().cwd()
+solution_path = Path().cwd()
+mode = RunMode.CLI
+lazy = False

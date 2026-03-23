@@ -22,7 +22,7 @@ import pytest
 import pytest_cases
 from test_010_model_cases import CasesEntityLookup, CasesLocator, CasesModel
 
-from datam8 import model_exceptions as errors
+from datam8 import errors
 from datam8.model import EntityWrapper, Locator, Model
 from datam8_model.base import EntityType
 from datam8_model.data_product import DataModule
@@ -85,9 +85,7 @@ def test_locator_comparison(test_case: tuple[str, str, bool]):
     )
 
 
-@pytest_cases.parametrize_with_cases(
-    "input", cases=CasesEntityLookup, glob="*_dict_valid"
-)
+@pytest_cases.parametrize_with_cases("input", cases=CasesEntityLookup, glob="*_dict_valid")
 def test_get_entity_dict(input: tuple[str, list[str]], model: Model):
     model.resolve()
     entity_type, entity_names = input
@@ -119,9 +117,7 @@ def test_get_entity_dict(input: tuple[str, list[str]], model: Model):
                 assert isinstance(entity, DataModule), f"Wrong type {type(entity)}"
                 return
             case _:
-                raise Exception(
-                    f"entity type not configured in {__name__}: {entity_type}"
-                )
+                raise Exception(f"entity type not configured in {__name__}: {entity_type}")
 
         assert isinstance(entity, EntityWrapper), (
             f"Looked up entity has the wrong type: {type(entity)}"

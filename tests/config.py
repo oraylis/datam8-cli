@@ -16,17 +16,14 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-from __future__ import annotations
+import dataclasses
+from pathlib import Path
 
-from pytest_cases import parametrize
+import pytest
 
 
-class CasesServerIntegration:
-    @parametrize(
-        "log_level, clean_output",
-        [
-            ("info", True),
-        ],
-    )
-    def case_generate_sync(self, log_level, clean_output):
-        return log_level, clean_output
+@dataclasses.dataclass
+class DataM8TestConfig:
+    solution_file_path: Path
+    log_level: str
+    pytest_config: pytest.Config

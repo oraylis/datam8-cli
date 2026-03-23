@@ -28,14 +28,14 @@ from .base import Plugin
 
 logger = logging.getLogger(__name__)
 
-type PluginInstantiator = Callable[[DataSource], Plugin]
+type PluginInstantiator = Callable[[DataSource, DataSourceType], Plugin]
 
 
 def _create_plugin_instantiator(cls: type[Plugin], manifest: PluginManifest) -> PluginInstantiator:
     logger.debug(f"Creating plugin instantiator for {manifest.id}")
 
-    def instantiator(ds: DataSource, /) -> Plugin:
-        return cls(manifest, ds)
+    def instantiator(ds: DataSource, dst: DataSourceType, /) -> Plugin:
+        return cls(manifest, ds, dst)
 
     return instantiator
 
@@ -53,7 +53,8 @@ class PluginManager:
 
     @classmethod
     def register_builtin_plugin(cls, name: str, /, plugin: PluginManifest) -> None:
-        cls.__builtin_plugins[name] = plugin
+        if name not in cls.__builtin_plugins:
+            cls.__builtin_plugins[name] = plugin
 
     def register_plugin(self, name: str, /, plugin: PluginManifest) -> None:
         """
@@ -103,7 +104,9 @@ class PluginManager:
 
         return _create_plugin_instantiator(PluginClass, manifest)
 
-    def get_plugin(self, plugin_id, /) -> type[Plugin]:
+    def get_plugin(self, plugin_id_: str, /) -> type[Plugin]:
+        plugin_id = plugin_id_.removeprefix("builtin:")
+
         if plugin_id in self.__loaded_plugins:
             return self.__loaded_plugins[plugin_id]
 

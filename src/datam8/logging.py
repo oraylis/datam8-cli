@@ -20,6 +20,8 @@
 Logging module to simplify and setup a common logging approach.
 """
 
+from __future__ import annotations
+
 import logging
 import os
 import pathlib
@@ -63,9 +65,7 @@ def setup_logger(
 
         log_path = _log_directory / f"{datetime.now().strftime('%Y-%m-%d_%H:%M:%S')}.log"
 
-        formatter = logging.Formatter(
-            "%(asctime)s - %(levelname)s - %(name)s: %(message)s"
-        )
+        formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(name)s: %(message)s")
         file_handler = logging.FileHandler(log_path)
         file_handler.setFormatter(formatter)
 
