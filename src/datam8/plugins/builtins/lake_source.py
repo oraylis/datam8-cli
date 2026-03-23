@@ -17,12 +17,11 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 from datam8.plugins import Plugin
-from datam8_model.plugin import Capability, PluginManifest, PluginType
+from datam8_model.plugin import Capability, PluginManifest
 
 manifest_azure = PluginManifest(
     id="builtin:AzureDataLake",
     displayName="Azure Data Lake (built-in)",
-    type=PluginType.CONNECTOR,
     version="0.1.0",
     entryPoint="datam8.plugins.lake_source:AzureDataLake",
     capabilities=[

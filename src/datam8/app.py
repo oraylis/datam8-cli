@@ -16,14 +16,15 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-from .cmd import root, plugin, secret
-
 import warnings
+
+from .cmd import plugin, root, secret, sources
 
 # Only crash on warnings coming from pydantic
 warnings.filterwarnings("error", module="pydantic.*")
 
 app = root.app
+app.add_typer(sources.app)
 app.add_typer(plugin.app)
 app.add_typer(secret.app)
 

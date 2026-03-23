@@ -19,8 +19,9 @@
 # ruff: noqa: F401
 
 from .base import Plugin
-from .builtins import lake_source, sql_server
+from .builtins import file, lake_source, sql_server
 from .manager import PluginManager
 
 PluginManager.register_builtin_plugin("AzureDataLake", lake_source.manifest_azure)
 PluginManager.register_builtin_plugin("SQLServer", sql_server.manifest)
+PluginManager.register_builtin_plugin("CsvFile", file.manifest_csv)
