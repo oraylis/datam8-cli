@@ -18,7 +18,6 @@
 
 import functools
 import urllib.parse
-from typing import Any
 
 import polars as pl
 import typer
@@ -27,7 +26,9 @@ from datam8 import config, logging, utils
 from datam8.plugins.base import Plugin
 from datam8.secrets import SecretResolver
 from datam8_model.data_source import (
+    AuthMode,
     ConnectionProperty,
+    ConnectionPropertyValueType,
     DataSource,
     DataSourceType,
     SourceDataTypeMapping,
@@ -118,7 +119,7 @@ class SqlServer(Plugin):
         database = (self._data_source.extendedProperties or {})["database"]
         query = f"""
             select
-                catalog_name, schema_name, schema_owner
+                schema_name as [schema]
             from
                 [information_schema].[schemata]
             where 1=1
@@ -130,16 +131,18 @@ class SqlServer(Plugin):
 
     def list_tables(self, schema: str | None = None) -> pl.DataFrame:
         database = (self._data_source.extendedProperties or {})["database"]
-        if schema is None:
-            raise utils.create_error("A schema needs to be provided for SQL Server sources")
 
         query = f"""
-            select *
+            select
+                table_schema as [schema],
+                table_name as [name],
+                table_type as [type]
             from [information_schema].[tables]
             where 1=1
                 and table_catalog = '{database}'
-                and table_schema = '{schema}'
         """
+        if schema is not None:
+            query += f" and table_schema = '{schema}'"
 
         return self._execute_query(query)
 
@@ -191,59 +194,66 @@ class SqlServer(Plugin):
 
     @staticmethod
     @functools.lru_cache(maxsize=1)
-    def get_ui_schema() -> dict[str, Any]:
-        schema_ = {
-            "titel": "SQL Server Connection",
-            "authModes": [],
-            "fields": [],
-        }
-        schema_["authModes"].append(
-            {
-                "id": "sql_user",
-                "label": "Username/Password",
-                "fields": [],
-            }
-        )
-        schema_["authModes"].append(
-            {
-                "id": "entry_mfa",
-                "label": "EntraID with MFA",
-                "fields": [],
-            }
-        )
+    def get_auth_modes() -> list[AuthMode]:
+        auth_modes = [
+            AuthMode(
+                name="sql_user",
+                displayName="Username / Password",
+                required=["username", "password"],
+                optional=["trust_server_certificate", "trust_server_certificate_ca", "encrypt"],
+            ),
+            AuthMode(
+                name="windows",
+                displayName="Windows Authentication",
+                required=["trusted_connection"],
+                optional=["trust_server_certificate", "trust_server_certificate_ca", "encrypt"],
+            ),
+        ]
 
-        return schema_
+        return auth_modes
 
     @staticmethod
     @functools.lru_cache(maxsize=1)
     def get_connection_properties() -> list[ConnectionProperty]:
         cp = [
-            ConnectionProperty(name="authMode", required=True),
-            ConnectionProperty(name="username", required=True),
-            ConnectionProperty(name="host", required=True),
-            ConnectionProperty(name="database", required=True),
-            ConnectionProperty(name="port", required=True, default=1433),
+            ConnectionProperty(
+                name="authMode", type=ConnectionPropertyValueType.STRING, required=True
+            ),
+            ConnectionProperty(
+                name="username", type=ConnectionPropertyValueType.STRING, required=True
+            ),
+            ConnectionProperty(name="host", type=ConnectionPropertyValueType.STRING, required=True),
+            ConnectionProperty(
+                name="database", type=ConnectionPropertyValueType.STRING, required=True
+            ),
+            ConnectionProperty(
+                name="port", type=ConnectionPropertyValueType.NUMBER, required=True, default=1433
+            ),
             ConnectionProperty(
                 name="trust_server_certificate",
                 required=False,
                 default=False,
+                type=ConnectionPropertyValueType.BOOLEAN,
                 description="Trust unverifyable certificates, e.g. self-signed",
             ),
             ConnectionProperty(
                 name="trust_server_certificate_ca",
                 required=False,
+                type=ConnectionPropertyValueType.BOOLEAN,
                 description="Path to a root ca to verify the server certificate against",
             ),
             ConnectionProperty(
                 name="encrypt",
                 required=False,
                 default=True,
+                type=ConnectionPropertyValueType.BOOLEAN,
                 description="Activate SSL encryption",
             ),
             ConnectionProperty(
                 name="trusted_connection",
                 required=False,
                 default=False,
+                type=ConnectionPropertyValueType.BOOLEAN,
                 description="Enables Windows Authentication",
             ),
         ]
