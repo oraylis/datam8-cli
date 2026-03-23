@@ -33,4 +33,8 @@ manifest_azure = PluginManifest(
 
 
 class AzureDataLake(Plugin):
-    manifest: PluginManifest = manifest_azure
+    __manifest: PluginManifest = manifest_azure
+
+    @classmethod
+    def manifest(cls) -> PluginManifest:
+        return cls.__manifest

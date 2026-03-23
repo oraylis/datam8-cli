@@ -43,7 +43,7 @@ manifest_csv = PluginManifest(
 
 
 class CsvFile(Plugin):
-    manifest: PluginManifest = manifest_csv
+    __manifest: PluginManifest = manifest_csv
 
     def _get_path(self) -> Path:
         protocol = self.connection_properties.pop("protocol")
@@ -54,6 +54,8 @@ class CsvFile(Plugin):
                 path = Path(path)
             case [unknown, _]:
                 raise utils.create_error(f"Protocol '{unknown}' is not implemented for CsvFiles")
+            case _:
+                raise utils.create_error("Should not be reached, is a bug...")
 
         return path
 
@@ -76,9 +78,13 @@ class CsvFile(Plugin):
         df = pl.read_csv(path / table_name, sample_size=limit, **self.connection_properties)
         return df.lazy()
 
+    @classmethod
+    def manifest(cls) -> PluginManifest:
+        return cls.__manifest
+
     @staticmethod
     @functools.lru_cache(maxsize=1)
-    def get_ui_schema(cls) -> dict[str, Any]:
+    def get_ui_schema() -> dict[str, Any]:
         return {}
 
     @staticmethod

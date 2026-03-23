@@ -24,19 +24,19 @@ from .base import Plugin
 from .builtins.file import CsvFile
 from .manager import PluginManager
 
-PluginManager.register_builtin_plugin("CsvFile", CsvFile.manifest)
+PluginManager.register_builtin_plugin("CsvFile", CsvFile.manifest())
 
 
 def register_lake_source() -> None:
     from .builtins.lake_source import AzureDataLake
 
-    PluginManager.register_builtin_plugin("AzureDataLake", AzureDataLake.manifest)
+    PluginManager.register_builtin_plugin("AzureDataLake", AzureDataLake.manifest())
 
 
 def register_sql_server() -> None:
     from .builtins.sql_server import SqlServer
 
-    PluginManager.register_builtin_plugin("SQLServer", SqlServer.manifest)
+    PluginManager.register_builtin_plugin("SQLServer", SqlServer.manifest())
 
 
 def init_builtin_plugins(

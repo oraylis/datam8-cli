@@ -62,7 +62,7 @@ class SqlServer(Plugin):
     does not rely on any further packages or drivers at uses pyArrow internally.
     """
 
-    manifest: PluginManifest = manifest
+    __manifest: PluginManifest = manifest
 
     def __init__(
         self, manifest: PluginManifest, /, data_source: DataSource, data_source_type: DataSourceType
@@ -143,7 +143,9 @@ class SqlServer(Plugin):
 
         return self._execute_query(query)
 
-    def preview_data(self, table: str, schema: str | None = None, limit: int = 10) -> pl.LazyFrame:
+    def preview_data(
+        self, table: str, /, schema: str | None = None, *, limit: int = 10
+    ) -> pl.LazyFrame:
         if schema is None:
             raise utils.create_error("A schema needs to be provided for SQL Server sources")
 
@@ -182,6 +184,10 @@ class SqlServer(Plugin):
     ) -> Exception | None:
         # TODO: implement additional plugin specific validation logics
         return None
+
+    @classmethod
+    def manifest(cls) -> PluginManifest:
+        return cls.__manifest
 
     @staticmethod
     @functools.lru_cache(maxsize=1)

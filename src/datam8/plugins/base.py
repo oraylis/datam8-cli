@@ -16,6 +16,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+from __future__ import annotations
+
 import abc
 import functools
 from typing import Any
@@ -110,7 +112,7 @@ class Plugin(abc.ABC):
 
     @classmethod
     def is_capable_of(cls, capability: Capability, /) -> bool:
-        return capability in cls.manifest.capabilities  # ty: ignore[unresolved-attribute]
+        return capability in cls.manifest().capabilities
 
     @classmethod
     def validate_connection(
@@ -148,13 +150,16 @@ class Plugin(abc.ABC):
     def manifest(cls) -> PluginManifest: ...
 
     @staticmethod
+    @functools.lru_cache
     @abc.abstractmethod
     def get_ui_schema() -> dict[str, Any]: ...
 
     @staticmethod
+    @functools.lru_cache
     @abc.abstractmethod
     def get_connection_properties() -> list[ConnectionProperty]: ...
 
     @staticmethod
+    @functools.lru_cache
     @abc.abstractmethod
     def get_data_type_mappings() -> list[SourceDataTypeMapping]: ...
