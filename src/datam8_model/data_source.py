@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from enum import Enum
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -83,14 +84,23 @@ class SourceDataTypeMapping(BaseModel):
             file.write(self.model_dump_json(**dump_options))
 
 
+class ConnectionPropertyValueType(Enum):
+    STRING = "string"
+    NUMBER = "number"
+    BOOLEAN = "boolean"
+    SECRET = "secret"
+
+
 class ConnectionProperty(BaseModel):
     """
     A property or setting defined by a data source type, which is then available when defining concret data sources.
     """
 
     name: str
+    displayName: str | None = None
     required: bool
     description: str | None = None
+    type: Annotated[ConnectionPropertyValueType, Field(title="ConnectionPropertyValueType")]
     default: str | bool | int | float | None = None
 
     def to_dict(self) -> dict:
@@ -121,6 +131,58 @@ class ConnectionProperty(BaseModel):
         """
         with open(path) as file:
             model = ConnectionProperty.model_validate_json(file.read())
+
+        return model
+
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode) as file:
+            file.write(self.model_dump_json(**dump_options))
+
+
+class AuthMode(BaseModel):
+    """
+    A single authentiocation method
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
+    name: str
+    displayName: str | None = None
+    required: Annotated[Sequence[str], Field(min_length=1)]
+    optional: Sequence[str] | None = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj: Any) -> AuthMode:
+        return AuthMode.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> AuthMode:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        AuthMode
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
+        with open(path) as file:
+            model = AuthMode.model_validate_json(file.read())
 
         return model
 
@@ -164,6 +226,10 @@ class DataSourceType(BaseModel):
     """
     Required connection properties for this source type
     """
+    authModes: Sequence[AuthMode]
+    """
+    Describes different authentication modes and which connection properties are relevant for it.
+    """
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
@@ -193,6 +259,93 @@ class DataSourceType(BaseModel):
         """
         with open(path) as file:
             model = DataSourceType.model_validate_json(file.read())
+
+        return model
+
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode) as file:
+            file.write(self.model_dump_json(**dump_options))
+
+
+class SourceObject(BaseModel):
+    schema_: Annotated[str | None, Field(alias="schema")] = None
+    name: str
+    type: str
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj: Any) -> SourceObject:
+        return SourceObject.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> SourceObject:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        SourceObject
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
+        with open(path) as file:
+            model = SourceObject.model_validate_json(file.read())
+
+        return model
+
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode) as file:
+            file.write(self.model_dump_json(**dump_options))
+
+
+class SourceField(BaseModel):
+    name: str
+    ordinal: Annotated[int, Field(ge=1)]
+    dataType: str
+    maxLength: Annotated[int | None, Field(ge=1)] = None
+    numericPrecision: Annotated[int | None, Field(ge=1)] = None
+    numbericScale: Annotated[int | None, Field(ge=1)] = None
+    isNullable: bool
+    isPrimaryKey: bool | None = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj: Any) -> SourceField:
+        return SourceField.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> SourceField:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        SourceField
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
+        with open(path) as file:
+            model = SourceField.model_validate_json(file.read())
 
         return model
 

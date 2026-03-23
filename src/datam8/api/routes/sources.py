@@ -15,14 +15,16 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
-
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
 from datam8 import factory
 from datam8.model import Locator
+from datam8_model.data_source import SourceField, SourceObject
 from datam8_model.model import ExternalModelSource
+
+from .responses import MultiItemResponse
 
 sources_router = APIRouter(prefix="/sources", tags=["sources"])
 
@@ -42,39 +44,43 @@ async def test_connection(data_source: str) -> None:
 
 
 @sources_router.get("/{data_source}/schemas")
-async def list_schemas(data_source: str) -> list[dict[str, Any]]:
+async def list_schemas(data_source: str) -> MultiItemResponse[str]:
     "List available source schema for a data source"
     plugin = factory.get_plugin_for_data_source(data_source)
-    schemas = plugin.list_schemas().to_dicts()
-    return schemas
+    schemas = [x["schema"] for x in plugin.list_schemas().to_dicts()]
+
+    return MultiItemResponse.from_list(schemas)
 
 
 @sources_router.get("/{data_source}/schemas/{schema}/tables")
-async def list_tables_for_schema(data_source: str, schema: str) -> list[dict[str, Any]]:
+async def list_tables_for_schema(data_source: str, schema: str) -> MultiItemResponse[SourceObject]:
     "List available source tables for a datasource connector"
     plugin = factory.get_plugin_for_data_source(data_source)
-    tables = plugin.list_tables(schema)
-    return tables.to_dicts()
+    tables = [SourceObject.from_dict(o) for o in plugin.list_tables(schema).to_dicts()]
+    return MultiItemResponse.from_list(tables)
 
 
 @sources_router.get("/{data_source}/schemas/{schema}/tables/{table}")
 async def get_table_metadata_for_schema(
     data_source: str, schema: str, table: str
-) -> list[dict[str, Any]]:
+) -> MultiItemResponse[SourceField]:
     plugin = factory.get_plugin_for_data_source(data_source)
-    metadata = plugin.get_table_metadata(table, schema)
-    return metadata.to_dicts()
+    metadata = [
+        SourceField.from_dict(sf) for sf in plugin.get_table_metadata(table, schema).to_dicts()
+    ]
+    return MultiItemResponse.from_list(metadata)
 
 
 @sources_router.get("/{data_source}/schemas/{schema}/tables/{table}/preview")
 async def preview_for_schema(
     data_source: str, schema: str, table: str, limit: int = 10
-) -> list[dict[str, Any]]:
+) -> MultiItemResponse[dict[str, Any]]:
     plugin = factory.get_plugin_for_data_source(data_source)
     preview = plugin.preview_data(table, schema, limit=limit)
 
     for df in preview.collect_batches(chunk_size=limit):
-        return df.to_dicts()
+        rows = df.to_dicts()
+        return MultiItemResponse.from_list(rows)
 
     raise HTTPException(status_code=404, detail="No data to preview")
 
@@ -89,28 +95,31 @@ async def import_for_schema(data_source: str, schema: str, table: str) -> list[d
 #
 
 
-@sources_router.get("/{data_source}/tables/")
-async def list_tables(data_source: str, table: str) -> list[dict[str, Any]]:
+@sources_router.get("/{data_source}/tables")
+async def list_tables(data_source: str) -> MultiItemResponse[SourceObject]:
     "List available source tables if a source does not support schemas"
     plugin = factory.get_plugin_for_data_source(data_source)
-    tables = plugin.list_tables()
-    return tables.to_dicts()
+    tables = [SourceObject.from_dict(o) for o in plugin.list_tables().to_dicts()]
+    return MultiItemResponse.from_list(tables)
 
 
 @sources_router.get("/{data_source}/tables/{table}")
-async def get_table_metadata(data_source: str, table: str) -> list[dict[str, Any]]:
+async def get_table_metadata(data_source: str, table: str) -> MultiItemResponse[SourceField]:
     plugin = factory.get_plugin_for_data_source(data_source)
-    metadata = plugin.get_table_metadata(table)
-    return metadata.to_dicts()
+    metadata = [SourceField.from_dict(o) for o in plugin.get_table_metadata(table).to_dicts()]
+    return MultiItemResponse.from_list(metadata)
 
 
 @sources_router.get("/{data_source}/tables/{table}/preview")
-async def preview(data_source: str, table: str, limit: int = 10) -> list[dict[str, Any]]:
+async def preview(
+    data_source: str, table: str, limit: int = 10
+) -> MultiItemResponse[dict[str, Any]]:
     plugin = factory.get_plugin_for_data_source(data_source)
     preview = plugin.preview_data(table, limit=limit)
 
     for df in preview.collect_batches(chunk_size=limit):
-        return df.to_dicts()
+        rows = df.to_dicts()
+        return MultiItemResponse.from_list(rows)
 
     raise HTTPException(status_code=404, detail="No data to preview")
 
@@ -132,7 +141,7 @@ async def import_for_table(data_source: str, table: str) -> list[dict[str, Any]]
 
 
 @sources_router.get("/{data_source}/usages")
-async def get_usages(data_source: str) -> list[Locator]:
+async def get_usages(data_source: str) -> MultiItemResponse[Locator]:
     model_ = factory.get_model()
     ds = model_.get_data_source(data_source)
     entities = [
@@ -141,4 +150,4 @@ async def get_usages(data_source: str) -> list[Locator]:
         if ds.entity.name
         in [s.dataSource for s in wrapper.entity.sources if isinstance(s, ExternalModelSource)]
     ]
-    return entities
+    return MultiItemResponse.from_list(entities)

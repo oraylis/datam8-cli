@@ -36,7 +36,7 @@ class GenerateBody(BaseModel):
 
 class GenerateResponse(BaseModel):
     target: str | None
-    output_path: str | None = None
+    output_path: Annotated[str | None, Field(alias="outputPath")] = None
     message: str | None = None
 
 
@@ -98,6 +98,7 @@ async def model_reload(force: bool = False) -> RealoadResponse:
 
 
 class UnsavedResponse(BaseModel):
+    count: int
     changed: list[model.Locator]
     deleted: list[model.Locator]
 
@@ -106,6 +107,7 @@ class UnsavedResponse(BaseModel):
 async def get_unsaved() -> UnsavedResponse:
     changed, deleted = factory.get_model().get_unsaved_entities()
     response = UnsavedResponse(
+        count=len(changed) + len(deleted),
         changed=changed,
         deleted=deleted,
     )

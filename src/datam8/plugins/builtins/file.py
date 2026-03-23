@@ -18,13 +18,17 @@
 
 import functools
 from pathlib import Path
-from typing import Any
 
 import polars as pl
 
 from datam8 import config, logging, utils
 from datam8.plugins import Plugin
-from datam8_model.data_source import ConnectionProperty, SourceDataTypeMapping
+from datam8_model.data_source import (
+    AuthMode,
+    ConnectionProperty,
+    ConnectionPropertyValueType,
+    SourceDataTypeMapping,
+)
 from datam8_model.plugin import Capability, PluginManifest
 
 logger = logging.getLogger(__name__)
@@ -69,7 +73,12 @@ class CsvFile(Plugin):
             )
 
     def list_tables(self, schema: str | None = None, /) -> pl.DataFrame:
-        return pl.DataFrame({"files": self._get_path().glob("*.csv")})
+        data = {
+            "schema": None,
+            "table": self._get_path().glob("*.csv"),
+            "type": "file",
+        }
+        return pl.DataFrame(data)
 
     def preview_data(
         self, table_name: str, /, schema: str | None = None, *, limit: int = 10
@@ -84,8 +93,13 @@ class CsvFile(Plugin):
 
     @staticmethod
     @functools.lru_cache(maxsize=1)
-    def get_ui_schema() -> dict[str, Any]:
-        return {}
+    def get_auth_modes() -> list[AuthMode]:
+        auth_modes = [
+            AuthMode(
+                name="no_auth", displayName="No Auth / Anonymouse", required=["path", "protocol"]
+            ),
+        ]
+        return auth_modes
 
     @staticmethod
     @functools.lru_cache(maxsize=1)
@@ -100,8 +114,18 @@ class CsvFile(Plugin):
     @functools.lru_cache(maxsize=1)
     def get_connection_properties() -> list[ConnectionProperty]:
         cps = [
-            ConnectionProperty(name="path", required=True),
-            ConnectionProperty(name="protocol", required=False, default="file"),
-            ConnectionProperty(name="has_header", required=False, default=True),
+            ConnectionProperty(name="path", required=True, type=ConnectionPropertyValueType.STRING),
+            ConnectionProperty(
+                name="protocol",
+                required=False,
+                type=ConnectionPropertyValueType.STRING,
+                default="file",
+            ),
+            ConnectionProperty(
+                name="has_header",
+                required=False,
+                type=ConnectionPropertyValueType.BOOLEAN,
+                default=True,
+            ),
         ]
         return cps

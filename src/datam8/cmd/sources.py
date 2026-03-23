@@ -89,6 +89,7 @@ def preview(
     preview = plugin.preview_data(table_name, schema_name, limit=limit)
 
     for df in preview.collect_batches(chunk_size=limit):
+        typer.echo(df.schema)
         df.show(
             limit=limit,
             tbl_hide_dataframe_shape=True,

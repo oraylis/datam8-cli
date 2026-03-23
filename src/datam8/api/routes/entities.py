@@ -23,46 +23,41 @@ from pydantic import BaseModel, ConfigDict, Field
 from datam8 import factory, model
 from datam8_model import base as b
 
+from .responses import MultiItemResponse, SingleItemResponse
+
 entities_router = APIRouter(prefix="/entities", tags=["entities"])
 
 
 @entities_router.get("/{locator:path}")
-async def get_entities(locator: str = "/") -> list[model.EntityWrapperVariant]:
+async def get_entities(locator: str = "/") -> MultiItemResponse[model.EntityWrapperVariant]:
     """
     Returns a list of entities based on the given locator. Returns an empty list if none are found.
     """
-    return factory.get_model().get_entities(locator)
+    entities = factory.get_model().get_entities(locator)
+    return MultiItemResponse.from_list(entities)
 
 
 @entities_router.patch("/{locator:path}")
-async def patch_entity(locator: str, patch: dict[str, Any]) -> model.EntityWrapperVariant:
+async def patch_entity(
+    locator: str, patch: dict[str, Any]
+) -> SingleItemResponse[model.EntityWrapperVariant]:
     wrapper = factory.get_model().get_entity_by_locator(locator)
     wrapper.update(**patch)
-    return wrapper
-
-
-class DeleteReponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-    deleted_entities: Annotated[int, Field(alias="deletedEntities")]
-    deleted_locators: Annotated[list[model.Locator], Field(alias="deletedLocators")]
+    return SingleItemResponse(item=wrapper)
 
 
 @entities_router.delete("/{locator:path}")
-async def delete_entity(locator: str) -> DeleteReponse:
+async def delete_entity(locator: str) -> MultiItemResponse[model.Locator]:
     deleted_locators = factory.get_model().delete_entities(locator)
-    response = DeleteReponse(
-        deleted_entities=len(deleted_locators),
-        deleted_locators=deleted_locators,
-    )
-    return response
+    return MultiItemResponse.from_list(deleted_locators)
 
 
 @entities_router.put("/{locator:path}")
 async def create_entity(
     locator: str, body: dict[str, Any]
-) -> model.EntityWrapper[b.BaseEntityType]:
+) -> SingleItemResponse[model.EntityWrapper[b.BaseEntityType]]:
     entity = factory.get_model().add_entity(locator, body)
-    return entity
+    return SingleItemResponse(item=entity)
 
 
 class CloneEntityBody(BaseModel):
@@ -72,8 +67,11 @@ class CloneEntityBody(BaseModel):
 
 
 @entities_router.put("/clone")
-async def clone_entity(body: CloneEntityBody) -> model.EntityWrapper[b.BaseEntityType]:
-    return factory.get_model().clone_entity(body.locator, body.new_locator)
+async def clone_entity(
+    body: CloneEntityBody,
+) -> MultiItemResponse[model.EntityWrapper[b.BaseEntityType]]:
+    entity = factory.get_model().clone_entity(body.locator, body.new_locator)
+    return MultiItemResponse.from_list([entity])
 
 
 class MoveBody(BaseModel):
@@ -83,5 +81,6 @@ class MoveBody(BaseModel):
 
 
 @entities_router.post("/move")
-async def move_entities(body: MoveBody) -> list[model.EntityWrapperVariant]:
-    return factory.get_model().move_entities(body._from, body._to)
+async def move_entities(body: MoveBody) -> MultiItemResponse[model.EntityWrapperVariant]:
+    entities = factory.get_model().move_entities(body._from, body._to)
+    return MultiItemResponse.from_list(entities)

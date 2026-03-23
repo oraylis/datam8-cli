@@ -26,12 +26,13 @@ import polars as pl
 
 from datam8 import logging, utils
 from datam8_model.data_source import (
+    AuthMode,
     ConnectionProperty,
     DataSource,
     DataSourceType,
     SourceDataTypeMapping,
 )
-from datam8_model.plugin import Capability, PluginManifest
+from datam8_model.plugin import Capability, PluginManifest, UiAuthMode, UiField, UiSchema
 
 VALIDATION_CONNECTION = Capability.VALIDATION_CONNECTION
 METADATA = Capability.METADATA
@@ -90,6 +91,8 @@ class Plugin(abc.ABC):
             raise MissingCapabilityError(VALIDATION_CONNECTION)
         raise NotImplementedError(f"test_connection on {self}")
 
+    # TODO: find way to type hint the DataFrame to make plugin development smoother?
+
     def list_schemas(self) -> pl.DataFrame:
         if not self.is_capable_of(METADATA):
             raise MissingCapabilityError(METADATA)
@@ -130,7 +133,7 @@ class Plugin(abc.ABC):
                 additional_properties.append(prop)
 
         for cp in dst_properties.values():
-            if cp.name not in ds_properties and cp.required:
+            if cp.name not in ds_properties and cp.required and cp.default is None:
                 missing_properties.append(cp.name)
 
         if len(additional_properties) > 0:
@@ -149,10 +152,40 @@ class Plugin(abc.ABC):
     @abc.abstractmethod
     def manifest(cls) -> PluginManifest: ...
 
+    @classmethod
+    def get_ui_schema(cls) -> UiSchema:
+        manifest = cls.manifest()
+
+        ui_schema = UiSchema(
+            title=manifest.displayName or manifest.id,
+            authModes=[
+                UiAuthMode(
+                    id=auth_mode.name,
+                    label=auth_mode.displayName,
+                    fields=[
+                        UiField(
+                            key=cp.name,
+                            label=cp.displayName,
+                            type=cp.type.value,
+                            required=cp.name in auth_mode.required,
+                            default=cp.default,
+                        )
+                        for cp in cls.get_connection_properties()
+                        if cp.name in auth_mode.required
+                        or cp.name in (auth_mode.optional or [])
+                        or cp.required
+                    ],
+                )
+                for auth_mode in cls.get_auth_modes()
+            ],
+        )
+
+        return ui_schema
+
     @staticmethod
     @functools.lru_cache
     @abc.abstractmethod
-    def get_ui_schema() -> dict[str, Any]: ...
+    def get_auth_modes() -> list[AuthMode]: ...
 
     @staticmethod
     @functools.lru_cache
