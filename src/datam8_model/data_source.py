@@ -91,6 +91,7 @@ class ConnectionProperty(BaseModel):
     name: str
     required: bool
     description: str | None = None
+    default: str | bool | int | float | None = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
@@ -159,7 +160,7 @@ class DataSourceType(BaseModel):
     """
     ID of the plugin used to connect to the source type. If not provided falls back to builtin plugins matching the  name
     """
-    connectionProperties: Sequence[ConnectionProperty] | None = None
+    connectionProperties: Annotated[Sequence[ConnectionProperty], Field(min_length=1)]
     """
     Required connection properties for this source type
     """
@@ -216,12 +217,11 @@ class DataSource(BaseModel):
     description: str | None = None
     properties: Sequence[property.PropertyReference] | None = None
     type: str
-    connectionString: str | None = None
     dataTypeMapping: Sequence[SourceDataTypeMapping] | None = None
     """
     Optional data type mappings. If not specified, uses defaults from DataSourceTypes. Individual mappings override defaults.
     """
-    extendedProperties: Mapping[str, str] | None = None
+    extendedProperties: Mapping[str, str | bool | int | float]
     """
     Additional properties specific to the data source
     """

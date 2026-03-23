@@ -21,8 +21,7 @@ from typing import Annotated, Any, cast
 
 from pydantic import ConfigDict, Field, ValidationError
 
-from datam8 import config, logging, opts, plugins, utils
-from datam8 import model_exceptions as errors
+from datam8 import config, errors, logging, opts, plugins, utils
 from datam8_model import attribute as a
 from datam8_model import base as b
 from datam8_model import data_product as dp
@@ -316,10 +315,10 @@ class Model:
     def get_entity_iterator(self) -> Iterator[EntityWrapperVariant]:
         for entity_type in b.EntityType:
             entities: EntityDict = getattr(self, entity_type.value)
-            logger.debug(f"Iterating... {entity_type}")
+            logger.log(5, f"Iterating... {entity_type}")
 
             for _, wrapper in entities.items():
-                logger.debug(f"Iterating... {str(wrapper.locator)}")
+                logger.log(5, f"Iterating... {str(wrapper.locator)}")
                 yield wrapper
 
     def get_generator_target(self, name: str, /) -> s.GeneratorTarget:
@@ -479,8 +478,9 @@ class Model:
 
         raise errors.EntityNotFoundError(f"Model Id {id}")
 
-    def has_locator(self, locator: Locator, /) -> bool:
-        wrapper = getattr(self, locator.entityType).get(locator)
+    def has_locator(self, locator: Locator | str, /) -> bool:
+        locator_ = _ensure_locator(locator)
+        wrapper = getattr(self, locator_.entityType).get(locator_)
 
         if wrapper is None:
             return False

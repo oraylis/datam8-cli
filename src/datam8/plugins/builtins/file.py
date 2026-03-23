@@ -15,22 +15,24 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
-import csv
-from collections.abc import Mapping
+
+import functools
 from pathlib import Path
 from typing import Any
 
-from datam8 import logging, utils
+import polars as pl
+
+from datam8 import config, logging, utils
 from datam8.plugins import Plugin
-from datam8_model.data_type import DataTypeDefinition
+from datam8_model.data_source import ConnectionProperty, SourceDataTypeMapping
 from datam8_model.plugin import Capability, PluginManifest
 
 logger = logging.getLogger(__name__)
 
 manifest_csv = PluginManifest(
-    id="builtin:LocalFileCsv",
+    id="builtin:CsvFile",
     displayName="Local CSV File (builtin)",
-    version="0.1.0",
+    version=config.get_version(),
     entryPoint="datam8.plugins.builtins.file:CsvFile",
     capabilities=[
         Capability.METADATA,
@@ -41,73 +43,59 @@ manifest_csv = PluginManifest(
 
 
 class CsvFile(Plugin):
-    def get_table_metadata(self, table: str, /, schema: str | None = None) -> Any:
-        pass
+    manifest: PluginManifest = manifest_csv
 
-    def validate_connection(self) -> Exception | None:
-        self._parse_connectionstring()
+    def _get_path(self) -> Path:
+        protocol = self.connection_properties.pop("protocol")
+        file_path = self.connection_properties.pop("path")
+
+        match [protocol, file_path]:
+            case ["file", path]:
+                path = Path(path)
+            case [unknown, _]:
+                raise utils.create_error(f"Protocol '{unknown}' is not implemented for CsvFiles")
+
+        return path
 
     def test_connection(self) -> Exception | None:
-        match self._parse_connectionstring():
-            case ["file", rest]:
-                if not Path(rest).exists():
-                    raise utils.create_error(FileNotFoundError(f"Path '{rest}' does not exist."))
-            case [unknown, *rest]:
-                raise utils.create_error(f"Protocol '{unknown}' is not implemented for CsvFiles")
-
-    def _parse_connectionstring(self) -> list[str]:
-        if self._data_source.connectionString is None:
-            raise utils.create_error("A connectionString must be set when connecting to files")
-
-        if "://" not in self._data_source.connectionString:
+        path = self._get_path()
+        if not path.exists():
             raise utils.create_error(
-                "Connectionstring must be in the form of <protocol>://<path> or only a path"
+                FileNotFoundError(
+                    f"Directory '{path}' for data source '{self._data_source.name}' not found"
+                )
             )
 
-        return self._data_source.connectionString.split("://")
-
-    def _get_paths_from_connectionstring(self) -> list[Path]:
-        match self._parse_connectionstring():
-            case ["file", *rest]:
-                paths = list(Path(*rest).glob("*.csv"))
-            case [unknown, *rest]:
-                raise utils.create_error(f"Protocol '{unknown}' is not implemented for CsvFiles")
-
-        return paths
-
-    def list_tables(self, schema: str | None = None, /) -> list[str]:
-        files = [path.as_posix() for path in self._get_paths_from_connectionstring()]
-        return files
+    def list_tables(self, schema: str | None = None, /) -> pl.DataFrame:
+        return pl.DataFrame({"files": self._get_path().glob("*.csv")})
 
     def preview_data(
         self, table_name: str, /, schema: str | None = None, *, limit: int = 10
-    ) -> list[list[str]]:
-        match self._parse_connectionstring():
-            case ["file", *rest]:
-                path = Path(*rest) / table_name
-            case [unknown, *rest]:
-                raise utils.create_error(f"Protocol '{unknown}' is not implemented for CsvFiles")
+    ) -> pl.LazyFrame:
+        path = self._get_path()
+        df = pl.read_csv(path / table_name, sample_size=limit, **self.connection_properties)
+        return df.lazy()
 
-        line_count = 0
-        lines: list[list[str]] = []
-        dialect = (self._data_source.extendedProperties or {}).get("dialect", "excel")
-
-        with open(path) as file_:
-            reader = csv.reader(file_, dialect)
-            for row in reader:
-                lines.append(row)
-                line_count += 1
-                if line_count >= limit:
-                    break
-
-        return lines
-
-    def get_ui_schema() -> dict[str, str]:
+    @staticmethod
+    @functools.lru_cache(maxsize=1)
+    def get_ui_schema(cls) -> dict[str, Any]:
         return {}
 
     @staticmethod
-    def get_data_type_mappings() -> dict[str, DataTypeDefinition]:
-        return {
-            "string": DataTypeDefinition(name="string", targets=Mapping()),
-            "number": DataTypeDefinition(name="decimal", targets=Mapping()),
-        }
+    @functools.lru_cache(maxsize=1)
+    def get_data_type_mappings() -> list[SourceDataTypeMapping]:
+        types = [
+            SourceDataTypeMapping(sourceType="string", targetType="string"),
+            SourceDataTypeMapping(sourceType="number", targetType="decimal"),
+        ]
+        return types
+
+    @staticmethod
+    @functools.lru_cache(maxsize=1)
+    def get_connection_properties() -> list[ConnectionProperty]:
+        cps = [
+            ConnectionProperty(name="path", required=True),
+            ConnectionProperty(name="protocol", required=False, default="file"),
+            ConnectionProperty(name="has_header", required=False, default=True),
+        ]
+        return cps

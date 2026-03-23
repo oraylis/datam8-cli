@@ -15,13 +15,15 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+from __future__ import annotations
+
 from pathlib import Path
 from typing import Any, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from datam8 import logging, utils
-from datam8 import model_exceptions as errors
+from datam8 import errors, logging, utils
 from datam8_model import attribute as a
 from datam8_model import base as b
 from datam8_model import data_product as dp
@@ -182,7 +184,7 @@ class EntityWrapper[T: b.BaseEntityType](BaseModel):
         try:
             new_entity = type(new_entity).model_validate(new_entity)
         except ValidationError as err:
-            raise utils.create_error(err, code=520)
+            raise utils.create_error(err, status_code=520)
 
         self.entity = new_entity
         self._changed = True

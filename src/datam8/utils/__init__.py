@@ -42,7 +42,6 @@ from logging import FileHandler, StreamHandler
 from pathlib import Path
 from typing import Any
 
-import fastapi
 import rich
 import typer
 from pydantic import BaseModel
@@ -53,14 +52,20 @@ from datam8 import config, logging, opts
 logger = logging.getLogger(__name__)
 
 
-def create_error(err: Exception | str, /, code: int = 500) -> Exception:
-    if config.run_as_api:
-        return fastapi.HTTPException(status_code=code, detail=str(err).splitlines())
+def create_error(err: Exception | str, /, status_code: int = 500, exit_code: int = 1) -> Exception:
+    if config.mode == config.RunMode.API:
+        import fastapi
+
+        return fastapi.HTTPException(status_code=status_code, detail=str(err).splitlines())
 
     if isinstance(err, str):
         err = Exception(err)
 
-    return err
+    if logger.getEffectiveLevel() <= logging.DEBUG or config.mode == config.RunMode.TEST:
+        return err
+
+    typer.echo(err)
+    return typer.Exit(exit_code)
 
 
 def emit_result(

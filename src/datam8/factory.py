@@ -16,14 +16,20 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+from __future__ import annotations
+
 import asyncio
 import pathlib
-import sys
 
 from pydantic_core import ValidationError
 
-from datam8 import config, logging, model, model_exceptions, parser, parser_exceptions
-from datam8.plugins import Plugin, PluginManager
+from datam8 import config, logging, model, parser, plugins, utils
+from datam8.errors import (
+    EntityNotFoundError,
+    ModelParseError,
+    NotSupportedModelVersionError,
+    PropertiesNotResolvedError,
+)
 from datam8_model import data_source as ds
 from datam8_model import folder as f
 from datam8_model import solution as s
@@ -32,12 +38,12 @@ from datam8_model.property import PropertyReference, PropertyValue
 logger = logging.getLogger(__name__)
 
 _model: model.Model | None = None
-_plugin_manager: PluginManager | None = None
+_plugin_manager: plugins.PluginManager | None = None
 
 
 def get_plugin_manager(
     solution: s.Solution | None = None, /, *, reset: bool = False
-) -> PluginManager:
+) -> plugins.PluginManager:
     """
     Get a plugin manager for the currently loaded solution.
 
@@ -55,12 +61,12 @@ def get_plugin_manager(
     global _plugin_manager
 
     if _plugin_manager is None or reset:
-        _plugin_manager = PluginManager(solution or get_model().solution)
+        _plugin_manager = plugins.PluginManager(solution or get_model().solution)
 
     return _plugin_manager
 
 
-def get_plugin_for_data_source(data_source: ds.DataSource | str) -> Plugin:
+def get_plugin_for_data_source(data_source: ds.DataSource | str) -> plugins.Plugin:
     _model = get_model()
 
     if isinstance(data_source, str):
@@ -68,9 +74,13 @@ def get_plugin_for_data_source(data_source: ds.DataSource | str) -> Plugin:
     else:
         data_source_ = data_source
 
-    _type = _model.get_data_source_type(data_source_.type)
-    plugin = get_plugin_manager(_model.solution).get_plugin_instantiator(_type.entity)(data_source_)
-    logger.info(f"Lookup {plugin} for {_type}")
+    type_ = _model.get_data_source_type(data_source_.type).entity
+
+    # register builtin plugin if applicable
+    plugins.init_builtin_plugins(data_source_type=type_)
+
+    plugin = get_plugin_manager(_model.solution).get_plugin_instantiator(type_)(data_source_, type_)
+    logger.debug(f"Lookup {plugin} for {type_}")
     return plugin
 
 
@@ -142,32 +152,26 @@ def create_model_or_exit(solution_path: pathlib.Path | None = None, /) -> model.
 
     try:
         return create_model(solution_path)
+    except NotSupportedModelVersionError as err:
+        logger.error(err)
+        raise utils.create_error(
+            f"Supported versions are: {config.supported_model_versions}", exit_code=2
+        )
     except FileNotFoundError as err:
-        logger.error(f"Solution file does not exist: {err}")
-        sys.exit(1)
+        raise utils.create_error(f"Solution file does not exist: {err}")
     except RecursionError as err:
-        logger.error(err)
-        sys.exit(1)
-    except ValidationError as err:
-        logger.error(err)
-        sys.exit(1)
-    except parser_exceptions.ModelParseException as err:
-        logger.error(err)
-        sys.exit(1)
-    except parser_exceptions.NotSupportedModelVersion as err:
-        logger.error(err)
-        logger.warning(f"Supported versions are: {config.supported_model_versions}")
-
-        if err.version == "1.0.0":
-            logger.warning(f"Supported versions are: {config.supported_model_versions}")
-
-        sys.exit(1)
-    except model_exceptions.EntityNotFoundError as err:
-        logger.error(err)
-        sys.exit(1)
-    except model_exceptions.PropertiesNotResolvedError as err:
-        logger.error(err)
-        sys.exit(1)
+        raise utils.create_error(str(err))
+    except Exception as err:
+        match err:
+            case (
+                ValidationError()
+                | ModelParseError()
+                | EntityNotFoundError()
+                | PropertiesNotResolvedError() as err_
+            ):
+                raise utils.create_error(str(err_), exit_code=3)
+            case _:
+                raise utils.create_error(err)
 
 
 def resolve_property(model: model.Model, /, reference: PropertyReference) -> list[PropertyValue]:

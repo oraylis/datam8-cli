@@ -235,7 +235,14 @@ LocatorOpt = Annotated[
     typer.Option(help="A locator to finetune search results"),
 ]
 
-Limit = Annotated[int, typer.Option("-n", help="Controls the max limit of rows to display")]
+Limit = Annotated[
+    int, typer.Option("--limit", "-n", help="Controls the max limit of rows to display", min=1)
+]
+ColLimit = Annotated[
+    int | None, typer.Option("--column-limit", "-cn", help="Number of columns to display", min=1)
+]
 
 SchemaName = Annotated[str | None, typer.Option(help="Name of a source schema")]
 TableName = Annotated[str, typer.Argument(help="Name of table in source")]
+
+SecretPath = Annotated[Path, typer.Argument(help="Path to store the secret in the keyring backend")]

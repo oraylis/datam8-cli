@@ -33,5 +33,4 @@ manifest_azure = PluginManifest(
 
 
 class AzureDataLake(Plugin):
-    def get_ui_schema(self) -> None:
-        print("Getting ui schema")
+    manifest: PluginManifest = manifest_azure

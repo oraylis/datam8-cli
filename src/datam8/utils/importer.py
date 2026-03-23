@@ -20,7 +20,7 @@ import sys
 from importlib import machinery, util
 from types import ModuleType
 
-from datam8 import config, exceptions, logging, utils
+from datam8 import config, errors, logging, utils
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +65,7 @@ def load_modules(module_path: pathlib.Path) -> dict[str, ModuleType]:
         module_name = module_files[i].relative_to(module_path).as_posix().removesuffix(".py")
         try:
             modules[module_name] = load_module(module_files[i], module_name)
-        except exceptions.PayloadRegisteredMultipleTimesError as err:
+        except errors.PayloadRegisteredMultipleTimesError as err:
             logger.error(f"{err}\n{module_files[i]}")
             sys.exit(1)
         except ModuleNotFoundError as err:

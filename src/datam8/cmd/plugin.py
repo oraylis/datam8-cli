@@ -15,13 +15,14 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 from typing import Annotated
 
 import rich
 import typer
 
 from datam8 import config, logging, opts, parser
-from datam8.plugins import PluginManager
+from datam8.plugins import PluginManager, init_builtin_plugins
 
 from . import common
 
@@ -47,43 +48,50 @@ def list(
     common.main_callback(solution_path, log_level, version)
 
     solution = parser.parse_solution_file(config.solution_path)
-    pm = PluginManager(solution)
+    init_builtin_plugins()
 
-    for plugin in pm.get_plugins():
+    for plugin in PluginManager(solution).get_plugins():
         rich.print(plugin)
 
 
 @app.command()
 def show(
-    name: Annotated[str, typer.Argument(help="Plugin name")],
+    plugin_id: Annotated[str, typer.Argument(help="Plugin name")],
     solution_path: opts.SolutionPath,
     log_level: opts.LogLevel = opts.LogLevels.WARNING,
     version: opts.Version = False,
 ):
     "List available plugins"
     common.main_callback(solution_path, log_level, version)
+    init_builtin_plugins(plugin_id=plugin_id)
 
     solution = parser.parse_solution_file(config.solution_path)
     pm = PluginManager(solution)
-    plugin = pm.get_plugin_manifest(name)
+    plugin_manifest = pm.get_plugin_manifest(plugin_id)
+    PluginClass = pm.get_plugin(plugin_manifest.id)
 
-    rich.print(plugin)
+    rich.print(plugin_manifest)
+
+    typer.echo("Connection Properties")
+    rich.print(PluginClass.get_connection_properties())
+
+    typer.echo("DataType mappings")
+    rich.print(PluginClass.get_data_type_mappings())
 
 
-@app.command()
-def list_schemas(
-    name: Annotated[str, typer.Argument(help="Datasource name")],
+@app.command("ui-schema")
+def ui_schema(
+    plugin_id: Annotated[str, typer.Argument(help="Plugin name")],
     solution_path: opts.SolutionPath,
     log_level: opts.LogLevel = opts.LogLevels.WARNING,
     version: opts.Version = False,
 ):
-    "List available plugins"
+    "Prints the results of the uiSchema capability of a plugin (intended for debugging)"
     common.main_callback(solution_path, log_level, version)
+    init_builtin_plugins(plugin_id=plugin_id)
 
-    from datam8 import factory
+    solution = parser.parse_solution_file(config.solution_path)
+    PluginClass = PluginManager(solution).get_plugin(plugin_id)
+    ui_schema = PluginClass.get_ui_schema()
 
-    model = factory.create_model_or_exit()
-    data_source = model.get_data_source(name)
-    plugin = factory.get_plugin_for_data_source(data_source.entity)
-
-    rich.print(plugin.list_schemas())
+    rich.print(ui_schema)

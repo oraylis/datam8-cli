@@ -20,19 +20,16 @@
 This module handles all parsing of json files into generator internal objects.
 """
 
+from __future__ import annotations
+
 import pathlib
 from concurrent import futures
 from typing import Any
 
 from pydantic import ValidationError
 
-from datam8_model import base as b
-from datam8_model import model as m
-from datam8_model import solution as s
-
-from . import config, logging
-from . import parser_exceptions as errors
-from .model import (
+from datam8 import config, errors, logging
+from datam8.model import (
     EntityDict,
     EntityWrapper,
     Locator,
@@ -40,6 +37,9 @@ from .model import (
     new_empty_entity_type_dict,
     wrap_base_entity,
 )
+from datam8_model import base as b
+from datam8_model import model as m
+from datam8_model import solution as s
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +96,7 @@ def parse_solution_file(path: pathlib.Path, /) -> s.Solution:
     solution = s.Solution.from_json_file(path)
 
     if solution.schemaVersion not in config.supported_model_versions:
-        raise errors.NotSupportedModelVersion(solution.schemaVersion)
+        raise errors.NotSupportedModelVersionError(solution.schemaVersion)
 
     logger.info(
         f"Parsed solution file with schema version: {solution.schemaVersion}",
@@ -148,7 +148,7 @@ def __parse_model_entities(
         _executor.shutdown()
 
     if parse_errors:
-        raise errors.ModelParseException(inner_exceptions=[err for err in parse_errors.values()])
+        raise errors.ModelParseError(inner_exceptions=[err for err in parse_errors.values()])
 
     logger.info(f"Parsed model entities: {len(model_files)}")
 
@@ -230,7 +230,7 @@ def __parse_base_entities(
         _executor.shutdown()
 
     if parse_errors:
-        raise errors.ModelParseException(inner_exceptions=[err for err in parse_errors.values()])
+        raise errors.ModelParseError(inner_exceptions=[err for err in parse_errors.values()])
 
     unpacked_entities = {
         k.value: {wrapped_entity.locator: wrapped_entity for wrapped_entity in v}
@@ -264,9 +264,7 @@ def __parse_base_entity_file(
     return rel_path, (entities_type, entities)
 
 
-def __validate_folder_product_module(
-    base_entities: dict[str, EntityDict[Any]], /
-) -> None:
+def __validate_folder_product_module(base_entities: dict[str, EntityDict[Any]], /) -> None:
     data_products: EntityDict[Any] = base_entities.get(b.EntityType.DATA_PRODUCTS.value, {})
     folders: EntityDict[Any] = base_entities.get(b.EntityType.FOLDERS.value, {})
 
@@ -306,7 +304,7 @@ def __validate_folder_product_module(
                 )
 
     if issues:
-        raise errors.ModelParseException(
+        raise errors.ModelParseError(
             msg="Folder metadata validation failed.",
             inner_exceptions=[ValueError(issue) for issue in issues],
         )

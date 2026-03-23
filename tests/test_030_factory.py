@@ -23,16 +23,12 @@ from datam8 import factory
 from datam8.model import Locator, Model, PropertyReference
 
 
-@pytest_cases.parametrize_with_cases(
-    "input", cases=CasesPropertyValueResolution, glob="*_valid"
-)
+@pytest_cases.parametrize_with_cases("input", cases=CasesPropertyValueResolution, glob="*_valid")
 def test_resolve_property(input, model: Model):
     property, value = input[0].split("/")
     ref = PropertyReference(property=property, value=value)
 
-    lookuped_values = sorted(
-        factory.resolve_property(model, ref), key=lambda x: x.property
-    )
+    lookuped_values = sorted(factory.resolve_property(model, ref), key=lambda x: x.property)
     expected_values = sorted(
         [
             model.propertyValues[Locator.from_path(f"/propertyValues/{ref}")].entity

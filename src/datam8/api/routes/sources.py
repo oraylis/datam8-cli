@@ -15,33 +15,16 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
 
 from datam8 import factory
 from datam8.model import Locator
 from datam8_model.model import ExternalModelSource
 
-sources_router = APIRouter(prefix="/sources")
-
-
-@sources_router.get("/{data_source}/validate-connection")
-async def validate_connection(data_source: str) -> None:
-    "Validate datasource connection properties"
-    ds = factory.get_plugin_for_data_source(data_source)
-    error = ds.validate_connection()
-
-    if isinstance(error, Exception):
-        raise HTTPException(status_code=500, detail=str(error))
-
-
-@sources_router.get("/{data_source}/list-tables")
-async def list_tables(data_source: str) -> list[str]:
-    "List available source tables for a datasource connector"
-    plugin = factory.get_plugin_for_data_source(data_source)
-    return plugin.list_tables()
+sources_router = APIRouter(prefix="/sources", tags=["sources"])
 
 
 @sources_router.get("/{data_source}/test")
@@ -53,31 +36,99 @@ async def test_connection(data_source: str) -> None:
         raise HTTPException(status_code=500, detail=str(error))
 
 
-class TableMetadataBody(BaseModel):
-    table: str
-    schema: str | None = None
+#
+# schema support
+#
 
 
-@sources_router.post("/{data_source}/table-metadata")
-async def get_table_metadata(data_source: str, body: TableMetadataBody) -> dict[str, Any]:
+@sources_router.get("/{data_source}/schemas")
+async def list_schemas(data_source: str) -> list[dict[str, Any]]:
+    "List available source schema for a data source"
     plugin = factory.get_plugin_for_data_source(data_source)
-    return plugin.get_table_metadata(body.table, body.schema)
+    schemas = plugin.list_schemas().to_dicts()
+    return schemas
 
 
-class PreviewBody(TableMetadataBody):
-    limit: int = 10
-
-
-@sources_router.post("/{data_source}/preview")
-async def preview(data_source: str, body: PreviewBody) -> list[Any]:
+@sources_router.get("/{data_source}/schemas/{schema}/tables")
+async def list_tables_for_schema(data_source: str, schema: str) -> list[dict[str, Any]]:
+    "List available source tables for a datasource connector"
     plugin = factory.get_plugin_for_data_source(data_source)
-    return plugin.preview_data(body.table, body.schema, limit=body.limit)
+    tables = plugin.list_tables(schema)
+    return tables.to_dicts()
 
 
-# NOTE: not sure what this is supposed to be?
-@sources_router.post("/{data_source}/virtual-table-metadata")
-async def get_virtual_table_metadata(data_source: str, body: TableMetadataBody) -> dict[str, Any]:
-    raise HTTPException(status_code=404, detail="NotImplemented")
+@sources_router.get("/{data_source}/schemas/{schema}/tables/{table}")
+async def get_table_metadata_for_schema(
+    data_source: str, schema: str, table: str
+) -> list[dict[str, Any]]:
+    plugin = factory.get_plugin_for_data_source(data_source)
+    metadata = plugin.get_table_metadata(table, schema)
+    return metadata.to_dicts()
+
+
+@sources_router.get("/{data_source}/schemas/{schema}/tables/{table}/preview")
+async def preview_for_schema(
+    data_source: str, schema: str, table: str, limit: int = 10
+) -> list[dict[str, Any]]:
+    plugin = factory.get_plugin_for_data_source(data_source)
+    preview = plugin.preview_data(table, schema, limit=limit)
+
+    for df in preview.collect_batches(chunk_size=limit):
+        return df.to_dicts()
+
+    raise HTTPException(status_code=404, detail="No data to preview")
+
+
+@sources_router.put("/{data_source}/schemas/{schema}/tables/{table}/import")
+async def import_for_schema(data_source: str, schema: str, table: str) -> list[dict[str, Any]]:
+    raise HTTPException(status_code=404, detail="comming soon...")
+
+
+#
+# no schema support
+#
+
+
+@sources_router.get("/{data_source}/tables/")
+async def list_tables(data_source: str, table: str) -> list[dict[str, Any]]:
+    "List available source tables if a source does not support schemas"
+    plugin = factory.get_plugin_for_data_source(data_source)
+    tables = plugin.list_tables()
+    return tables.to_dicts()
+
+
+@sources_router.get("/{data_source}/tables/{table}")
+async def get_table_metadata(data_source: str, table: str) -> list[dict[str, Any]]:
+    plugin = factory.get_plugin_for_data_source(data_source)
+    metadata = plugin.get_table_metadata(table)
+    return metadata.to_dicts()
+
+
+@sources_router.get("/{data_source}/tables/{table}/preview")
+async def preview(data_source: str, table: str, limit: int = 10) -> list[dict[str, Any]]:
+    plugin = factory.get_plugin_for_data_source(data_source)
+    preview = plugin.preview_data(table, limit=limit)
+
+    for df in preview.collect_batches(chunk_size=limit):
+        return df.to_dicts()
+
+    raise HTTPException(status_code=404, detail="No data to preview")
+
+
+@sources_router.put("/{data_source}/tables/{table}/import")
+async def import_for_table(data_source: str, table: str) -> list[dict[str, Any]]:
+    raise HTTPException(status_code=404, detail="comming soon...")
+
+
+#
+# additional routes
+#
+
+
+# TODO: not sure what this is supposed to be?
+# @sources_router.post("/{data_source}/virtual-table-metadata")
+# async def get_virtual_table_metadata(data_source: str, body: TableMetadataBody) -> dict[str, Any]:
+#     raise HTTPException(status_code=404, detail="NotImplemented")
 
 
 @sources_router.get("/{data_source}/usages")
