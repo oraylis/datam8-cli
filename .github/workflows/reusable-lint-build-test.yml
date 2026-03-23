@@ -25,12 +25,16 @@ jobs:
           python_version_file: ".python-version"
 
       - name: Run ruff lint check
-        run: uv tool run ruff check . --respect-gitignore --exclude datam8-model/
+        run: uvx ruff check . --respect-gitignore --exclude datam8-model/
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run ty code analysis
+        run: uvx ty check src
 
       - name: Run pyright code analysis
-        run: |
-          uv sync
-          uv tool run pyright src
+        run: uvx pyright src
 
   building:
     runs-on: ubuntu-latest
@@ -75,7 +79,7 @@ jobs:
         with:
           repository: oraylis/datam8-sample-solution
           # TODO: remove after v2 is done
-          ref: feature/v2
+          ref: feature/v2-cli-pm
           path: datam8-sample-solution
 
       - name: Set up environment
@@ -89,11 +93,15 @@ jobs:
           echo "DATAM8_SOLUTION_PATH=datam8-sample-solution/ORAYLISDatabricksSample.dm8s" >> $GITHUB_ENV
 
       - name: Install packages
-        run: uv sync
+        run: uv sync --all-extras
 
       - name: Run pytests
         run: uv run pytest --junitxml=TEST-generator-pytest.xml
         continue-on-error: true
+        env:
+          NO_COLOR: 1
+          FORCE_COLOR: 0
+          TERM: dumb
 
       - name: Publish Test Results
         uses: dorny/test-reporter@v1

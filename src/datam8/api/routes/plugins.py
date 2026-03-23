@@ -47,9 +47,7 @@ async def get_plugin(plugin_id: str) -> pl.PluginManifest:
 
 @plugins_router.get("/{plugin_id}/ui-schema")
 async def get_plugin_ui_schema(plugin_id: str) -> dict[str, Any]:
-    model_ = factory.get_model()
-    type_ = model_.get_data_source_type(plugin_id).entity
-    ui_schema = factory.get_plugin_manager().get_plugin(plugin_id).get_ui_schema(type_)
+    ui_schema = factory.get_plugin_manager().get_plugin(plugin_id).get_ui_schema()
     return ui_schema
 
 
@@ -61,7 +59,7 @@ async def get_data_type_mappings(plugin_id: str):
 
 @plugins_router.get("/{plugin_id}/connection-properties")
 async def get_connection_properties(plugin_id: str):
-    connection_properties = (
-        factory.get_plugin_manager().get_plugin(plugin_id).get_connection_properties()
-    )
+    pm = factory.get_plugin_manager()
+    PluginClass = pm.get_plugin(plugin_id)
+    connection_properties = PluginClass.get_connection_properties()
     return connection_properties
