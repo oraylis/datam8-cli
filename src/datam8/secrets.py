@@ -29,11 +29,20 @@ from datam8 import config, logging, utils
 
 logger = logging.getLogger(__name__)
 
+ENV_VAR_PREFIX: str = "DATAM8_SECRET__"
+SECRET_PREFIX: str = "datam8:"
+
 
 def _ensure_path(path: PurePosixPath | str) -> PurePosixPath:
     if isinstance(path, str):
-        return PurePosixPath(path)
+        return PurePosixPath(path.removeprefix("ref://"))
     return path
+
+
+def _path_to_env_var(path: PurePosixPath) -> str:
+    upper_ = path.as_posix().upper()
+    replaced_ = upper_.replace("/", "_")
+    return f"{ENV_VAR_PREFIX}{replaced_}"
 
 
 class SecretResolver:
@@ -54,7 +63,7 @@ class SecretResolver:
             cls.__instance = None
 
     def __init__(self) -> None:
-        self.__service_name = f"datam8:{config.get_name()}"
+        self.__service_name = f"{SECRET_PREFIX}{config.get_name()}"
         self.__username = os.getlogin()
         self.lock = Lock()
 
@@ -163,7 +172,12 @@ class SecretResolver:
     def get_secret(self, path: PurePosixPath | str, /) -> str | None:
         path_ = _ensure_path(path)
         service_name = self.__create_service_name(path_)
-        secret = self.__get_password(service_name)
+
+        # in case secret is no secret backend, try env var
+        secret = os.getenv(
+            _path_to_env_var(path_),
+            self.__get_password(service_name),
+        )
 
         return secret
 

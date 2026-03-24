@@ -50,8 +50,8 @@ class CsvFile(Plugin):
     __manifest: PluginManifest = manifest_csv
 
     def _get_path(self) -> Path:
-        protocol = self.connection_properties.pop("protocol")
-        file_path = self.connection_properties.pop("path")
+        protocol = self.extended_properties.pop("protocol")
+        file_path = self.extended_properties.pop("path")
 
         match [protocol, file_path]:
             case ["file", path]:
@@ -84,7 +84,7 @@ class CsvFile(Plugin):
         self, table_name: str, /, schema: str | None = None, *, limit: int = 10
     ) -> pl.LazyFrame:
         path = self._get_path()
-        df = pl.read_csv(path / table_name, sample_size=limit, **self.connection_properties)
+        df = pl.read_csv(path / table_name, sample_size=limit, **self.extended_properties)
         return df.lazy()
 
     @classmethod
