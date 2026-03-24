@@ -15,6 +15,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
+from typing import Any
 
 import functools
 import urllib.parse
@@ -71,31 +72,56 @@ class SqlServer(Plugin):
         super().__init__(manifest, data_source, data_source_type)
         SqlServer.validate_connection(data_source, data_source_type)
 
-        self.logger.debug(f"Properties: {self.connection_properties}")
+        self.logger.debug(f"Properties: {self.extended_properties}")
 
     def get_connection_string(self) -> str:
-        # mandatory options
-        username = self.connection_properties.pop("username")
-        host = self.connection_properties.pop("host")
-        database = self.connection_properties.pop("database")
-        port = self.connection_properties.pop("port")
+        mandatory: dict[str, Any] = {}
+        optional: dict[str, Any] = {}
 
-        password_ref = self.connection_properties.pop(
-            "password_ref", f"sources/SQLServer/{self._data_source.name}"
-        )
+        for cp in self.get_connection_properties():
+            match [cp.required, cp.default, cp.name]:
+                case [True, _, _]:
+                    mandatory[cp.name] = self.extended_properties[cp.name]
+                case [False, None, name] if name in self.extended_properties:
+                    optional[name] = self.extended_properties[name]
+                case [False, _ as default, _ as name] if name in self.extended_properties:
+                    optional[name] = self.extended_properties.get(name, default)
 
-        password = SecretResolver().get_secret(password_ref)
-        if password is None:
-            raise utils.create_error(KeyError(f"Missing ref from secret store: {password_ref}"))
+        match mandatory:
+            case {"authMode": "sql_user", **rest}:
+                assert "password" in optional
+                assert "username" in optional
 
-        password = urllib.parse.quote_plus(password)
-        uri = f"mssql://{username}:{password}@{host}:{port}/{database}"
+                mandatory["username"] = optional.pop("username")
+                mandatory["password"] = urllib.parse.quote_plus(optional.pop("password"))
 
-        if len(self.connection_properties) > 0:
-            uri += "?" + "&".join([f"{k}={v}" for k, v in self.connection_properties.items()])
+                uri = "mssql://{username}:{password}@{host}:{port}/{database}"
 
-        sanitized_uri = uri.replace(password, "*****")
-        self.logger.debug(f"Created connection string: {sanitized_uri}")
+            case {"authMode": "windows", **rest}:
+                assert "trusted_connection" in optional
+
+                uri = "mssql://@{host}:{port}/{database}"
+
+            case {"authMode": _ as auth_mode, **rest}:
+                raise utils.create_error(
+                    ValueError(f"Unkown authMode {auth_mode} in {self._data_source.name}")
+                )
+
+        uri = uri.format(**mandatory)
+
+        if len(optional) > 0:
+            uri += "?" + "&".join([f"{k}={v}" for k, v in optional.items()])
+
+        masked_uri = uri
+        for cp in self.get_connection_properties():
+            if (
+                cp.name in {**mandatory, **optional}
+                and cp.type == ConnectionPropertyValueType.SECRET
+            ):
+                to_replace = mandatory.get(cp.name, optional.get(cp.name))
+                masked_uri = masked_uri.replace(to_replace, "*****")
+
+        self.logger.debug(f"Created connection string: {masked_uri}")
 
         return uri
 
@@ -219,15 +245,18 @@ class SqlServer(Plugin):
             ConnectionProperty(
                 name="authMode", type=ConnectionPropertyValueType.STRING, required=True
             ),
-            ConnectionProperty(
-                name="username", type=ConnectionPropertyValueType.STRING, required=True
-            ),
             ConnectionProperty(name="host", type=ConnectionPropertyValueType.STRING, required=True),
             ConnectionProperty(
                 name="database", type=ConnectionPropertyValueType.STRING, required=True
             ),
             ConnectionProperty(
                 name="port", type=ConnectionPropertyValueType.NUMBER, required=True, default=1433
+            ),
+            ConnectionProperty(
+                name="username", type=ConnectionPropertyValueType.STRING, required=False
+            ),
+            ConnectionProperty(
+                name="password", type=ConnectionPropertyValueType.SECRET, required=False
             ),
             ConnectionProperty(
                 name="trust_server_certificate",

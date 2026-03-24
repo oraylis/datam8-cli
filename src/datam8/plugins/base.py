@@ -25,9 +25,11 @@ from typing import Any
 import polars as pl
 
 from datam8 import logging, utils
+from datam8.secrets import SecretResolver
 from datam8_model.data_source import (
     AuthMode,
     ConnectionProperty,
+    ConnectionPropertyValueType,
     DataSource,
     DataSourceType,
     SourceDataTypeMapping,
@@ -70,7 +72,7 @@ class Plugin(abc.ABC):
         return f"Plugin(id='{self._manifest.id}' data_source='{self._data_source.name}')"
 
     @functools.cached_property
-    def connection_properties(self) -> dict[str, Any]:
+    def extended_properties(self) -> dict[str, Any]:
         if not self.is_capable_of(VALIDATION_CONNECTION):
             raise MissingCapabilityError(VALIDATION_CONNECTION)
 
@@ -80,6 +82,17 @@ class Plugin(abc.ABC):
         for cp in self._data_source_type.connectionProperties:
             if cp.name not in base and cp.default is not None:
                 base[cp.name] = cp.default
+            if cp.type == ConnectionPropertyValueType.SECRET:
+                secret_ref = base.pop(cp.name)
+                if not isinstance(secret_ref, str):
+                    raise utils.create_error(ValueError("A secret ref needs to be of type string"))
+
+                secret = SecretResolver().get_secret(secret_ref)
+                if secret is None:
+                    raise utils.create_error(
+                        ValueError(f"Could not resolve secret ref: {secret_ref}")
+                    )
+                base[cp.name] = secret
 
         return base
 
