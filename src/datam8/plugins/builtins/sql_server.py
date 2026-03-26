@@ -15,17 +15,15 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
-from typing import Any
-
 import functools
 import urllib.parse
+from typing import Any
 
 import polars as pl
 import typer
 
 from datam8 import config, logging, utils
 from datam8.plugins.base import Plugin
-from datam8.secrets import SecretResolver
 from datam8_model.data_source import (
     AuthMode,
     ConnectionProperty,
@@ -88,7 +86,7 @@ class SqlServer(Plugin):
                     optional[name] = self.extended_properties.get(name, default)
 
         match mandatory:
-            case {"authMode": "sql_user", **rest}:
+            case {"authMode": "sql_user", **rest}:  # noqa: F841
                 assert "password" in optional
                 assert "username" in optional
 
@@ -97,12 +95,12 @@ class SqlServer(Plugin):
 
                 uri = "mssql://{username}:{password}@{host}:{port}/{database}"
 
-            case {"authMode": "windows", **rest}:
+            case {"authMode": "windows", **rest}:  # noqa: F841
                 assert "trusted_connection" in optional
 
                 uri = "mssql://@{host}:{port}/{database}"
 
-            case {"authMode": _ as auth_mode, **rest}:
+            case {"authMode": _ as auth_mode, **rest}:  # noqa: F841
                 raise utils.create_error(
                     ValueError(f"Unkown authMode {auth_mode} in {self._data_source.name}")
                 )

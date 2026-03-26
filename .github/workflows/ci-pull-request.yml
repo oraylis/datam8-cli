@@ -7,5 +7,7 @@ jobs:
   call-lint-build-test:
     uses: ./.github/workflows/reusable-lint-build-test.yml
     secrets: inherit
+    permissions:
+      contents: read
     with:
       upload_artifacts: false

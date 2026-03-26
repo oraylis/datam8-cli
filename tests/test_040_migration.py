@@ -35,16 +35,12 @@ def print_diff(diff: DeepDiff, logger: logging.Logger = logger):
             logger.error("%s(%s) - %s", key, skey, diff_dict[key][skey])
 
     no_type_changes = len(diff_dict["type_changes"]) if "type_changes" in diff_dict else 0
-    no_values_changed = (
-        len(diff_dict["values_changed"]) if "type_changes" in diff_dict else 0
-    )
+    no_values_changed = len(diff_dict["values_changed"]) if "type_changes" in diff_dict else 0
     no_iterable_item_added = (
         len(diff_dict["iterable_item_added"]) if "iterable_item_added" in diff_dict else 0
     )
     no_iterable_item_removed = (
-        len(diff_dict["iterable_item_removed"])
-        if "iterable_item_removed" in diff_dict
-        else 0
+        len(diff_dict["iterable_item_removed"]) if "iterable_item_removed" in diff_dict else 0
     )
 
     logger.error(
@@ -56,9 +52,7 @@ def print_diff(diff: DeepDiff, logger: logging.Logger = logger):
     )
 
 
-@pytest_cases.parametrize_with_cases(
-    "case", cases=CaseBaseEntityMigration, glob="*_valid"
-)
+@pytest_cases.parametrize_with_cases("case", cases=CaseBaseEntityMigration, glob="*_valid")
 def test_migrate_model(case: BaseEntityMapping):
     old = case.legacy
     new = case.new
@@ -73,12 +67,8 @@ def test_migrate_model(case: BaseEntityMapping):
     assert migrated == new, f"migrated model does not match expectation: {new.type}"
 
 
-@pytest_cases.parametrize_with_cases(
-    "case", cases=CaseModelEntityMigration, glob="*_valid"
-)
-def test_migrated_model_entity(
-    case: ModelEntityMapping, migration: migration_v1.MigrationV1
-):
+@pytest_cases.parametrize_with_cases("case", cases=CaseModelEntityMigration, glob="*_valid")
+def test_migrated_model_entity(case: ModelEntityMapping, migration: migration_v1.MigrationV1):
     old = case.legacy
     new = case.new
 

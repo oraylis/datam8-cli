@@ -29,6 +29,7 @@ to those imports are executed. This reduces startup time.
 """
 
 # ruff: noqa: I001
+import os
 
 import sys
 
@@ -231,22 +232,32 @@ def init(
     log_level: opts.LogLevel = opts.LogLevels.INFO,
     version: opts.Version = False,
 ):
-    """Initialise a new DataM8 solution"""
-    common.main_callback(solution_path, log_level, version)
+    """
+    Initialise a new DataM8 solution. This is experimentell and will current always initialize the
+    sample solution as a starting point.
+    """
+    config.log_level = log_level
+    common.version_callback(version)
 
     new_solution_path = solution_path.resolve()
     if solution_path.suffix != ".dm8s":
         new_solution_path = new_solution_path / f"{name}.dm8s"
 
     if new_solution_path.exists():
-        logger.error("Solution file aready exists at %s", new_solution_path)
-        sys.exit(1)
+        typer.echo(f"Solution file aready exists at {new_solution_path}")
+        raise typer.Exit(1)
+
+    if len(os.listdir(new_solution_path.parent)) > 0:
+        typer.echo("Init needs to be run in an empty directory")
+        raise typer.Exit(1)
 
     from datam8 import solution
 
-    solution.init_solution(new_solution_path)
+    created_version = solution.init_solution_from_sample(new_solution_path)
+    typer.echo(f"Sample Solution in version {created_version} created")
 
-    typer.echo("Initialisation successfull")
+    # TODO: ask user if a blank or sample solution is required
+    # solution.init_solution(new_solution_path)
 
 
 @app.command()

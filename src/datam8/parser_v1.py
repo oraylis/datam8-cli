@@ -13,10 +13,7 @@ from datam8_model.v1 import (
 from datam8_model.v1.Index import IndexEntry
 
 type ModelEntitiesType = (
-    RawModelEntry.Model
-    | StageModelEntry.Model
-    | CoreModelEntry.Model
-    | CuratedModelEntry.Model
+    RawModelEntry.Model | StageModelEntry.Model | CoreModelEntry.Model | CuratedModelEntry.Model
 )
 
 

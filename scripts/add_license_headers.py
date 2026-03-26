@@ -67,7 +67,9 @@ def _apply(path: Path, header: str, dry_run: bool) -> bool:
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Add DataM8 license header to Python files.")
-    parser.add_argument("--dry-run", action="store_true", help="Only print files that would be updated.")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Only print files that would be updated."
+    )
     parser.add_argument(
         "--path",
         action="append",

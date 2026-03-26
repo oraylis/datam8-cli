@@ -16,10 +16,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+
 from __future__ import annotations
 
 from collections.abc import Sequence
-from enum import Enum, StrEnum
+from enum import Enum
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -40,7 +41,7 @@ class HistoryType(Enum):
     SCD4 = "SCD4"
 
 
-class ExpressionLanguage(StrEnum):
+class ExpressionLanguage(Enum):
     SQL = "sql"
     DAX = "dax"
     PYTHON = "python"

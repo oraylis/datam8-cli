@@ -87,7 +87,9 @@ def build(*, clean: bool = True, onefile: bool = True) -> Path:
         raise RuntimeError(f"datam8 binary missing at {bin_path}")
 
     # Smoke: `datam8 --help` should work.
-    _ = subprocess.check_output([str(bin_path), "--help"], cwd=str(repo_root), env={**os.environ}, text=True)
+    _ = subprocess.check_output(
+        [str(bin_path), "--help"], cwd=str(repo_root), env={**os.environ}, text=True
+    )
     return dist_root
 
 
@@ -100,4 +102,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

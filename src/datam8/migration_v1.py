@@ -35,9 +35,7 @@ MODEL_DUMP_OPTIONS: dict[str, Any] = {
     "exclude_none": True,
 }
 
-type BaseEntitiesType = (
-    ds_legacy.Model | at_legacy.Model | dp_legacy.Model | dt_legacy.Model
-)
+type BaseEntitiesType = ds_legacy.Model | at_legacy.Model | dp_legacy.Model | dt_legacy.Model
 
 type Tags = Sequence[str]
 
@@ -56,9 +54,8 @@ def data_source(old: ds_legacy.DataSource) -> ds.DataSource:
         type=old.type,
         displayName=old.displayName,
         description=old.purpose,
-        connectionString=old.connectionString,
         dataTypeMapping=new_mapping,
-        extendedProperties=utils.none_if(getattr(old, "ExtendedProperties", None), {}),
+        extendedProperties=getattr(old, "ExtendedProperties", {}),
     )
 
     return new
@@ -79,15 +76,9 @@ def data_type_mapping(
 
 
 def attribute_type(old: at_legacy.AttributeType) -> a.AttributeType:
-    if (
-        old.isUnit == at_legacy.IsUnit.CURRENCY
-        or old.hasUnit == at_legacy.HasUnit.CURRENCY
-    ):
+    if old.isUnit == at_legacy.IsUnit.CURRENCY or old.hasUnit == at_legacy.HasUnit.CURRENCY:
         has_unit = a.HasUnit.CURRENCY
-    elif (
-        old.isUnit == at_legacy.IsUnit.PHYSICAL
-        or old.hasUnit == at_legacy.IsUnit.PHYSICAL
-    ):
+    elif old.isUnit == at_legacy.IsUnit.PHYSICAL or old.hasUnit == at_legacy.IsUnit.PHYSICAL:
         has_unit = a.HasUnit.PHYSICAL
     else:
         has_unit = a.HasUnit.NO_UNIT
@@ -245,9 +236,7 @@ def attribute_stage(old: stage_legacy.Attribute) -> a.Attribute:
         dateDeleted=None,
         dateModified=None,
         properties=[
-            p.PropertyReference(property="tags", value=t)
-            for t in old.tags or []
-            if t not in ["BK"]
+            p.PropertyReference(property="tags", value=t) for t in old.tags or [] if t not in ["BK"]
         ],
         isBusinessKey=is_pk,
         history=a.HistoryType.SCD0 if is_pk else a.HistoryType.SCD1,
@@ -266,9 +255,7 @@ def attribute_core(old: core_legacy.Attribute) -> a.Attribute:
     if old_history.value in a.HistoryType._value2member_map_:
         history = a.HistoryType(old_history.value)
 
-    properties = [
-        p.PropertyReference(property="tags", value=tag) for tag in old.tags or []
-    ]
+    properties = [p.PropertyReference(property="tags", value=tag) for tag in old.tags or []]
 
     if old.history == core_legacy.History.SK:
         properties.append(p.PropertyReference(property="column_type", value="SK"))
@@ -364,9 +351,7 @@ class MigrationV1:
                     sourceDataType=dt.DataType(
                         type=source_attributes[mapping.source].type,
                         nullable=source_attributes[mapping.source].nullable or False,
-                        charLen=utils.none_if(
-                            source_attributes[mapping.source].charLength, 0
-                        ),
+                        charLen=utils.none_if(source_attributes[mapping.source].charLength, 0),
                         precision=source_attributes[mapping.source].precision,
                         scale=source_attributes[mapping.source].scale,
                     ),
@@ -410,17 +395,14 @@ class MigrationV1:
                 new_date_deleted = None
 
             new_attribute.dateModified = new_date_modified
-            new_attribute.dateAdded = (
-                new_date_added or new_date_modified or new_attribute.dateAdded
-            )
+            new_attribute.dateAdded = new_date_added or new_date_modified or new_attribute.dateAdded
             new_attribute.dateDeleted = new_date_deleted
 
             attributes.append(new_attribute)
 
             # combine raw and stage parameter
         parameters = [
-            m.ModelParameter(name=t.name, value=t.value)
-            for t in raw_entity.entity.parameters or []
+            m.ModelParameter(name=t.name, value=t.value) for t in raw_entity.entity.parameters or []
         ] + [
             m.ModelParameter(name=t.name, value=t.value)
             for t in old.entity.parameters or []
@@ -428,8 +410,7 @@ class MigrationV1:
         ]
 
         properties = [
-            p.PropertyReference(property="tags", value=tag)
-            for tag in old.entity.tags or []
+            p.PropertyReference(property="tags", value=tag) for tag in old.entity.tags or []
         ] + [
             p.PropertyReference(property="tags", value=tag)
             for tag in raw_entity.entity.tags or []
@@ -532,19 +513,17 @@ class MigrationV1:
                     for src in func.source or []:
                         source_mappings.append(
                             m.InternalModelSource(
-                                sourceLocation=self.model_file_references[src.dm8l].id
+                                sourceLocation=self.model_file_references[src.dm8l.lower()].id
                             )
                         )
 
         relationships: list[m.ModelRelationship] = []
         for rel in old.entity.relationship or []:
             new_relationship = m.ModelRelationship(
-                targetLocation=self.model_file_references[rel.dm8lKey].id,
+                targetLocation=self.model_file_references[rel.dm8lKey.lower()].id,
                 alias=rel.role if rel.role != "#" else None,
                 attributes=[
-                    m.ModelAttributeMapping(
-                        sourceName=attr.dm8lKeyAttr, targetName=attr.dm8lAttr
-                    )
+                    m.ModelAttributeMapping(sourceName=attr.dm8lKeyAttr, targetName=attr.dm8lAttr)
                     for attr in rel.fields or []
                 ],
             )
@@ -556,12 +535,10 @@ class MigrationV1:
             displayName=old.entity.displayName,
             description=_compose_description(old.entity.purpose, old.entity.explanation),
             parameters=[
-                m.ModelParameter(name=p.name, value=p.value)
-                for p in old.entity.parameters or []
+                m.ModelParameter(name=p.name, value=p.value) for p in old.entity.parameters or []
             ],
             properties=[
-                p.PropertyReference(property="tags", value=tag)
-                for tag in old.entity.tags or []
+                p.PropertyReference(property="tags", value=tag) for tag in old.entity.tags or []
             ],
             attributes=attributes,
             sources=source_mappings,
@@ -582,9 +559,7 @@ class MigrationV1:
 
         for file in model_dir_path.glob("**/*.json"):
             output_file_path = (
-                output_path
-                / file.parent.relative_to(model_dir_path.absolute())
-                / file.name
+                output_path / file.parent.relative_to(model_dir_path.absolute()) / file.name
             )
 
             logger.debug(f"Migrating {file} to {output_file_path}")
@@ -636,9 +611,7 @@ class MigrationV1:
                 case "DataSources.json":
                     base_entity = ds_legacy.Model.from_json_file(file)
                 case _:
-                    logger.warning(
-                        "Unknown base file found, cannot be migrated: %s", file.name
-                    )
+                    logger.warning("Unknown base file found, cannot be migrated: %s", file.name)
                     continue
 
             new_base_entities = base_entities(base_entity)
@@ -656,6 +629,15 @@ class MigrationV1:
                             data_source_types[src.type] = ds.DataSourceType(
                                 name=src.type,
                                 dataTypeMapping=[x for x in src.dataTypeMapping or []],
+                                authModes=[],
+                                connectionProperties=[
+                                    ds.ConnectionProperty(
+                                        name=x,
+                                        required=False,
+                                        type=ds.ConnectionPropertyValueType.STRING,
+                                    )
+                                    for x in src.extendedProperties
+                                ],
                             )
                         src.dataTypeMapping = None
 
@@ -689,9 +671,7 @@ class MigrationV1:
         )
 
     @staticmethod
-    def migrate_zones(
-        solution: Solution.Model, output_path: pathlib.Path
-    ) -> list[z.Zone]:
+    def migrate_zones(solution: Solution.Model, output_path: pathlib.Path) -> list[z.Zone]:
         new_zones = b.Zones(
             type="zones",
             zones=[
@@ -712,9 +692,7 @@ class MigrationV1:
                 ),
             ],
         )
-        content = new_zones.model_dump_json(
-            indent=2, exclude_defaults=True, exclude_none=True
-        )
+        content = new_zones.model_dump_json(indent=2, exclude_defaults=True, exclude_none=True)
 
         with open(output_path, "w") as file:
             file.write(content)
@@ -727,6 +705,7 @@ class MigrationV1:
             schemaVersion="2.0.0",
             basePath=pathlib.Path("Base"),
             modelPath=pathlib.Path("Model"),
+            pluginsPath=pathlib.Path("Plugins"),
             generatorTargets=[
                 s.GeneratorTarget(
                     name="databricks",
@@ -788,9 +767,7 @@ class MigrationV1:
 
                 product_folder = b.Folders(
                     type="folders",
-                    folders=[
-                        f.Folder(id=next_id, name=product.name, dataProduct=product.name)
-                    ],
+                    folders=[f.Folder(id=next_id, name=product.name, dataProduct=product.name)],
                 )
                 next_id += 1
 
@@ -829,15 +806,11 @@ def timestamp(old: str | None) -> datetime.datetime | None:
     except Exception as err_:
         err = err_
     try:
-        return datetime.datetime.strptime(old, "%Y-%m-%d %H:%M:%S").astimezone(
-            datetime.UTC
-        )
+        return datetime.datetime.strptime(old, "%Y-%m-%d %H:%M:%S").astimezone(datetime.UTC)
     except Exception as err_:
         err = err_
     try:
-        return datetime.datetime.strptime(old, "%Y-%M-%d %H:%m:%S").astimezone(
-            datetime.UTC
-        )
+        return datetime.datetime.strptime(old, "%Y-%M-%d %H:%m:%S").astimezone(datetime.UTC)
     except Exception as err_:
         err = err_
 

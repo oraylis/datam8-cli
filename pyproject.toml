@@ -11,22 +11,23 @@ classifiers = [
   "Operating System :: OS Independent",
 ]
 dependencies = [
-  "Jinja2~=3.1",
-  "pydantic~=2.12",
-  "typer~=0.19",
-  "keyring~=25.6",
+  "Jinja2~=3.1.0",
+  "pydantic~=2.12.0",
+  "typer~=0.19.0",
+  "keyring~=25.6.0",
   # connecting stuff
-  "polars~=1.39",
-  "pyarrow~=23.0",
+  "polars~=1.39.0",
+  "pyarrow~=23.0.0",
+  "requests~=2.32.0",
 ]
 
 [project.optional-dependencies]
 api = [
-  "uvicorn~=0.40",
-  "fastapi~=0.128",
+  "uvicorn~=0.40.0",
+  "fastapi~=0.128.0",
 ]
 sql = [
-  "connectorx~=0.4",
+  "connectorx~=0.4.0",
 ]
 
 [project.scripts]
@@ -38,11 +39,12 @@ Issues = "https://github.com/oraylis/datam8/issues"
 
 [dependency-groups]
 dev = [
-  "pytest~=8.3",
-  "pytest-cases~=3.8",
-  "hatchling~=1.27",
-  "httpx~=0.25",
-  "bandit~=1.9",
+  "pytest~=8.3.0",
+  "pytest-cases~=3.8.0",
+  "hatchling~=1.27.0",
+  "httpx~=0.25.0",
+  "bandit~=1.9.0",
+  "deepdiff==8.6.1",
 ]
 
 [build-system]
@@ -72,8 +74,8 @@ packages = ["src/datam8", "src/datam8_model"]
 [tool.hatch.build.hooks.custom]
 path = "hatch_build_datamodel.py"
 dependencies = [
-  "datamodel-code-generator>=0.33.0",
-  "ruff",
+  "datamodel-code-generator~=0.33.0",
+  "ruff~=0.15.0",
 ]
 
 ###############

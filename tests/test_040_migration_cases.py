@@ -102,9 +102,7 @@ class CaseBaseEntityMigration:
                             displayName="All Entities for Sales.",
                             explanation="Test",
                             module=[
-                                dp_legacy.DataModule(
-                                    name="Customer", displayName="Customer module"
-                                )
+                                dp_legacy.DataModule(name="Customer", displayName="Customer module")
                             ],
                         )
                     ]
@@ -117,9 +115,7 @@ class CaseBaseEntityMigration:
                             displayName="All Entities for Sales.",
                             description="Test",
                             dataModules=[
-                                dp.DataModule(
-                                    name="Customer", displayName="Customer module"
-                                ),
+                                dp.DataModule(name="Customer", displayName="Customer module"),
                             ],
                         )
                     ],
@@ -192,6 +188,7 @@ class CaseBaseEntityMigration:
                         ds.DataSource(
                             name="test",
                             type="sql",
+                            extendedProperties={},
                             dataTypeMapping=[
                                 ds.SourceDataTypeMapping(
                                     sourceType="string",

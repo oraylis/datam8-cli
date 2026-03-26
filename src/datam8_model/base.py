@@ -16,6 +16,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -26,20 +27,6 @@ from typing import Annotated, Any, Literal, TypeAlias
 from pydantic import BaseModel, ConfigDict, Field, RootModel
 
 from . import attribute, data_product, data_source, data_type, folder, model, property, zone
-
-
-class EntityType(Enum):
-    PROPERTIES = "properties"
-    PROPERTY_VALUES = "propertyValues"
-    ZONES = "zones"
-    DATA_TYPES = "dataTypes"
-    DATA_SOURCE_TYPES = "dataSourceTypes"
-    DATA_PRODUCTS = "dataProducts"
-    DATA_MODULES = "dataModules"
-    ATTRIBUTE_TYPES = "attributeTypes"
-    DATA_SOURCES = "dataSources"
-    FOLDERS = "folders"
-    MODEL_ENTITIES = "modelEntities"
 
 
 class AttributeTypes(BaseModel):
@@ -53,7 +40,7 @@ class AttributeTypes(BaseModel):
         validate_assignment=True,
         revalidate_instances="always",
     )
-    type: Annotated[Literal["attributeTypes"], Field(title="EntityType")]
+    type: Literal["attributeTypes"]
     properties: Any | None = None
     propertyValues: Any | None = None
     zones: Any | None = None
@@ -102,6 +89,20 @@ class AttributeTypes(BaseModel):
             file.write(self.model_dump_json(**dump_options))
 
 
+class EntityType(Enum):
+    PROPERTIES = "properties"
+    PROPERTY_VALUES = "propertyValues"
+    ZONES = "zones"
+    DATA_TYPES = "dataTypes"
+    DATA_SOURCE_TYPES = "dataSourceTypes"
+    DATA_PRODUCTS = "dataProducts"
+    DATA_MODULES = "dataModules"
+    ATTRIBUTE_TYPES = "attributeTypes"
+    DATA_SOURCES = "dataSources"
+    FOLDERS = "folders"
+    MODEL_ENTITIES = "modelEntities"
+
+
 class PropertyValues(BaseModel):
     """
     Defines the layout of entity files within the `Base` folder.
@@ -113,7 +114,7 @@ class PropertyValues(BaseModel):
         validate_assignment=True,
         revalidate_instances="always",
     )
-    type: Annotated[Literal["propertyValues"], Field(title="EntityType")]
+    type: Literal["propertyValues"]
     properties: Any | None = None
     propertyValues: Sequence[property.PropertyValue]
     zones: Any | None = None
@@ -173,7 +174,7 @@ class Zones(BaseModel):
         validate_assignment=True,
         revalidate_instances="always",
     )
-    type: Annotated[Literal["zones"], Field(title="EntityType")]
+    type: Literal["zones"]
     properties: Any | None = None
     propertyValues: Any | None = None
     zones: Sequence[zone.Zone]
@@ -233,7 +234,7 @@ class DataTypes(BaseModel):
         validate_assignment=True,
         revalidate_instances="always",
     )
-    type: Annotated[Literal["dataTypes"], Field(title="EntityType")]
+    type: Literal["dataTypes"]
     properties: Any | None = None
     propertyValues: Any | None = None
     zones: Any | None = None
@@ -293,7 +294,7 @@ class DataSourceTypes(BaseModel):
         validate_assignment=True,
         revalidate_instances="always",
     )
-    type: Annotated[Literal["dataSourceTypes"], Field(title="EntityType")]
+    type: Literal["dataSourceTypes"]
     properties: Any | None = None
     propertyValues: Any | None = None
     zones: Any | None = None
@@ -353,7 +354,7 @@ class Folders(BaseModel):
         validate_assignment=True,
         revalidate_instances="always",
     )
-    type: Annotated[Literal["folders"], Field(title="EntityType")]
+    type: Literal["folders"]
     properties: Any | None = None
     propertyValues: Any | None = None
     zones: Any | None = None
@@ -413,7 +414,7 @@ class Properties(BaseModel):
         validate_assignment=True,
         revalidate_instances="always",
     )
-    type: Annotated[Literal["properties"], Field(title="EntityType")]
+    type: Literal["properties"]
     properties: Sequence[property.Property]
     propertyValues: Any | None = None
     zones: Any | None = None
@@ -473,7 +474,7 @@ class DataModules(BaseModel):
         validate_assignment=True,
         revalidate_instances="always",
     )
-    type: Annotated[Literal["dataModules"], Field(title="EntityType")]
+    type: Literal["dataModules"]
     properties: Any | None = None
     propertyValues: Any | None = None
     zones: Any | None = None
@@ -533,7 +534,7 @@ class DataSources(BaseModel):
         validate_assignment=True,
         revalidate_instances="always",
     )
-    type: Annotated[Literal["dataSources"], Field(title="EntityType")]
+    type: Literal["dataSources"]
     properties: Any | None = None
     propertyValues: Any | None = None
     zones: Any | None = None
@@ -593,7 +594,7 @@ class DataProducts(BaseModel):
         validate_assignment=True,
         revalidate_instances="always",
     )
-    type: Annotated[Literal["dataProducts"], Field(title="EntityType")]
+    type: Literal["dataProducts"]
     properties: Any | None = None
     propertyValues: Any | None = None
     zones: Any | None = None
@@ -653,7 +654,7 @@ class ModelEntities(BaseModel):
         validate_assignment=True,
         revalidate_instances="always",
     )
-    type: Annotated[Literal["modelEntities"], Field(title="EntityType")]
+    type: Literal["modelEntities"]
     properties: Any | None = None
     propertyValues: Any | None = None
     zones: Any | None = None

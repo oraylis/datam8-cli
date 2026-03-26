@@ -17,37 +17,41 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 import pathlib
-import sys
 
 import rich
 import typer
 
 from datam8 import config, migration_v1, opts, parser_v1, utils
 
-app = typer.Typer()
+from . import common
 
 logger = utils.start_logger(__name__)
-sys.tracebacklimit = 0
+
+app = typer.Typer(
+    name="migrate",
+    help="Subcommands to migrate older models",
+    no_args_is_help=True,
+    context_settings={
+        "help_option_names": ["-h", "--help"],
+    },
+)
 
 
-@app.command("migrate")
-def command(
+@app.command("v1-to-v2")
+def v1_to_v2(
     solution_path: opts.SolutionPath,
     output_dir: opts.MigrationOutputDir = pathlib.Path("migration"),
     log_level: opts.LogLevel = opts.LogLevels.WARNING,
+    version: opts.Version = False,
 ):
     """Migrate solution model."""
-    config.log_level = log_level
+    common.main_callback(solution_path, log_level, version)
     config.lazy = False
-    config.solution_path = solution_path
-    config.solution_folder_path = solution_path.parent.absolute()
 
     solution, model_file_references = parser_v1.parse_solution_file(solution_path)
 
     final_output_dir = (
-        output_dir
-        if output_dir.is_absolute()
-        else config.solution_folder_path / output_dir
+        output_dir if output_dir.is_absolute() else config.solution_folder_path / output_dir
     )
 
     utils.delete_path(final_output_dir, recursive=True)
@@ -60,14 +64,9 @@ def command(
         output_path=final_output_dir / "Base",
     )
 
-    zones = migration_from_v1.migrate_zones(
-        solution, final_output_dir / "Base" / "zones.json"
-    )
-    migration_from_v1.create_new_databricks_solution(
-        final_output_dir / solution_path.name
-    )
+    zones = migration_from_v1.migrate_zones(solution, final_output_dir / "Base" / "zones.json")
+    migration_from_v1.create_new_databricks_solution(final_output_dir / solution_path.name)
 
-    # TODO: add more entries for raw/stage, which need to be merged some way
     tags: list[str] = []
     tags.extend(
         migration_from_v1.migrate_model_entities(

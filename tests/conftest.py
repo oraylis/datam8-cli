@@ -93,6 +93,27 @@ def model(config: DataM8TestConfig) -> datam8_model.Model:
     return model
 
 
+@fixture
+def migration(config: DataM8TestConfig) -> migration_v1.MigrationV1:
+    return migration_v1.MigrationV1(
+        {
+            "/core/sales/customer/customer": parser_v1.ModelFileReference(
+                id=1,
+                path=pathlib.Path().cwd()
+                / "tests"
+                / "test_040_migration"
+                / "core_entity_before.json",
+            ),
+            "/010-stage/sales/customer/customer": parser_v1.ModelFileReference(
+                id=2, path=pathlib.Path().cwd()
+            ),
+            "/010-stage/sales/customer/customer_en": parser_v1.ModelFileReference(
+                id=3, path=pathlib.Path().cwd()
+            ),
+        }
+    )
+
+
 def __get_variable(config: pytest.Config, variable: str, default: str | None = None) -> str:
     variable_from_env = __get_variable_from_env(variable)
     variable_from_cli = __get_variable_from_cli(config, variable)
