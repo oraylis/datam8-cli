@@ -93,7 +93,7 @@ class ConnectionPropertyValueType(Enum):
 
 class ConnectionProperty(BaseModel):
     """
-    A property or setting defined by a data source type, which is then available when defining concret data sources.
+    A property or setting defined by a data source type, which is then available when defining concrete data sources.
     """
 
     name: str

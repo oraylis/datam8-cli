@@ -29,7 +29,7 @@ from . import property
 
 class Zone(BaseModel):
     """
-    Defines a high-level layer or zone, typically used to clearly seperate different states of data processing, e.g. bronze, silver, gold, semantic.
+    Defines a high-level layer or zone, typically used to clearly separate different states of data processing, e.g. bronze, silver, gold, semantic.
     """
 
     model_config = ConfigDict(
