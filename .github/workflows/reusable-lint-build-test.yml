@@ -79,7 +79,7 @@ jobs:
         with:
           repository: oraylis/datam8-sample-solution
           # TODO: remove after v2 is done
-          ref: feature/v2-cli-pm
+          ref: v2.0.0-beta.1
           path: datam8-sample-solution
 
       - name: Set up environment

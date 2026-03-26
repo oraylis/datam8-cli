@@ -30,7 +30,7 @@ from . import data_type, property
 
 class HistoryType(Enum):
     """
-    Defines how an attribute in a slowly chaning dimension should behave.
+    Defines how an attribute in a slowly changing dimension should behave.
     """
 
     SCD0 = "SCD0"
@@ -137,7 +137,7 @@ class Attribute(BaseModel):
     isBusinessKey: bool | None = False
     history: Annotated[HistoryType | None, Field(title="HistoryType")] = HistoryType.SCD1
     """
-    Defines how an attribute in a slowly chaning dimension should behave.
+    Defines how an attribute in a slowly changing dimension should behave.
     """
     expression: str | None = None
     expressionLanguage: ExpressionLanguage | str | None = ExpressionLanguage.SQL
