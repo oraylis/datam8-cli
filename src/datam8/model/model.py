@@ -589,11 +589,55 @@ class Model:
     def delete_entities(self, locator: Locator | str, /) -> list[Locator]:
         search_locator = _ensure_locator(locator)
         deleted_locators: list[Locator] = []
+        seen_locators: set[str] = set()
+
+        def _mark_deleted(wrapper: EntityWrapperVariant) -> None:
+            key = str(wrapper.locator)
+            if key in seen_locators:
+                return
+            wrapper._deleted = True
+            deleted_locators.append(wrapper.locator)
+            seen_locators.add(key)
+
+        def _normalize_subtree_root(_locator: Locator) -> Locator:
+            if _locator.entityName is None:
+                return _locator
+
+            return Locator(
+                entityType=_locator.entityType,
+                folders=[*_locator.folders, _locator.entityName],
+                entityName=None,
+            )
+
+        # 1) first mark the exact entity/folder itself
+        for wrapper in self.get_entity_iterator():
+            if wrapper.locator == search_locator:
+                _mark_deleted(wrapper)
+
+        # 2) then mark everything below that locator inside the same entity type
+        subtree_root = _normalize_subtree_root(search_locator)
 
         for wrapper in self.get_entity_iterator():
-            if wrapper.locator in search_locator:
-                wrapper._deleted = True
-                deleted_locators.append(wrapper.locator)
+            if (
+                wrapper.locator.entityType == subtree_root.entityType
+                and wrapper.locator in subtree_root
+            ):
+                _mark_deleted(wrapper)
+
+        # 3) if deleting a folder, also delete all modelEntities below that folder path
+        if search_locator.entityType == b.EntityType.FOLDERS.value:
+            model_subtree_root = Locator(
+                entityType=b.EntityType.MODEL_ENTITIES.value,
+                folders=subtree_root.folders,
+                entityName=None,
+            )
+
+            for wrapper in self.get_entity_iterator():
+                if (
+                    wrapper.locator.entityType == b.EntityType.MODEL_ENTITIES.value
+                    and wrapper.locator in model_subtree_root
+                ):
+                    _mark_deleted(wrapper)
 
         if len(deleted_locators) == 0:
             raise utils.create_error(errors.InvalidLocatorError(str(locator)))
@@ -846,17 +890,17 @@ class Model:
         for _file in deleted_files:
             del self._model_files[_file]
 
-    def cleanup_directories(self) -> None:
-        model_directories = config.solution_folder_path / self.solution.modelPath
-        base_directories = config.solution_folder_path / self.solution.basePath
+    def cleanup_directories(self, *start_paths: Path) -> None:
+    for start_path in start_paths:
+        if not start_path.exists() or not start_path.is_dir():
+            continue
 
-        for dir_path, dir_names, file_names in model_directories.walk(top_down=False):
-            if len(dir_names) == 0 and len(file_names) == 0:
+        for dir_path, _, _ in start_path.walk(top_down=False):
+            if dir_path.exists() and not any(dir_path.iterdir()):
                 utils.delete_path(dir_path)
 
-        for dir_path, dir_names, file_names in base_directories.walk(top_down=False):
-            if len(dir_names) == 0 and len(file_names) == 0:
-                utils.delete_path(dir_path)
+        if start_path.exists() and not any(start_path.iterdir()):
+            utils.delete_path(start_path)
 
     def get_unsaved_entities(self) -> tuple[list[Locator], list[Locator]]:
         """Returns a list of changed and delete locators"""
@@ -951,23 +995,28 @@ class EntityFileRef:
             case _:
                 current_content = b.BaseEntities.from_json_file(self.file_path)
                 entities: list[b.BaseEntityType] = getattr(current_content.root, self._type.value)
-                entities = [e for e in entities if e.name not in [w.entity.name for w in wrappers]]
 
-                setattr(current_content.root, self._type.value, entities)
+                wrapper_names = [w.entity.name for w in wrappers]
+                entities = [e for e in entities if e.name not in wrapper_names]
 
-                with open(self.file_path, "w") as _file:
-                    _file.write(current_content.model_dump_json(**MODEL_DUMP_OPTIONS))
-
-                self.locators = [
+                remaining_locators = [
                     loc for loc in self.locators if loc not in [w.locator for w in wrappers]
                 ]
 
-                # NOTE: this should actually never not be case, if not the something went majorly wrong
-                assert len(self.locators) == len(entities)
-
-                if len(self.locators) == 0:
+                if len(entities) == 0:
                     utils.delete_path(self.file_path)
+                    self.locators = []
                     return True
+
+                setattr(current_content.root, self._type.value, entities)
+
+                with open(self.file_path, "w", encoding="utf-8") as _file:
+                    _file.write(current_content.model_dump_json(**MODEL_DUMP_OPTIONS))
+
+                self.locators = remaining_locators
+
+                # NOTE: this should actually never not be case, if not then something went majorly wrong
+                assert len(self.locators) == len(entities)
 
                 return False
 
