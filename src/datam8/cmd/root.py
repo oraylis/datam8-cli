@@ -233,31 +233,25 @@ def init(
     version: opts.Version = False,
 ):
     """
-    Initialise a new DataM8 solution. This is experimentell and will current always initialize the
-    sample solution as a starting point.
+    Initialise a new empty DataM8 solution with default base entities.
     """
     config.log_level = log_level
     common.version_callback(version)
+
+    from datam8 import solution
 
     new_solution_path = solution_path.resolve()
     if solution_path.suffix != ".dm8s":
         new_solution_path = new_solution_path / f"{name}.dm8s"
 
     if new_solution_path.exists():
-        typer.echo(f"Solution file aready exists at {new_solution_path}")
-        raise typer.Exit(1)
+        raise utils.create_error(f"Solution file already exists: {new_solution_path}")
 
-    if len(os.listdir(new_solution_path.parent)) > 0:
-        typer.echo("Init needs to be run in an empty directory")
-        raise typer.Exit(1)
+    if new_solution_path.parent.exists() and any(new_solution_path.parent.iterdir()):
+        raise utils.create_error(f"Solution directory is not empty: {new_solution_path.parent}")
 
-    from datam8 import solution
-
-    created_version = solution.init_solution_from_sample(new_solution_path)
-    typer.echo(f"Sample Solution in version {created_version} created")
-
-    # TODO: ask user if a blank or sample solution is required
-    # solution.init_solution(new_solution_path)
+    solution.init_solution(new_solution_path)
+    typer.echo(f"Blank solution created at {new_solution_path}")
 
 
 @app.command()
