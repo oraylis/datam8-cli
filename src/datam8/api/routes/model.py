@@ -17,10 +17,12 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
+from datam8_model import base as b
 
 from datam8 import config, factory, generate, model, opts
 
@@ -102,6 +104,63 @@ class UnsavedResponse(BaseModel):
     changed: list[model.Locator]
     deleted: list[model.Locator]
 
+class FunctionSourceBody(BaseModel):
+    locator: str
+    source: str
+    content: str | None = None
+
+
+class FunctionRenameBody(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    locator: str
+    from_source: Annotated[str, Field(alias="fromSource")]
+    to_source: Annotated[str, Field(alias="toSource")]
+
+
+class FunctionSourceResponse(BaseModel):
+    content: str
+
+
+class FunctionMutationResponse(BaseModel):
+    ok: bool = True
+
+
+def _normalize_source_path(source: str) -> str:
+    normalized = (source or "").strip().replace("\\", "/")
+
+    if not normalized:
+        raise HTTPException(status_code=400, detail="Source path must not be empty.")
+
+    if normalized.startswith("/") or any(part in {".", ".."} for part in normalized.split("/")):
+        raise HTTPException(status_code=400, detail="Invalid source path.")
+
+    return normalized
+
+
+def _get_function_root(locator: str) -> Path:
+    loc = model.Locator.from_path(locator)
+
+    if loc.entityType != b.EntityType.MODEL_ENTITIES.value or not loc.entityName:
+        raise HTTPException(status_code=400, detail="Locator must point to a model entity.")
+
+    base_path = factory.get_model().get_base_path_for_entity_type(b.EntityType.MODEL_ENTITIES)
+    return Path(base_path, *loc.folders, loc.entityName)
+
+
+def _get_function_source_path(locator: str, source: str) -> Path:
+    return _get_function_root(locator) / _normalize_source_path(source)
+
+
+def _prune_empty_dirs_until_entity_root(file_path: Path, entity_root: Path) -> None:
+    current = file_path.parent
+
+    while current.exists() and current != entity_root.parent:
+        try:
+            current.rmdir()
+        except OSError:
+            break
+        current = current.parent
 
 @model_router.get("/unsaved")
 async def get_unsaved() -> UnsavedResponse:
@@ -112,3 +171,58 @@ async def get_unsaved() -> UnsavedResponse:
         deleted=deleted,
     )
     return response
+
+@model_router.get("/function/source")
+async def get_function_source(
+    locator: str = Query(...),
+    source: str = Query(...),
+) -> FunctionSourceResponse:
+    path = _get_function_source_path(locator, source)
+
+    if not path.exists() or not path.is_file():
+        raise HTTPException(status_code=404, detail="Function source not found.")
+
+    return FunctionSourceResponse(content=path.read_text(encoding="utf-8"))
+
+
+@model_router.post("/function/source")
+async def save_function_source(body: FunctionSourceBody) -> FunctionMutationResponse:
+    path = _get_function_source_path(body.locator, body.source)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(body.content or "", encoding="utf-8")
+    return FunctionMutationResponse()
+
+
+@model_router.delete("/function/source")
+async def delete_function_source(
+    locator: str = Query(...),
+    source: str = Query(...),
+) -> FunctionMutationResponse:
+    path = _get_function_source_path(locator, source)
+
+    if not path.exists() or not path.is_file():
+        raise HTTPException(status_code=404, detail="Function source not found.")
+
+    path.unlink()
+
+    entity_root = _get_function_root(locator)
+    _prune_empty_dirs_until_entity_root(path, entity_root)
+
+    return FunctionMutationResponse()
+
+
+@model_router.post("/function/rename")
+async def rename_function_source(body: FunctionRenameBody) -> FunctionMutationResponse:
+    from_path = _get_function_source_path(body.locator, body.from_source)
+    to_path = _get_function_source_path(body.locator, body.to_source)
+
+    if not from_path.exists() or not from_path.is_file():
+        raise HTTPException(status_code=404, detail="Function source not found.")
+
+    to_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if to_path.exists() and to_path != from_path:
+        raise HTTPException(status_code=409, detail="Target function source already exists.")
+
+    from_path.rename(to_path)
+    return FunctionMutationResponse()
