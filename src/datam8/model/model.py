@@ -1202,10 +1202,11 @@ class EntityFileRef:
                 current_content = b.BaseEntities.from_json_file(self.file_path)
                 entities: b.BaseEntityType = getattr(current_content.root, self._type.value)
 
-                for idx in range(len(wrappers)):
-                    for existing_entity in entities:
-                        if existing_entity.name == wrappers[idx].entity.name:
-                            entities[idx] = wrappers[idx].entity
+                for wrapper in wrappers:
+                    for existing_idx, existing_entity in enumerate(entities):
+                        if existing_entity.name == wrapper.entity.name:
+                            entities[existing_idx] = wrapper.entity
+                            break
 
                 setattr(current_content.root, self._type.value, entities)
 
