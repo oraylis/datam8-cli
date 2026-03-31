@@ -29,7 +29,6 @@ to those imports are executed. This reduces startup time.
 """
 
 # ruff: noqa: I001
-import os
 
 import sys
 
