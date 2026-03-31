@@ -73,6 +73,30 @@ def class_from_type(_type: b.EntityType) -> type[b.BaseEntityType]:
     return _class
 
 
+def _default_base_file_name_for_type(_type: b.EntityType) -> str:
+    match _type:
+        case b.EntityType.PROPERTIES:
+            return "Properties.json"
+        case b.EntityType.PROPERTY_VALUES:
+            return "PropertyValues.json"
+        case b.EntityType.ZONES:
+            return "Zones.json"
+        case b.EntityType.DATA_TYPES:
+            return "DataTypes.json"
+        case b.EntityType.DATA_SOURCE_TYPES:
+            return "DataSourceTypes.json"
+        case b.EntityType.DATA_PRODUCTS:
+            return "DataProducts.json"
+        case b.EntityType.DATA_MODULES:
+            return "DataModules.json"
+        case b.EntityType.ATTRIBUTE_TYPES:
+            return "AttributeTypes.json"
+        case b.EntityType.DATA_SOURCES:
+            return "DataSources.json"
+        case _:
+            return f"{_type.value}.json"
+
+
 class PropertyReference(p.PropertyReference):
     """
     Sub-class of `datam8.property.PropertyReference` for actual use with the
@@ -544,9 +568,19 @@ class Model:
                 ".properties.json",
             )
         else:
-            source_file_path = Path(base_file_path, *_locator.folders) / f"{_locator.entityName}.json"
+            existing_refs = [
+                ref.file_path
+                for ref in self._model_files.values()
+                if ref._type == _type
+            ]
+            if existing_refs:
+                source_file_path = sorted(existing_refs, key=lambda p: len(str(p)))[0]
+            else:
+                source_file_path = Path(base_file_path, *_locator.folders) / _default_base_file_name_for_type(_type)
 
-        content.update({"id": self.get_next_model_id(), "name": _locator.entityName})
+        content["name"] = _locator.entityName
+        if _type == b.EntityType.MODEL_ENTITIES:
+            content["id"] = self.get_next_model_id()
 
         try:
             new_wrapper = EntityWrapper(
