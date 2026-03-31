@@ -22,9 +22,9 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
-from datam8_model import base as b
 
 from datam8 import config, factory, generate, model, opts
+from datam8_model import base as b
 
 model_router = APIRouter(prefix="/model", tags=["model"])
 
