@@ -534,8 +534,17 @@ class Model:
     ) -> EntityWrapper[b.BaseEntityType]:
         _locator = _ensure_locator(locator)
         _type = b.EntityType(_locator.entityType)
+
         base_file_path = self.get_base_path_for_entity_type(_type)
-        source_file_path = Path(base_file_path, *_locator.folders) / f"{_locator.entityName}.json"
+        if _type == b.EntityType.FOLDERS:
+            source_file_path = Path(
+                base_file_path,
+                *_locator.folders,
+                _locator.entityName,
+                ".properties.json",
+            )
+        else:
+            source_file_path = Path(base_file_path, *_locator.folders) / f"{_locator.entityName}.json"
 
         content.update({"id": self.get_next_model_id(), "name": _locator.entityName})
 
