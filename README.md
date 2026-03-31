@@ -1,33 +1,44 @@
 # ORAYLIS DataM8 Generator
 
-`datam8-generator` is the canonical DataM8 v2 backend:
+`datam8-generator` is the canonical DataM8 v2 backend.
 
-- `datam8` CLI
-- `datam8 serve` FastAPI server
-- synchronous HTTP execution
+It provides:
+- the `datam8` CLI
+- the local FastAPI backend started with `datam8 serve`
+- synchronous generation/validation/model operations
 
-Neon launches the backend over embedded Python (`python -m datam8 serve`) and communicates via localhost HTTP.
+Neon starts this backend as a local process and talks to it over HTTP on root paths (no `/api/*` prefix).
 
-## Issues
+## Repository role in v2
 
-Issues are tracked centrally in the DataM8 repository:
-
-- https://github.com/oraylis/datam8/issues
+- `datam8-model`: schema source of truth
+- `datam8-generator`: backend implementation (this repo)
+- `datam8-neon`: desktop/web UI using this backend
+- `datam8-sample-solution`: reference solution used in tests/CI
 
 ## Key docs
 
-- Backend contract (canonical): `docs/backend-contract.md`
-- Server startup/auth details: `docs/server.md`
-- Connector plugin details: `docs/connectors.md`
-- Agent guidance: `AGENTS.md`
-- Central DataM8 docs: https://github.com/oraylis/datam8/tree/main/docs
+- Canonical backend HTTP contract: `docs/backend-contract.md`
+- Runtime/server behavior: `docs/server.md`
+- Connector/plugin behavior: `docs/connectors.md`
+- CLI and API surface mapping notes: `docs/neon-cli-mapping.md`
+- Testing guide: `tests/README.md`
+- Contributor guardrails: `AGENTS.md`
 
-## Local development
-
-### Requirements
+## Requirements
 
 - Python 3.12+
 - `uv` (https://docs.astral.sh/uv/getting-started/installation/)
+
+## Setup
+
+```sh
+uv sync --extra api --extra sql
+```
+
+Why extras are needed:
+- `api`: installs `fastapi` + `uvicorn` required by `datam8 serve`
+- `sql`: installs `connectorx` required by the built-in SQL Server plugin
 
 ### Clone
 
@@ -39,65 +50,60 @@ cd datam8-generator
 git submodule update --init --recursive
 ```
 
-### Run CLI
+## Quick usage
+
+### CLI help
 
 ```sh
 uv run datam8 --help
-uv run datam8 serve --help
-uv run datam8 validate --help
-uv run datam8 generate --help
+uv run datam8 sources --help
+uv run datam8 plugins --help
+uv run datam8 secrets --help
+uv run datam8 migrate --help
 ```
 
-### CLI arguments (quick reference)
-
-The legacy `dm8gen --action ...` argument model is no longer used.
-The current CLI uses command groups under `datam8`.
-
-`datam8 serve`:
-- `--token` (required): bearer token for non-health endpoints.
-- `--host` (default `127.0.0.1`), `--port` (default `0`).
-- `--solution-path` / `--solution` / `-s` (optional).
-- `--openapi` (optional), `--log-level` (optional).
-
-`datam8 validate`:
-- `--solution-path` / `--solution` / `-s` (required for execution).
-- `--log-level` / `-l` (optional).
-
-`datam8 generate`:
-- `TARGET` argument (optional, defaults from solution/config).
-- `--solution-path` / `--solution` / `-s` (required for execution).
-- `--clean-output` / `-c` (optional).
-- `--payload` / `-p` (optional, repeatable).
-- `--all` (optional), `--lazy` (optional), `--log-level` / `-l` (optional).
-
-For additional command groups (`solution`, `model`, `index`, `plugin`, `secret`, ...),
-use `uv run datam8 <group> --help`.
-
-### Build wheel
+### Start backend
 
 ```sh
-uv build
+uv run datam8 serve \
+  --host 127.0.0.1 \
+  --port 0 \
+  --token <token> \
+  --solution-path "<path-to-solution.dm8s>"
 ```
 
-### Tests
+Use `--openapi` to expose `/docs` and `/openapi.json`.
 
-Testing requires a path to a DataM8 solution.
-You can pass it via `--solution-path` or environment variable (`DATAM8_SOLUTION_PATH`).
-See `tests/README.md` for details.
+## Main code entry points
+
+- CLI root: `src/datam8/app.py`
+- Root commands (`list`, `show`, `validate`, `generate`, `init`, `serve`): `src/datam8/cmd/root.py`
+- Sources commands: `src/datam8/cmd/sources.py`
+- Plugins commands: `src/datam8/cmd/plugin.py`
+- Secrets commands: `src/datam8/cmd/secret.py`
+- Migration commands: `src/datam8/cmd/migrate.py`
+- API app + middleware: `src/datam8/api/app.py`
+- API routes: `src/datam8/api/routes/*.py`
+
+## Testing
+
+Model-centric tests require a solution path.
 
 ```sh
-uv sync
 uv run pytest --solution-path "<path-to-solution.dm8s>"
 ```
 
-### Linting / checks
+See `tests/README.md` for details.
+
+## Quality gates
+
+Run before finishing changes:
 
 ```sh
-uv tool run ruff check src
 uv tool run pyright src
-```
+uv tool run ruff check src
 
-### License headers
+## License headers
 
 ```sh
 uv run python scripts/add_license_headers.py --dry-run

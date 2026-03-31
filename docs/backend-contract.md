@@ -1,29 +1,54 @@
 # Backend Contract (Canonical)
 
-This document is the canonical HTTP contract between `datam8-generator` and `datam8-neon`.
+This document is the canonical HTTP contract for `datam8-generator` as currently implemented.
+
+All endpoints are rooted at `/` (no `/api/*` namespace).
 
 ## Startup and readiness
 
-Neon starts the backend as a long-lived process:
+Neon/clients start the backend as a long-lived process:
 
-```bash
+```sh
 datam8 serve --host 127.0.0.1 --port 0 --token <random>
 ```
 
-When ready, the server writes exactly one JSON line to stdout:
+When startup completes, the process prints a readiness line to stdout:
 
-```json
-{"type":"ready","baseUrl":"http://127.0.0.1:<PORT>","version":"<cliVersion>"}
+```text
+API ready at `http://127.0.0.1:<PORT>`, schemaVersion: 2.0.0
 ```
 
-All non-readiness logs are written to stderr.
+## Auth contract
 
-## Auth
+- `GET /health` and `GET /version` are always unauthenticated.
+- If `--token` is provided, every other endpoint requires:
+  - `Authorization: Bearer <token>`
+- If `--token` is not provided, auth middleware is not enabled.
 
-- No auth required: `GET /health`, `GET /version`
-- All other endpoints require: `Authorization: Bearer <token>`
+## Error contract
 
-## Endpoint surface used by Neon (plus parity extensions)
+Application errors are returned as a JSON envelope:
+
+```json
+{
+  "code": "validation_error",
+  "message": "Invalid request.",
+  "details": null,
+  "hint": null,
+  "traceId": "..."
+}
+```
+
+Status mapping in `src/datam8/api/app.py`:
+- `validation_error` -> `400`
+- `not_found` -> `404`
+- `conflict` / `locked` -> `409`
+- `auth` -> `401`
+- `permission` -> `403`
+- `not_implemented` -> `501`
+- fallback -> `500`
+
+## Endpoint surface
 
 ### System
 
@@ -31,86 +56,72 @@ All non-readiness logs are written to stderr.
 - `GET /version`
 - `GET /config`
 
-### Workspace and editor operations
+### Solution
 
-- Filesystem: `GET /fs/list`
-- Solution: `GET /solution`, `GET /solution/full`, `GET /solution/inspect`, `POST /solution/new-project`
-  - Full model validate parity: `POST /validate`
-- Migration: `POST /migration/v1-to-v2`
-- Model entities: `GET|POST|DELETE /model/entities`, `POST /model/entities/move`, `POST /model/folder/rename`
-  - Parity aliases: `GET /model/entity`, `POST /model/entity/create`, `POST /model/entity/validate`, `POST /model/entity/set`, `POST /model/entity/patch`, `POST /model/entity/duplicate`
-  - Folder metadata explicit endpoints: `GET|POST|DELETE /model/folder-metadata`
-- Model functions: `GET|POST /model/function/source`, `POST /model/function/rename`
-- Base entities: `GET|POST|DELETE /base/entities`
-  - Parity aliases: `GET /base/entity`, `POST /base/entity/set`, `POST /base/entity/patch`
-- Solution parity aliases: `GET /solution/info`, `POST /solution/validate`
-- Index/refactor: `POST /index/regenerate`, `GET /index/show`, `GET /index/validate`, `POST /refactor/properties`, `POST /refactor/keys`, `POST /refactor/values`, `POST /refactor/entity-id`
-- Search: `GET /search/entities`, `GET /search/text`
-- Connectors/plugins/secrets under `/connectors/*`, `/plugins/*`, `/datasources/*`, `/http/datasources/*`, `/secrets/*`
-  - Datasource parity endpoint: `POST /datasources/{dataSourceId}/test`
-  - Plugin parity endpoints: `GET /plugins/{pluginId}/info`, `POST /plugins/{pluginId}/verify`, `POST /plugins/verify`
-  - Secrets parity endpoints: `GET /secrets/runtime/list`, `GET /secrets/runtime/key`
+- `GET /solution`
+- `GET /solution/full`
 
-### Generation
+### Model
 
-- `POST /generate` (synchronous)
-  - Body: `{ "solutionPath": "...", "target": "...", "logLevel": "info", "cleanOutput": true, "payloads": [], "lazy": false }`
-  - Response: `{ "status": "succeeded", "target": "...", "outputPath": "..." }`
+- `POST /model/generate`
+- `POST /model/save`
+- `POST /model/reload`
+- `GET /model/unsaved`
+- `GET /model/function/source`
+- `POST /model/function/source`
+- `DELETE /model/function/source`
+- `POST /model/function/rename`
 
-## `GET /solution/full` payload
+### Entities
 
-- `solution`: parsed solution metadata.
-- `baseEntities`: base JSON entities (`content` is a typed base wrapper object).
-- `modelEntities`: model JSON entities (excludes folder metadata files; `locator` is a locator object).
-- `folderEntities`: folder metadata files discovered under `Model/**/.properties.json`.
+- `GET /entities/{locator:path}`
+- `PATCH /entities/{locator:path}`
+- `DELETE /entities/{locator:path}`
+- `PUT /entities/{locator:path}`
+- `PUT /entities/clone`
+- `POST /entities/move`
 
-## Folder Metadata Contract
+### Sources
 
-- Folder metadata file path: `Model/**/.properties.json`.
-- File content is a direct folder object (no `folders[]` wrapper).
-- Folder fields used by Neon/backend:
-  - `id` (number), `name` (string)
-  - optional `displayName`, `description`, `path`
-  - optional `properties` (array of `{ property, value }`)
-  - optional `dataProduct` (string) and `dataModule` (string)
-- Save/update uses `POST /model/entities` or `POST /model/folder-metadata` with `relPath` pointing to `.properties.json`.
+- `GET /sources/{data_source}/test`
+- `GET /sources/{data_source}/schemas`
+- `GET /sources/{data_source}/schemas/{schema}/tables`
+- `GET /sources/{data_source}/schemas/{schema}/tables/{table}`
+- `GET /sources/{data_source}/schemas/{schema}/tables/{table}/preview`
+- `PUT /sources/{data_source}/schemas/{schema}/tables/{table}/import` (currently returns 404 "comming soon...")
+- `GET /sources/{data_source}/tables`
+- `GET /sources/{data_source}/tables/{table}`
+- `GET /sources/{data_source}/tables/{table}/preview`
+- `PUT /sources/{data_source}/tables/{table}/import` (currently returns 404 "comming soon...")
+- `GET /sources/{data_source}/usages`
 
-### Folder Validation Rules
+### Plugins
 
-- `dataModule` requires `dataProduct`.
-- `dataProduct` must exist in `Base/DataProducts.json`.
-- `dataModule` must exist under the selected `dataProduct` in `Base/DataProducts.json`.
+- `GET /plugins/`
+- `POST /plugins/reload`
+- `GET /plugins/{plugin_id}`
+- `GET /plugins/{plugin_id}/ui-schema`
+- `GET /plugins/{plugin_id}/data-type-mappings`
+- `GET /plugins/{plugin_id}/connection-properties`
 
-### Folder Inheritance Semantics (UI Consumption)
+### Secrets
 
-- Folder `properties` inherit down the folder chain (child overrides parent by `property` key).
-- `dataProduct` and `dataModule` inherit from nearest available ancestors.
+- `POST /secrets/check`
+- `PUT /secrets/set`
 
-## Response contract
+## Response envelopes for collection/single-item routes
 
-- All JSON responses are object payloads with stable top-level fields per endpoint.
-- No endpoint returns a bare JSON array or untyped ad-hoc dictionary contract.
-- `204 No Content` is used for mutation endpoints that intentionally return no body (e.g. secrets upsert/delete).
+Many routes use typed wrappers from `src/datam8/api/routes/responses.py`:
 
-### Typing policy
-
-- Stable and workflow-critical fields are exposed via explicit typed response models.
-- Plugin-/connector-driven payloads with intentionally dynamic shape remain open objects to avoid over-constraining connector implementations.
-- Dynamic sections are still wrapped in typed top-level response envelopes to keep endpoint contracts stable.
-- Locator fields in model/folder payloads are typed objects:
-  - `entityType: string`
-  - `folders: string[]`
-  - `entityName: string | null`
-
-## Implementation notes (non-contract)
-
-- Route implementation is split by domain (`api_solution.py`, `api_workspace.py`, `api_connectors.py`) and composed in `api.py`.
-- This split does not change endpoint URLs; it is a maintainability refactor only.
+- `MultiItemResponse<T>`:
+  - `count: int`
+  - `items: list[T]`
+- `SingleItemResponse<T>`:
+  - `item: T`
 
 ## Change policy
 
 Contract changes must include:
-
-- updates to this document,
-- coordinated generator + Neon changes,
-- integration tests for affected flows.
+- update of this document
+- coordinated Neon + generator implementation change (if Neon-consumed)
+- tests for changed behavior

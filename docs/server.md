@@ -1,83 +1,75 @@
 # DataM8 Server (`datam8 serve`)
 
-This document describes the desktop-safe FastAPI backend used by DataM8 Neon.
+This document describes runtime behavior of the local FastAPI server.
 
-Canonical endpoint contract for Neon lives in `docs/backend-contract.md`.
+For the canonical endpoint list and contract, see `docs/backend-contract.md`.
 
-## Desktop-safe startup protocol
-
-Neon starts the backend as a long-lived process:
+## Command
 
 ```sh
-datam8 serve --host 127.0.0.1 --port 0 --token <random>
+datam8 serve [options]
 ```
 
-When the server is bound and ready, it prints exactly one single-line JSON object to stdout:
+Main options:
+- `--solution` / `--solution-path` / `-s`: `.dm8s` file or folder containing exactly one `.dm8s`
+- `--token` / `-t`: optional bearer token for endpoint protection
+- `--host`: default `127.0.0.1`
+- `--port`: default `0` (OS picks a free port)
+- `--openapi` / `-o`: enables `/docs` and `/openapi.json`
+- `--log-level` / `-l`: `debug|info|warning|error|critical`
 
-```json
-{"type":"ready","baseUrl":"http://127.0.0.1:<PORT>","version":"<cliVersion>"}
+## Startup sequence
+
+1. CLI configures solution path/log level.
+2. Full model is loaded once (`factory.create_model()`).
+3. Socket is pre-bound (`_bind`) so selected port is known.
+4. Uvicorn server starts using that socket.
+5. On startup event, readiness line is printed to stdout:
+
+```text
+API ready at `http://<host>:<actualPort>`, schemaVersion: <schemaVersion>
 ```
 
-All other logs go to stderr.
+Implementation:
+- `src/datam8/cmd/root.py` (`serve` command)
+- `src/datam8/api/app.py` (`_bind`, `create_server`)
 
-## CLI flags
+## Auth behavior
 
-- `--host` (default `127.0.0.1`): bind interface (desktop-safe default).
-- `--port` (default `0`): bind port. `0` lets the OS pick a free port.
-- `--token` (required): bearer token for all non-health endpoints.
-- `--solution-path` (optional): convenience to set `DATAM8_SOLUTION_PATH`.
-- `--openapi` (optional): enables `/docs` and `/openapi.json` (off by default for desktop).
-- `--log-level` (optional): uvicorn log level (`debug|info|warning|error|critical`).
+Auth middleware is enabled only when `--token` is provided.
 
-## CLI architecture
+- Exempt paths: `/health`, `/version`
+- All other paths require `Authorization: Bearer <token>`
+- Missing/invalid token returns HTTP `401` with `Datam8Error` envelope
 
-- Single CLI root: `src/datam8/app.py`
-- Command groups: `src/datam8/cmd/*.py`
-- `serve` is one regular command module (`src/datam8/cmd/serve.py`) and shares the same root CLI entry as all other commands.
+## CORS behavior
 
-## Health/version
+Configured in `src/datam8/api/app.py`.
 
-No auth required:
+Defaults:
+- Allowed origins:
+  - `http://localhost:4320`
+  - `http://127.0.0.1:4320`
+  - `http://localhost:4321`
+  - `http://127.0.0.1:4321`
+  - `null`
+- Allowed origin regex:
+  - `^http://(localhost|127\.0\.0\.1):\d+$`
 
-- `GET /health` -> `{"status":"ok"}`
-- `GET /version` -> `{"version":"..."}`
+Overrides:
+- `DATAM8_CORS_ORIGINS` (comma-separated)
+- `DATAM8_CORS_ORIGIN_REGEX`
 
-## Auth
+## OpenAPI docs
 
-All endpoints except `/health` and `/version` require:
+- Disabled by default.
+- Enabled with `--openapi`.
+- When enabled:
+  - Swagger UI: `/docs`
+  - OpenAPI JSON: `/openapi.json`
 
-`Authorization: Bearer <token>`
+## Errors
 
-If `--token` is missing/blank, the server exits non-zero.
+Unhandled and domain errors are normalized to a JSON envelope with `code`, `message`, `details`, `hint`, and optional `traceId`.
 
-## CORS (dev desktop)
-
-In dev desktop, the UI runs at a Vite origin (typically `http://localhost:4320`) while the backend is `http://127.0.0.1:<port>`.
-
-The server enables CORS for localhost dev by default and supports overrides:
-
-- `DATAM8_CORS_ORIGINS`: comma-separated allowlist.
-- `DATAM8_CORS_ORIGIN_REGEX`: regex allowlist (default `^http://(localhost|127\.0\.0\.1):\d+$`).
-
-## Generation flow
-
-Generation is synchronous:
-
-- `POST /generate`
-- Request body: `{"solutionPath":"...","target":"...","logLevel":"info","cleanOutput":true}`
-- Response body: `{"status":"succeeded","target":"...","outputPath":"..."}`
-
-## Error envelope
-
-Errors are returned as a consistent envelope for both validation and server failures.
-
-For auth failures, the server returns HTTP 401 with a `Datam8Error` envelope and a `traceId` when available.
-
-## Code pointers (contributors)
-
-- CLI entrypoint: `src/datam8/cmd/serve.py`
-- CLI root and command registration: `src/datam8/app.py`
-- FastAPI app factory + middleware: `src/datam8/api/app.py`
-- Routes:
-  - system: `src/datam8/api/routes/system.py`
-  - workspace/connectors/generate: `src/datam8/api/routes/api.py`
+See `src/datam8/errors.py` and exception handlers in `src/datam8/api/app.py`.

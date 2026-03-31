@@ -1,47 +1,65 @@
-# Connectors
+# Connectors and Plugins
 
-DataM8 v2 uses Python connector plugins only. There are no built-in connectors.
+Data source connectivity is implemented through plugin classes (`src/datam8/plugins`).
 
-## Binding
+## Built-in plugins
 
-Connector binding is stored only on `DataSourceType.connectionProperties` using reserved meta property names:
+Registered in `src/datam8/plugins/__init__.py`:
+- `builtin:CsvFile`
+- `builtin:AzureDataLake`
+- `builtin:SQLServer`
 
-- `__connector.id=<connectorId>` (required, exactly once)
-- `__connector.version=<semver|range>` (optional, at most once)
+`SQLServer` requires optional dependency group `sql` (`connectorx`).
 
-These reserved properties must not be rendered as user inputs in the UI.
+## Plugin manifests
 
-`DataSource.extendedProperties` stores only user-entered values as strings.
+Plugin metadata uses `datam8_model.plugin.PluginManifest` and includes:
+- `id`
+- `displayName`
+- `version`
+- `entryPoint` (`module.path:ClassName`)
+- `capabilities`
 
-## Secret handling
+## Loading model
 
-Secrets must never be stored plaintext in solution JSON.
+`PluginManager` combines:
+- built-in manifests (registered at runtime)
+- solution manifests loaded from:
+  - `config.solution_folder_path / solution.pluginsPath`
 
-- The UI writes a secret reference string into `DataSource.extendedProperties`:
-  - `secretRef://runtime/<dataSourceName>/<key>`
-- The UI stores the actual secret value in the backend secure store via:
-  - `PUT /secrets/runtime`
-- Connectors receive a `secret_resolver` that resolves secret references at runtime.
+It loads plugin classes lazily on first use (`get_plugin`).
 
-## Plugin loading
+## API surface
 
-The backend discovers connector plugins under `DATAM8_PLUGIN_DIR`:
+Plugin metadata endpoints:
+- `GET /plugins/`
+- `POST /plugins/reload`
+- `GET /plugins/{plugin_id}`
+- `GET /plugins/{plugin_id}/ui-schema`
+- `GET /plugins/{plugin_id}/data-type-mappings`
+- `GET /plugins/{plugin_id}/connection-properties`
 
-`$DATAM8_PLUGIN_DIR/connectors/<connector_id>/plugin.json`
+Source browsing/testing endpoints:
+- `GET /sources/{data_source}/test`
+- `GET /sources/{data_source}/schemas`
+- `GET /sources/{data_source}/schemas/{schema}/tables`
+- `GET /sources/{data_source}/schemas/{schema}/tables/{table}`
+- `GET /sources/{data_source}/schemas/{schema}/tables/{table}/preview`
+- `GET /sources/{data_source}/tables`
+- `GET /sources/{data_source}/tables/{table}`
+- `GET /sources/{data_source}/tables/{table}/preview`
+- `GET /sources/{data_source}/usages`
 
-The `plugin.json` manifest must include:
+Note: import endpoints exist but currently return `404` with "comming soon...".
 
-- `pluginType: "connector"`
-- `id`, `displayName`, `version`
-- `entrypoint` (`module.path:ClassName`)
-- `capabilities` (at least `uiSchema` and `metadata`)
+## Secrets
 
-## API (Neon consumes)
+Secrets are managed via the keyring-backed resolver (`datam8.secrets.SecretResolver`) and API:
+- `POST /secrets/check`
+- `PUT /secrets/set`
 
-- `GET /connectors`
-- `GET /connectors/{connectorId}/ui-schema`
-- `POST /connectors/{connectorId}/validate-connection`
+## CLI commands
 
-## Dev notes
-
-When running `datam8 serve` locally, set `DATAM8_PLUGIN_DIR` to a directory containing a `connectors/` subfolder with connector plugin folders.
+- `datam8 plugins list|show|ui-schema`
+- `datam8 sources list-schemas|list-tables|table-metadata|preview|import|test-connection`
+- `datam8 secrets list|add|show|unset|clean`
