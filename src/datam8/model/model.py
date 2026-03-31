@@ -799,8 +799,14 @@ class Model:
                 *new_locator.folders,
                 new_locator.entityName,
             ).with_suffix(".json")
-        to_wrapper = from_wrapper.model_copy()
+        to_wrapper = from_wrapper.model_copy(deep=True)
         to_wrapper.reset(new_locator, source_file=new_source_file)
+
+        if hasattr(to_wrapper.entity, "name") and new_locator.entityName is not None:
+            to_wrapper.entity.name = new_locator.entityName
+
+        if hasattr(to_wrapper.entity, "path"):
+            to_wrapper.entity.path = "/".join(new_locator.folders + [new_locator.entityName or ""])
         self.resolve_wrapper(to_wrapper)
         to_wrapper._changed = True
 
@@ -1103,6 +1109,37 @@ class EntityFileRef:
                 utils.delete_path(self.file_path)
                 self.locators = []
                 return True
+            case b.EntityType.FOLDERS:
+                wrapper_locators = [w.locator for w in wrappers]
+                remaining_locators = [
+                    loc for loc in self.locators if loc not in wrapper_locators
+                ]
+
+                if len(remaining_locators) == 0:
+                    utils.delete_path(self.file_path)
+                    self.locators = []
+                    return True
+
+                current_content = b.BaseEntities.from_json_file(self.file_path)
+                entities: list[b.BaseEntityType] = getattr(
+                    current_content.root, self._type.value
+                )
+                remaining_names = {
+                    loc.entityName for loc in remaining_locators if loc.entityName
+                }
+                entities = [e for e in entities if e.name in remaining_names]
+
+                if len(entities) == 0:
+                    utils.delete_path(self.file_path)
+                    self.locators = []
+                    return True
+
+                setattr(current_content.root, self._type.value, entities)
+                with open(self.file_path, "w", encoding="utf-8") as _file:
+                    _file.write(current_content.model_dump_json(**MODEL_DUMP_OPTIONS))
+
+                self.locators = remaining_locators
+                return False
 
             case _:
                 current_content = b.BaseEntities.from_json_file(self.file_path)

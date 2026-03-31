@@ -135,6 +135,23 @@ def test_get_entities(model: Model):
     assert len(entities) > 0
 
 
+def test_move_folder_updates_folder_metadata(model: Model):
+    moved = model.move_entities("folders/020-Core/Sales", "folders/020-Core/SalesRenamed")
+    moved_folder = next(
+        (
+            wrapper
+            for wrapper in moved
+            if wrapper.locator.entityType == EntityType.FOLDERS.value
+            and wrapper.locator.entityName == "SalesRenamed"
+        ),
+        None,
+    )
+
+    assert moved_folder is not None
+    assert moved_folder.entity.name == "SalesRenamed"
+    assert moved_folder.entity.path == "020-Core/SalesRenamed"
+
+
 # @parametrize_with_cases("locator", cases=CasesLocator, glob="*_multiple")
 # def test_lookup_entity__multiple(locator, model):
 #     """Test Model.lookup_entity() with multiple resolve locators."""
