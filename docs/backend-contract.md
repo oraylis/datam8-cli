@@ -108,6 +108,9 @@ Status mapping in `src/datam8/api/app.py`:
 
 - `POST /secrets/check`
 - `PUT /secrets/set`
+  - Upsert semantics: setting an existing secret path overwrites the existing value.
+  - Successful writes return `204 No Content`.
+  - Secret refs use `ref://<path>` (for example `ref://datasources/AdventureWorks/password`).
 
 ## Response envelopes for collection/single-item routes
 

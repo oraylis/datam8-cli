@@ -152,6 +152,51 @@ def test_move_folder_updates_folder_metadata(model: Model):
     assert moved_folder.entity.path == "020-Core/SalesRenamed"
 
 
+def _model_entity_payload_template(model: Model) -> tuple[dict, str]:
+    wrapper = next(iter(model.modelEntities.values()))
+    payload = wrapper.entity.model_copy().model_dump(mode="json")
+    payload["id"] = 999999
+    payload["name"] = "ClientProvidedName"
+    zone_folder = wrapper.locator.folders[0]
+    return payload, zone_folder
+
+
+def test_add_model_entity_uses_next_id_after_existing_max(model: Model):
+    existing_max = max(wrapper.entity.id for wrapper in model.modelEntities.values())
+    payload, zone_folder = _model_entity_payload_template(model)
+
+    created = model.add_entity(f"modelEntities/{zone_folder}/IdSequenceRegression", payload)
+
+    assert created.entity.id == existing_max + 1
+
+
+def test_add_model_entity_ignores_client_supplied_id(model: Model):
+    existing_max = max(wrapper.entity.id for wrapper in model.modelEntities.values())
+    payload, zone_folder = _model_entity_payload_template(model)
+    payload["id"] = 1
+
+    created = model.add_entity(f"modelEntities/{zone_folder}/ClientIdIgnored", payload)
+
+    assert created.entity.id == existing_max + 1
+    assert created.entity.id != 1
+
+
+def test_add_model_entity_uses_dedicated_model_file_path(model: Model):
+    existing = next(iter(model.modelEntities.values()))
+    payload, zone_folder = _model_entity_payload_template(model)
+    entity_name = "SourceFileRegression"
+
+    created = model.add_entity(f"modelEntities/{zone_folder}/{entity_name}", payload)
+    expected = (
+        model.get_base_path_for_entity_type(EntityType.MODEL_ENTITIES)
+        / zone_folder
+        / f"{entity_name}.json"
+    )
+
+    assert created.source_file == expected
+    assert created.source_file != existing.source_file
+
+
 # @parametrize_with_cases("locator", cases=CasesLocator, glob="*_multiple")
 # def test_lookup_entity__multiple(locator, model):
 #     """Test Model.lookup_entity() with multiple resolve locators."""

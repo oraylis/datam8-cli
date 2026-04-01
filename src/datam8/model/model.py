@@ -167,7 +167,7 @@ class Model:
         if len(self.modelEntities) == 0:
             self.__next_model_id = 1
         else:
-            self.__next_model_id = max([w.entity.id for w in self.modelEntities.values()])
+            self.__next_model_id = max([w.entity.id for w in self.modelEntities.values()]) + 1
 
         self.plugin_manager = plugins.PluginManager()
 
@@ -560,7 +560,9 @@ class Model:
         _type = b.EntityType(_locator.entityType)
 
         base_file_path = self.get_base_path_for_entity_type(_type)
-        if _type == b.EntityType.FOLDERS:
+        if _type == b.EntityType.MODEL_ENTITIES:
+            source_file_path = Path(base_file_path, *_locator.folders, f"{_locator.entityName}.json")
+        elif _type == b.EntityType.FOLDERS:
             source_file_path = Path(
                 base_file_path,
                 *_locator.folders,

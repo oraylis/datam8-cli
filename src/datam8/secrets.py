@@ -35,7 +35,7 @@ SECRET_PREFIX: str = "datam8:"
 
 def _ensure_path(path: PurePosixPath | str) -> PurePosixPath:
     if isinstance(path, str):
-        return PurePosixPath(path.removeprefix("ref://"))
+        return PurePosixPath(path.strip().removeprefix("ref://"))
     return path
 
 
@@ -86,13 +86,19 @@ class SecretResolver:
     def __register_secret(self, path: PurePosixPath, /) -> None:
         service_name = self.__create_service_name()
         secrets = self.__get_password(service_name)
+        posix_path = path.as_posix()
 
         logger.debug(f"Before register: {secrets}")
 
         if secrets is None or secrets == "":
-            secrets = path.as_posix()
+            secrets = posix_path
         else:
-            secrets = f"{secrets},{path.as_posix()}"
+            entries = [entry for entry in secrets.split(",") if entry]
+            if posix_path in entries:
+                logger.debug("Secret already registered: %s", posix_path)
+                return
+            entries.append(posix_path)
+            secrets = ",".join(entries)
 
         self.__set_password(service_name, secrets)
         logger.debug(f"After register: {secrets}")

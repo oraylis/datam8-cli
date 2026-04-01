@@ -184,20 +184,115 @@ class SqlServer(Plugin):
             raise utils.create_error("A schema needs to be provided for SQL Server sources")
 
         query = f"""
-            select c.*
-            from [information_schema].[tables] as t
-                join [information_schema].[columns] as c
-                    on c.table_name = t.table_name
-                    and c.table_schema = t.table_schema
-                    and c.table_catalog = t.table_catalog
+            select
+                c.*,
+                case when pk.[COLUMN_NAME] is not null then cast(1 as bit) else cast(0 as bit) end as [IS_PRIMARY_KEY]
+            from [information_schema].[columns] as c
+                left join (
+                    select
+                        kcu.[TABLE_CATALOG],
+                        kcu.[TABLE_SCHEMA],
+                        kcu.[TABLE_NAME],
+                        kcu.[COLUMN_NAME]
+                    from [information_schema].[table_constraints] as tc
+                        inner join [information_schema].[key_column_usage] as kcu
+                            on tc.[constraint_name] = kcu.[constraint_name]
+                            and tc.[table_schema] = kcu.[table_schema]
+                    where tc.[constraint_type] = 'PRIMARY KEY'
+                ) as pk
+                    on c.[TABLE_CATALOG] = pk.[TABLE_CATALOG]
+                    and c.[TABLE_SCHEMA] = pk.[TABLE_SCHEMA]
+                    and c.[TABLE_NAME] = pk.[TABLE_NAME]
+                    and c.[COLUMN_NAME] = pk.[COLUMN_NAME]
             where 1=1
-                and t.table_name = '{table}'
-                and t.table_schema = '{schema}'
+                and c.[table_name] = '{table}'
+                and c.[table_schema] = '{schema}'
             order by
-                ordinal_position
+                c.[ordinal_position]
         """
 
-        result = self._execute_query(query).drop("TABLE_CATALOG", "TABLE_SCHEMA", "TABLE_NAME")
+        raw_result = self._execute_query(query).to_dicts()
+        mapped_rows: list[dict[str, Any]] = []
+
+        def _first_non_null(row: dict[str, Any], keys: list[str]) -> Any:
+            for key in keys:
+                if key in row and row[key] is not None:
+                    return row[key]
+            return None
+
+        def _to_nullable_int(value: Any) -> int | None:
+            if value is None:
+                return None
+            if isinstance(value, bool):
+                num = int(value)
+                return num if num > 0 else None
+            if isinstance(value, (int, float)):
+                num = int(value)
+                return num if num > 0 else None
+            raw = str(value).strip()
+            if not raw:
+                return None
+            num = int(raw)
+            return num if num > 0 else None
+
+        def _to_bool(value: Any) -> bool:
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, (int, float)):
+                return bool(value)
+            raw = str(value).strip().lower()
+            return raw in {"1", "true", "yes", "y"}
+
+        for row in raw_result:
+            name = _first_non_null(row, ["name", "COLUMN_NAME", "column_name"])
+            ordinal = _first_non_null(row, ["ordinal", "ORDINAL_POSITION", "ordinal_position"])
+            data_type = _first_non_null(row, ["dataType", "DATA_TYPE", "data_type"])
+            is_nullable = _first_non_null(row, ["isNullable", "IS_NULLABLE", "is_nullable"])
+
+            if name is None or ordinal is None or data_type is None or is_nullable is None:
+                raise utils.create_error(
+                    ValueError(
+                        f"Invalid source metadata row for [{schema}].[{table}] in '{self._data_source.name}': {row}"
+                    )
+                )
+
+            ordinal_int = int(_to_nullable_int(ordinal) or 0)
+            if ordinal_int < 1:
+                raise utils.create_error(
+                    ValueError(
+                        f"Invalid ordinal in source metadata row for [{schema}].[{table}] in '{self._data_source.name}': {row}"
+                    )
+                )
+
+            mapped_rows.append(
+                {
+                    "name": str(name),
+                    "ordinal": ordinal_int,
+                    "dataType": str(data_type),
+                    "maxLength": _to_nullable_int(
+                        _first_non_null(
+                            row,
+                            [
+                                "maxLength",
+                                "CHARACTER_MAXIMUM_LENGTH",
+                                "character_maximum_length",
+                            ],
+                        )
+                    ),
+                    "numericPrecision": _to_nullable_int(
+                        _first_non_null(row, ["numericPrecision", "NUMERIC_PRECISION", "numeric_precision"])
+                    ),
+                    "numbericScale": _to_nullable_int(
+                        _first_non_null(row, ["numbericScale", "NUMERIC_SCALE", "numeric_scale"])
+                    ),
+                    "isNullable": _to_bool(is_nullable),
+                    "isPrimaryKey": _to_bool(
+                        _first_non_null(row, ["isPrimaryKey", "IS_PRIMARY_KEY", "is_primary_key"]) or False
+                    ),
+                }
+            )
+
+        result = pl.DataFrame(mapped_rows)
         if result.is_empty():
             raise utils.create_error(
                 f"Table [{schema}].[{table}] does not exist in '{self._data_source.name}'"
