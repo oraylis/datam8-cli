@@ -227,14 +227,15 @@ class Model:
             wrapper.resolved = True
             return wrapper
 
-        property_references: list[p.PropertyReference] = getattr(wrapper.entity, "properties") or []
-
-        property_references += [
+        local_property_references: list[p.PropertyReference] = list(
+            getattr(wrapper.entity, "properties") or []
+        )
+        property_references: list[p.PropertyReference] = local_property_references + [
             pr
             for pr in self.get_inherited_property_references(wrapper)
             # NOTE: properties set on the entity itself takes precedene to
             # inherited properties
-            if pr not in property_references
+            if pr not in local_property_references
         ]
 
         if len(property_references) > 0:

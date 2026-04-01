@@ -17,6 +17,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 from types import MethodType
+from pathlib import Path
 
 import pytest
 import pytest_cases
@@ -25,7 +26,8 @@ from test_010_model_cases import CasesEntityLookup, CasesLocator, CasesModel
 from datam8 import errors
 from datam8.model import EntityWrapper, Locator, Model
 from datam8_model.base import EntityType
-from datam8_model.data_product import DataModule
+from datam8_model.data_product import DataModule, DataProduct
+from datam8_model.property import PropertyReference
 
 
 @pytest_cases.parametrize_with_cases("attribute", cases=CasesModel, glob="*_attributes")
@@ -150,6 +152,43 @@ def test_move_folder_updates_folder_metadata(model: Model):
     assert moved_folder is not None
     assert moved_folder.entity.name == "SalesRenamed"
     assert moved_folder.entity.path == "020-Core/SalesRenamed"
+
+
+def test_resolve_wrapper_keeps_local_properties_unmodified():
+    local_ref = PropertyReference(property="localProp", value="localValue")
+    inherited_ref = PropertyReference(property="inheritedProp", value="inheritedValue")
+    wrapper = EntityWrapper(
+        locator=Locator.from_path("dataProducts/Sales"),
+        source_file=Path("Base/DataProducts.json"),
+        entity=DataProduct(
+            name="Sales",
+            properties=[local_ref],
+            dataModules=[DataModule(name="Module1")],
+        ),
+    )
+    captured: dict[str, list[PropertyReference]] = {}
+
+    class DummyResolver:
+        def get_inherited_property_references(self, current_wrapper):
+            assert current_wrapper is wrapper
+            return [inherited_ref]
+
+        def _resolve_properties(self, current_wrapper, props):
+            assert current_wrapper is wrapper
+            captured["props"] = list(props)
+
+        def _resolve_model_attributes(self, current_wrapper):
+            assert current_wrapper is wrapper
+
+    resolver = DummyResolver()
+    before_local = list(wrapper.entity.properties or [])
+    resolved = Model.resolve_wrapper(resolver, wrapper)
+    after_local = list(resolved.entity.properties or [])
+
+    assert resolved.resolved
+    assert after_local == before_local
+    assert local_ref in captured["props"]
+    assert inherited_ref in captured["props"]
 
 
 def _model_entity_payload_template(model: Model) -> tuple[dict, str]:

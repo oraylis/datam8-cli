@@ -39,65 +39,43 @@ DEFAULT_ATTRIBUTE_TYPES_JSON = """{
             "displayName": "Amount",
             "description": "Amount value having a currency",
             "defaultType": "double",
-            "hasUnit": "Currency",
-            "canBeInRelation": false,
-            "isDefaultProperty": false
+            "hasUnit": "Currency"
         },
         {
             "name": "BirthDate",
             "displayName": "Birth Date of a Person",
-            "defaultType": "datetime",
-            "canBeInRelation": false,
-            "isDefaultProperty": false
+            "defaultType": "datetime"
         },
         {
             "name": "CreationDate",
             "displayName": "Creation Date",
             "defaultType": "datetime",
-            "hasUnit": "NoUnit",
-            "canBeInRelation": false,
-            "isDefaultProperty": false
+            "hasUnit": "NoUnit"
         },
         {
             "name": "Currency",
             "displayName": "Currency Attribute",
             "defaultType": "string",
             "defaultLength": 3,
-            "hasUnit": "NoUnit",
-            "canBeInRelation": false,
-            "isDefaultProperty": false
+            "hasUnit": "NoUnit"
         },
         {
             "name": "Dsc",
             "displayName": "Description",
             "defaultType": "string",
             "defaultLength": 256,
-            "hasUnit": "NoUnit",
-            "canBeInRelation": false,
-            "isDefaultProperty": false
-        },
-        {
-            "name": "email",
-            "displayName": "e-mail Address",
-            "defaultType": "string",
-            "defaultLength": 256,
-            "canBeInRelation": false,
-            "isDefaultProperty": false
+            "hasUnit": "NoUnit"
         },
         {
             "name": "EMail",
-            "displayName": "EMail",
-            "defaultType": "string",
-            "canBeInRelation": false,
-            "isDefaultProperty": false
+            "displayName": "E-Mail Address",
+            "defaultType": "string"
         },
         {
             "name": "Flag",
             "displayName": "Flag",
             "defaultType": "string",
-            "defaultLength": 1,
-            "canBeInRelation": false,
-            "isDefaultProperty": false
+            "defaultLength": 1
         },
         {
             "name": "ID",
@@ -110,24 +88,18 @@ DEFAULT_ATTRIBUTE_TYPES_JSON = """{
             "name": "Key",
             "displayName": "Key",
             "defaultType": "string",
-            "defaultLength": 16,
-            "canBeInRelation": false,
-            "isDefaultProperty": false
+            "defaultLength": 16
         },
         {
             "name": "Name",
             "displayName": "Name",
-            "defaultType": "string",
-            "canBeInRelation": false,
-            "isDefaultProperty": false
+            "defaultType": "string"
         },
         {
             "name": "PersonalInfo",
             "displayName": "Personal Information",
             "defaultType": "string",
-            "defaultLength": 256,
-            "canBeInRelation": false,
-            "isDefaultProperty": false
+            "defaultLength": 256
         },
         {
             "name": "SID",
@@ -140,9 +112,7 @@ DEFAULT_ATTRIBUTE_TYPES_JSON = """{
         {
             "name": "Text",
             "displayName": "Text",
-            "defaultType": "string",
-            "canBeInRelation": false,
-            "isDefaultProperty": false
+            "defaultType": "string"
         },
         {
             "name": "Unit",
@@ -150,38 +120,31 @@ DEFAULT_ATTRIBUTE_TYPES_JSON = """{
             "description": "Unit for amount quanities",
             "defaultType": "string",
             "defaultLength": 16,
-            "hasUnit": "NoUnit",
-            "canBeInRelation": false,
-            "isDefaultProperty": false
+            "hasUnit": "NoUnit"
         },
         {
             "name": "Val",
             "displayName": "Value",
             "description": "Unit free value",
             "defaultType": "double",
-            "hasUnit": "NoUnit",
-            "canBeInRelation": false,
-            "isDefaultProperty": false
+            "hasUnit": "NoUnit"
         },
         {
             "name": "Generic String",
             "displayName": "Generic for String",
             "defaultType": "string",
-            "canBeInRelation": false,
             "isDefaultProperty": true
         },
         {
             "name": "Generic Datetime",
             "displayName": "Generic for Datetime",
             "defaultType": "datetime",
-            "canBeInRelation": false,
             "isDefaultProperty": true
         },
         {
             "name": "Generic Date",
             "displayName": "Generic for Date",
             "defaultType": "date",
-            "canBeInRelation": false,
             "isDefaultProperty": true
         },
         {
@@ -195,7 +158,6 @@ DEFAULT_ATTRIBUTE_TYPES_JSON = """{
             "name": "Generic Double",
             "displayName": "Generic for Double",
             "defaultType": "double",
-            "canBeInRelation": false,
             "isDefaultProperty": true
         }
     ]
@@ -210,8 +172,6 @@ DEFAULT_DATA_TYPES_JSON = """{
       "displayName": "Unicode String (UTF-8) with char length",
       "description": "#",
       "hasCharLen": true,
-      "hasPrecision": false,
-      "hasScale": false,
       "targets": {
         "databricks": "string",
         "powerbi": "string"
@@ -221,8 +181,6 @@ DEFAULT_DATA_TYPES_JSON = """{
       "name": "short",
       "displayName": "Integer (16 bit)",
       "hasCharLen": false,
-      "hasPrecision": false,
-      "hasScale": false,
       "targets": {
         "databricks": "smallint",
         "powerbi": "int64"
@@ -232,8 +190,6 @@ DEFAULT_DATA_TYPES_JSON = """{
       "name": "int",
       "displayName": "Integer (32 bit)",
       "hasCharLen": false,
-      "hasPrecision": false,
-      "hasScale": false,
       "targets": {
         "databricks": "int",
         "powerbi": "int64"
@@ -243,8 +199,6 @@ DEFAULT_DATA_TYPES_JSON = """{
       "name": "long",
       "displayName": "Integer (64 bit)",
       "hasCharLen": false,
-      "hasPrecision": false,
-      "hasScale": false,
       "targets": {
         "databricks": "bigint",
         "powerbi": "int64"
@@ -254,8 +208,6 @@ DEFAULT_DATA_TYPES_JSON = """{
       "name": "byte",
       "displayName": "Integer (8 bit)",
       "hasCharLen": false,
-      "hasPrecision": false,
-      "hasScale": false,
       "targets": {
         "databricks": "tinyint",
         "powerbi": "int64"
@@ -266,8 +218,6 @@ DEFAULT_DATA_TYPES_JSON = """{
       "displayName": "Floating point with double precision",
       "description": "Test 2",
       "hasCharLen": false,
-      "hasPrecision": false,
-      "hasScale": false,
       "targets": {
         "databricks": "double",
         "powerbi": "double"
@@ -277,8 +227,6 @@ DEFAULT_DATA_TYPES_JSON = """{
       "name": "bit",
       "displayName": "Bit (1 bit)",
       "hasCharLen": false,
-      "hasPrecision": false,
-      "hasScale": false,
       "targets": {
         "databricks": "boolean",
         "powerbi": "boolean"
@@ -288,8 +236,6 @@ DEFAULT_DATA_TYPES_JSON = """{
       "name": "date",
       "displayName": "Date storage yyyy-mm-dd",
       "hasCharLen": false,
-      "hasPrecision": false,
-      "hasScale": false,
       "targets": {
         "databricks": "date",
         "powerbi": "date"
@@ -299,8 +245,6 @@ DEFAULT_DATA_TYPES_JSON = """{
       "name": "datetime",
       "displayName": "Date time storage yyyy-mm-dd HH:mm:ss",
       "hasCharLen": false,
-      "hasPrecision": false,
-      "hasScale": false,
       "targets": {
         "databricks": "timestamp",
         "powerbi": "timestamp"
@@ -310,8 +254,6 @@ DEFAULT_DATA_TYPES_JSON = """{
       "name": "binary",
       "displayName": "Binary storage",
       "hasCharLen": true,
-      "hasPrecision": false,
-      "hasScale": false,
       "targets": {
         "databricks": "binary",
         "powerbi": "binary"
@@ -321,8 +263,6 @@ DEFAULT_DATA_TYPES_JSON = """{
       "name": "uniqueidentifier",
       "displayName": "Unique Identifier",
       "hasCharLen": false,
-      "hasPrecision": false,
-      "hasScale": false,
       "targets": {
         "databricks": "string",
         "powerbi": "string"
@@ -343,8 +283,6 @@ DEFAULT_DATA_TYPES_JSON = """{
       "name": "money",
       "displayName": "Money",
       "hasCharLen": false,
-      "hasPrecision": false,
-      "hasScale": false,
       "targets": {
         "databricks": "decimal(19,4)",
         "powerbi": "decimal"
@@ -354,8 +292,6 @@ DEFAULT_DATA_TYPES_JSON = """{
       "name": "dynstring",
       "displayName": "string without character lenght",
       "hasCharLen": false,
-      "hasPrecision": false,
-      "hasScale": false,
       "targets": {
         "databricks": "string",
         "powerbi": "string"
@@ -365,8 +301,6 @@ DEFAULT_DATA_TYPES_JSON = """{
       "name": "dyndecimal",
       "displayName": "decimal with precision and scale",
       "hasCharLen": false,
-      "hasPrecision": false,
-      "hasScale": false,
       "targets": {
         "databricks": "decimal(19,3)",
         "powerbi": "decimal"
@@ -382,19 +316,16 @@ DEFAULT_PROPERTIES_JSON = """{
     {
       "name": "jobs",
       "displayName": "jobs",
-      "schema_": "./jobs.json",
       "scopes": [
         {
           "type": "entity",
-          "singleUsage": false,
-          "mandatory": false
+          "singleUsage": false
         }
       ]
     },
     {
       "name": "schedules",
       "displayName": "schedules",
-      "schema_": "./schedules.json",
       "scopes": [
         {
           "type": "none"
@@ -404,7 +335,6 @@ DEFAULT_PROPERTIES_JSON = """{
     {
       "name": "cluster",
       "displayName": "cluster",
-      "schema_": "./cluster.json",
       "scopes": [
         {
           "type": "none"
@@ -414,13 +344,11 @@ DEFAULT_PROPERTIES_JSON = """{
     {
       "name": "tags",
       "displayName": "tags",
-      "schema_": "./tags.json",
       "scopes": []
     },
     {
       "name": "write_mode",
       "displayName": "write mode",
-      "schema_": "./write_mode.json",
       "scopes": [
         {
           "type": "entity",
@@ -431,11 +359,9 @@ DEFAULT_PROPERTIES_JSON = """{
     {
       "name": "data_retention",
       "displayName": "data retention",
-      "schema_": "./data_retention.json",
       "scopes": [
         {
-          "type": "entity",
-          "mandatory": false
+          "type": "entity"
         }
       ]
     },
@@ -473,25 +399,21 @@ DEFAULT_PROPERTY_VALUES_JSON = """{
     {
       "name": "overwrite",
       "displayName": "overwrite",
-      "default": false,
       "property": "write_mode"
     },
     {
       "name": "delta",
       "displayName": "Delta",
-      "default": false,
       "property": "extract_column"
     },
     {
       "name": "delta",
       "displayName": "Delta",
-      "default": false,
       "property": "extract_mode"
     },
     {
       "name": "query",
       "displayName": "Query",
-      "default": false,
       "property": "extract_mode"
     },
     {
@@ -504,14 +426,12 @@ DEFAULT_PROPERTY_VALUES_JSON = """{
     {
       "name": "weekly",
       "displayName": "Weekly",
-      "default": false,
       "property": "schedules",
       "cron": "1 0"
     },
     {
       "name": "small",
       "displayName": "S",
-      "default": false,
       "property": "cluster",
       "node_type": "Standard_D4ds_v5",
       "num_workers": 4,
@@ -529,7 +449,6 @@ DEFAULT_PROPERTY_VALUES_JSON = """{
     {
       "name": "sales_daily",
       "displayName": "Sales (Daily)",
-      "default": false,
       "property": "jobs",
       "properties": [
         {
@@ -545,7 +464,6 @@ DEFAULT_PROPERTY_VALUES_JSON = """{
     {
       "name": "sales_weekly",
       "displayName": "Sales (Weekly)",
-      "default": false,
       "property": "jobs",
       "properties": [
         {
@@ -577,15 +495,83 @@ DEFAULT_PROPERTY_VALUES_JSON = """{
       "name": "7_days",
       "displayName": "7 Days Data Retention",
       "property": "data_retention"
-    },
-    {
-      "name": "power-bi",
-      "property": "target"
     }
   ]
 }
 """
 
+DEFAULT_ZONES_JSON = """{
+  "type": "zones",
+  "zones": [
+    {
+      "name": "Zone1",
+      "targetName": "zone1",
+      "displayName": "Zone1"
+    }
+  ]
+}
+"""
+
+DEFAULT_DATA_SOURCES_JSON = """{
+  "type": "dataSources",
+  "dataSources": [
+    {
+      "name": "DataSource1",
+      "type": "DataSourceType1",
+      "extendedProperties": {}
+    }
+  ]
+}
+"""
+
+DEFAULT_DATA_SOURCE_TYPES_JSON = """{
+  "type": "dataSourceTypes",
+  "dataSourceTypes": [
+    {
+      "name": "DataSourceType1",
+      "dataTypeMapping": [
+        {
+          "sourceType": "string",
+          "targetType": "string"
+        }
+      ],
+      "connectionProperties": [
+        {
+          "name": "host",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "authModes": [
+        {
+          "name": "default",
+          "required": [
+            "host"
+          ],
+          "optional": []
+        }
+      ]
+    }
+  ]
+}
+"""
+
+DEFAULT_DATA_PRODUCTS_JSON = """{
+  "type": "dataProducts",
+  "dataProducts": [
+    {
+      "name": "DataProduct1",
+      "dataModules": [
+        {
+          "name": "Module1",
+          "displayName": "Module1",
+          "properties": []
+        }
+      ]
+    }
+  ]
+}
+"""
 
 def _write_default_base_entities(base_path: Path) -> None:
     files = {
@@ -593,6 +579,10 @@ def _write_default_base_entities(base_path: Path) -> None:
         "DataTypes.json": DEFAULT_DATA_TYPES_JSON,
         "Properties.json": DEFAULT_PROPERTIES_JSON,
         "PropertyValues.json": DEFAULT_PROPERTY_VALUES_JSON,
+        "Zones.json": DEFAULT_ZONES_JSON,
+        "DataSources.json": DEFAULT_DATA_SOURCES_JSON,
+        "DataSourceTypes.json": DEFAULT_DATA_SOURCE_TYPES_JSON,
+        "DataProducts.json": DEFAULT_DATA_PRODUCTS_JSON,
     }
 
     for filename, content in files.items():
