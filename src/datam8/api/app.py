@@ -21,6 +21,7 @@ from __future__ import annotations
 import os
 import socket
 import uuid
+from contextlib import asynccontextmanager
 
 import typer
 
@@ -82,8 +83,15 @@ def create_server(
     """Create and configure the HTTP API application."""
     base_url = f"http://{host}:{port}"
 
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        print(
+            f"API ready at `{base_url}`, schemaVersion: {factory.get_model().solution.schemaVersion}"
+        )
+        yield
+
     if enable_openapi:
-        app = FastAPI(title="DataM8 API", version=config.get_version())
+        app = FastAPI(title="DataM8 API", version=config.get_version(), lifespan=lifespan)
     else:
         app = FastAPI(
             title="DataM8 API",
@@ -91,6 +99,7 @@ def create_server(
             docs_url=None,
             redoc_url=None,
             openapi_url=None,
+            lifespan=lifespan,
         )
 
     origins_env = os.environ.get("DATAM8_CORS_ORIGINS")
@@ -183,12 +192,6 @@ def create_server(
         return JSONResponse(status_code=500, content=env.model_dump())
 
     app.include_router(router)
-
-    @app.on_event("startup")
-    async def _emit_ready() -> None:
-        print(
-            f"API ready at `{base_url}`, schemaVersion: {factory.get_model().solution.schemaVersion}"
-        )
 
     server = uvicorn.Server(
         uvicorn.Config(

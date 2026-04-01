@@ -16,8 +16,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-from types import MethodType
 from pathlib import Path
+from types import MethodType
 
 import pytest
 import pytest_cases

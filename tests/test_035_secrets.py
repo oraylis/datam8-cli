@@ -23,9 +23,9 @@ from pathlib import PurePosixPath
 
 import pytest
 
+import datam8.secrets as secrets_module
 from datam8.api.routes.secrets import SetSecretBody, set_secret
 from datam8.secrets import SecretResolver
-import datam8.secrets as secrets_module
 
 
 @pytest.fixture

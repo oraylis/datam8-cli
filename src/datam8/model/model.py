@@ -564,6 +564,10 @@ class Model:
         if _type == b.EntityType.MODEL_ENTITIES:
             source_file_path = Path(base_file_path, *_locator.folders, f"{_locator.entityName}.json")
         elif _type == b.EntityType.FOLDERS:
+            if _locator.entityName is None:
+                raise utils.create_error(
+                    Exception("Folder locator must include entityName when adding a folder entity")
+                )
             source_file_path = Path(
                 base_file_path,
                 *_locator.folders,
@@ -817,6 +821,10 @@ class Model:
         new_locator = _to.clone()
         new_locator.entityType = _from.entityType
         new_locator.entityName = _to.entityName or _from.entityName
+        if new_locator.entityName is None:
+            raise utils.create_error(
+                Exception("Target locator must include entityName when moving an entity")
+            )
 
         if self.has_locator(new_locator) and not force:
             raise utils.create_error(
@@ -851,8 +859,8 @@ class Model:
         if hasattr(to_wrapper.entity, "name") and new_locator.entityName is not None:
             to_wrapper.entity.name = new_locator.entityName
 
-        if hasattr(to_wrapper.entity, "path"):
-            to_wrapper.entity.path = "/".join(new_locator.folders + [new_locator.entityName or ""])
+        if _type == b.EntityType.FOLDERS and isinstance(to_wrapper.entity, f.Folder):
+            to_wrapper.entity.path = "/".join([*new_locator.folders, new_locator.entityName])
         self.resolve_wrapper(to_wrapper)
         to_wrapper._changed = True
 
