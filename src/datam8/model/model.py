@@ -1239,10 +1239,14 @@ class EntityFileRef:
                 entities: b.BaseEntityType = getattr(current_content.root, self._type.value)
 
                 for wrapper in wrappers:
+                    replaced = False
                     for existing_idx, existing_entity in enumerate(entities):
                         if existing_entity.name == wrapper.entity.name:
                             entities[existing_idx] = wrapper.entity
+                            replaced = True
                             break
+                    if not replaced:
+                        entities.append(wrapper.entity)
 
                 setattr(current_content.root, self._type.value, entities)
 
