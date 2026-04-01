@@ -99,8 +99,9 @@ class PluginManager:
         This is a lazy operation, as a plugin is only loaded once then stored in an internal dictionary.
         To reset all plugins or remove specific ones use `remove_plugin()` and `reset_plugins()` respectivly.
         """
-        manifest = self.get_plugin_manifest(data_source_type.name)
-        PluginClass = self.get_plugin(data_source_type.name)
+        plugin_id = data_source_type.pluginId or data_source_type.name
+        manifest = self.get_plugin_manifest(plugin_id)
+        PluginClass = self.get_plugin(plugin_id)
 
         return _create_plugin_instantiator(PluginClass, manifest)
 
