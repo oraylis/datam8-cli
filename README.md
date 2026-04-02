@@ -7,13 +7,13 @@ It provides:
 - the local FastAPI backend started with `datam8 serve`
 - synchronous generation/validation/model operations
 
-Neon starts this backend as a local process and talks to it over HTTP on root paths (no `/api/*` prefix).
+Frontend starts this backend as a local process and talks to it over HTTP on root paths (no `/api/*` prefix).
 
 ## Repository role in v2
 
 - `datam8-model`: schema source of truth
 - `datam8-generator`: backend implementation (this repo)
-- `datam8-neon`: desktop/web UI using this backend
+- `datam8`: desktop/web UI using this backend
 - `datam8-sample-solution`: reference solution used in tests/CI
 
 ## Key docs
@@ -21,7 +21,7 @@ Neon starts this backend as a local process and talks to it over HTTP on root pa
 - Canonical backend HTTP contract: `docs/backend-contract.md`
 - Runtime/server behavior: `docs/server.md`
 - Connector/plugin behavior: `docs/connectors.md`
-- CLI and API surface mapping notes: `docs/neon-cli-mapping.md`
+- CLI and API surface mapping notes: `docs/Frontend-cli-mapping.md`
 - Testing guide: `tests/README.md`
 - Contributor guardrails: `AGENTS.md`
 
@@ -109,3 +109,4 @@ uv tool run ruff check src
 uv run python scripts/add_license_headers.py --dry-run
 uv run python scripts/add_license_headers.py
 ```
+
