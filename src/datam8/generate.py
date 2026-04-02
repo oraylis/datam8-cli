@@ -213,7 +213,7 @@ async def render_payload(
         return err
 
     template_loader = jinja2.FileSystemLoader([_config.template_path, config.solution_folder_path])
-    template_env = jinja2.Environment(loader=template_loader, autoescape=True)
+    template_env = jinja2.Environment(loader=template_loader, autoescape=False)
     template_path = _config.target.sourcePath / payload.template_path
 
     try:
