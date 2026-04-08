@@ -55,7 +55,13 @@ def data_source(old: ds_legacy.DataSource) -> ds.DataSource:
         displayName=old.displayName,
         description=old.purpose,
         dataTypeMapping=new_mapping,
-        extendedProperties=getattr(old, "ExtendedProperties", {}),
+        extendedProperties=(
+            # since the old model allows additional attributes the exact name
+            # of this property is not actually enforce, so check for both
+            getattr(old, "ExtendedProperties", None)
+            or getattr(old, "extendedProperties", None)
+            or {}
+        ),
     )
 
     return new
@@ -618,28 +624,55 @@ class MigrationV1:
             match new_base_entities:
                 case b.DataTypes():
                     data_types = new_base_entities.dataTypes
+
                 case b.DataProducts():
                     data_products = new_base_entities.dataProducts
+
                 case b.AttributeTypes():
                     attribute_types = new_base_entities.attributeTypes
+
                 case b.DataSources():
                     data_sources = new_base_entities.dataSources
+
                     for src in data_sources:
-                        if src.type not in data_types:
-                            data_source_types[src.type] = ds.DataSourceType(
-                                name=src.type,
-                                dataTypeMapping=[x for x in src.dataTypeMapping or []],
-                                authModes=[],
-                                connectionProperties=[
-                                    ds.ConnectionProperty(
-                                        name=x,
-                                        required=False,
-                                        type=ds.ConnectionPropertyValueType.STRING,
-                                    )
-                                    for x in src.extendedProperties
-                                ],
-                            )
+                        # extract the data type mapping and remove it from the source, this should
+                        # always happen regardless of if the source type already exists or not
+                        data_type_mappings = [x for x in src.dataTypeMapping or []]
                         src.dataTypeMapping = None
+
+                        # in case the data source type was already migrated/created
+                        if src.type in data_types:
+                            continue
+
+                        # create connection properties matching extendedProperties due to the
+                        # model mismatch, this could result in no connectionProperties at all,
+                        # which is not allowed in the new model. If this happens, create a "dummy"
+                        # property for a connection string
+                        connection_properties = (
+                            [
+                                ds.ConnectionProperty(
+                                    name=x,
+                                    required=False,
+                                    type=ds.ConnectionPropertyValueType.STRING,
+                                )
+                                for x in src.extendedProperties
+                            ]
+                            if len(src.extendedProperties) > 0
+                            else [
+                                ds.ConnectionProperty(
+                                    name="connectionString",
+                                    required=False,
+                                    type=ds.ConnectionPropertyValueType.STRING,
+                                )
+                            ]
+                        )
+
+                        data_source_types[src.type] = ds.DataSourceType(
+                            name=src.type,
+                            dataTypeMapping=data_type_mappings,
+                            authModes=[],
+                            connectionProperties=connection_properties,
+                        )
 
             content = new_base_entities.model_dump_json(indent=2, exclude_none=True)
 

@@ -364,7 +364,7 @@ class Model:
             raise utils.create_error(errors.InvalidLocatorError(str(wrapper.locator)))
 
         for zone in self.zones.values():
-            if zone.entity.localFolderName == wrapper.locator.folders[0]:
+            if zone.entity.localFolderName or zone.entity.name == wrapper.locator.folders[0]:
                 return zone
 
         raise utils.create_error(errors.EntityNotFoundError(f"zones/{wrapper.locator.folders[0]}"))
@@ -686,6 +686,7 @@ class Model:
             raise utils.create_error(errors.InvalidLocatorError(str(locator)))
 
         property_value = self.get_entity_by_locator(locator)
+
         results = [
             wrapper
             for wrapper in self.get_entities(model_locator)
