@@ -52,9 +52,9 @@ class PluginManager:
             self.load_plugins_from_solution(solution)
 
     @classmethod
-    def register_builtin_plugin(cls, name: str, /, plugin: PluginManifest) -> None:
-        if name not in cls.__builtin_plugins:
-            cls.__builtin_plugins[name] = plugin
+    def register_builtin_plugin(cls, plugin_id: str, /, plugin: PluginManifest) -> None:
+        if plugin_id not in cls.__builtin_plugins:
+            cls.__builtin_plugins[plugin_id] = plugin
 
     def register_plugin(self, name: str, /, plugin: PluginManifest) -> None:
         """
@@ -105,8 +105,7 @@ class PluginManager:
 
         return _create_plugin_instantiator(PluginClass, manifest)
 
-    def get_plugin(self, plugin_id_: str, /) -> type[Plugin]:
-        plugin_id = plugin_id_.removeprefix("builtin:")
+    def get_plugin(self, plugin_id: str, /) -> type[Plugin]:
 
         if plugin_id in self.__loaded_plugins:
             return self.__loaded_plugins[plugin_id]

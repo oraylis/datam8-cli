@@ -221,7 +221,7 @@ class DataSourceType(BaseModel):
     """
     pluginId: str | None = None
     """
-    ID of the plugin used to connect to the source type. If not provided falls back to builtin plugins matching the  name
+    Canonical plugin ID used to connect to this source type (e.g. `builtin:SQLServer`).
     """
     connectionProperties: Annotated[Sequence[ConnectionProperty], Field(min_length=1)]
     """

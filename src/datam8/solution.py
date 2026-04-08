@@ -180,7 +180,6 @@ DEFAULT_DATA_TYPES_JSON = """{
     {
       "name": "short",
       "displayName": "Integer (16 bit)",
-      "hasCharLen": false,
       "targets": {
         "databricks": "smallint",
         "powerbi": "int64"
@@ -189,7 +188,6 @@ DEFAULT_DATA_TYPES_JSON = """{
     {
       "name": "int",
       "displayName": "Integer (32 bit)",
-      "hasCharLen": false,
       "targets": {
         "databricks": "int",
         "powerbi": "int64"
@@ -198,7 +196,6 @@ DEFAULT_DATA_TYPES_JSON = """{
     {
       "name": "long",
       "displayName": "Integer (64 bit)",
-      "hasCharLen": false,
       "targets": {
         "databricks": "bigint",
         "powerbi": "int64"
@@ -207,7 +204,6 @@ DEFAULT_DATA_TYPES_JSON = """{
     {
       "name": "byte",
       "displayName": "Integer (8 bit)",
-      "hasCharLen": false,
       "targets": {
         "databricks": "tinyint",
         "powerbi": "int64"
@@ -217,7 +213,6 @@ DEFAULT_DATA_TYPES_JSON = """{
       "name": "double",
       "displayName": "Floating point with double precision",
       "description": "Test 2",
-      "hasCharLen": false,
       "targets": {
         "databricks": "double",
         "powerbi": "double"
@@ -226,7 +221,6 @@ DEFAULT_DATA_TYPES_JSON = """{
     {
       "name": "bit",
       "displayName": "Bit (1 bit)",
-      "hasCharLen": false,
       "targets": {
         "databricks": "boolean",
         "powerbi": "boolean"
@@ -235,7 +229,6 @@ DEFAULT_DATA_TYPES_JSON = """{
     {
       "name": "date",
       "displayName": "Date storage yyyy-mm-dd",
-      "hasCharLen": false,
       "targets": {
         "databricks": "date",
         "powerbi": "date"
@@ -244,7 +237,6 @@ DEFAULT_DATA_TYPES_JSON = """{
     {
       "name": "datetime",
       "displayName": "Date time storage yyyy-mm-dd HH:mm:ss",
-      "hasCharLen": false,
       "targets": {
         "databricks": "timestamp",
         "powerbi": "timestamp"
@@ -262,7 +254,6 @@ DEFAULT_DATA_TYPES_JSON = """{
     {
       "name": "uniqueidentifier",
       "displayName": "Unique Identifier",
-      "hasCharLen": false,
       "targets": {
         "databricks": "string",
         "powerbi": "string"
@@ -271,7 +262,6 @@ DEFAULT_DATA_TYPES_JSON = """{
     {
       "name": "decimal",
       "displayName": "Decimal",
-      "hasCharLen": false,
       "hasPrecision": true,
       "hasScale": true,
       "targets": {
@@ -282,7 +272,6 @@ DEFAULT_DATA_TYPES_JSON = """{
     {
       "name": "money",
       "displayName": "Money",
-      "hasCharLen": false,
       "targets": {
         "databricks": "decimal(19,4)",
         "powerbi": "decimal"
@@ -291,7 +280,6 @@ DEFAULT_DATA_TYPES_JSON = """{
     {
       "name": "dynstring",
       "displayName": "string without character lenght",
-      "hasCharLen": false,
       "targets": {
         "databricks": "string",
         "powerbi": "string"
@@ -300,7 +288,6 @@ DEFAULT_DATA_TYPES_JSON = """{
     {
       "name": "dyndecimal",
       "displayName": "decimal with precision and scale",
-      "hasCharLen": false,
       "targets": {
         "databricks": "decimal(19,3)",
         "powerbi": "decimal"

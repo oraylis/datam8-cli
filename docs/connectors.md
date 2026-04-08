@@ -9,6 +9,8 @@ Registered in `src/datam8/plugins/__init__.py`:
 - `builtin:AzureDataLake`
 - `builtin:SQLServer`
 
+Built-ins are resolved strictly by canonical plugin IDs (`builtin:*`). Legacy short names (for example `SQLServer`) are not supported.
+
 `SQLServer` requires optional dependency group `sql` (`connectorx`).
 
 ## Plugin manifests

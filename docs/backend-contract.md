@@ -103,6 +103,7 @@ Status mapping in `src/datam8/api/app.py`:
 - `GET /plugins/{plugin_id}/ui-schema`
 - `GET /plugins/{plugin_id}/data-type-mappings`
 - `GET /plugins/{plugin_id}/connection-properties`
+- `plugin_id` must use canonical plugin IDs (for example `builtin:SQLServer`); legacy short names are rejected.
 
 ### Secrets
 
