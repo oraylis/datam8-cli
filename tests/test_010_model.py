@@ -25,9 +25,10 @@ from test_010_model_cases import CasesEntityLookup, CasesLocator, CasesModel
 
 from datam8 import errors
 from datam8.model import EntityWrapper, Locator, Model
+from datam8.model.model import EntityFileRef
 from datam8_model.base import EntityType
 from datam8_model.data_product import DataModule, DataProduct
-from datam8_model.property import PropertyReference
+from datam8_model.property import PropertyReference, PropertyValue
 
 
 @pytest_cases.parametrize_with_cases("attribute", cases=CasesModel, glob="*_attributes")
@@ -234,6 +235,44 @@ def test_add_model_entity_uses_dedicated_model_file_path(model: Model):
 
     assert created.source_file == expected
     assert created.source_file != existing.source_file
+
+
+def test_entity_file_ref_delete_property_values_uses_property_and_name(tmp_path: Path):
+    file_path = tmp_path / "PropertyValues.json"
+    file_path.write_text(
+        """{
+  "type": "propertyValues",
+  "propertyValues": [
+    { "name": "Default", "property": "Color" },
+    { "name": "Default", "property": "Status" }
+  ]
+}
+""",
+        encoding="utf-8",
+    )
+
+    color_locator = Locator.from_path("/propertyValues/Color/Default")
+    status_locator = Locator.from_path("/propertyValues/Status/Default")
+    file_ref = EntityFileRef(
+        _type=EntityType.PROPERTY_VALUES,
+        file_path=file_path,
+        locators=[color_locator, status_locator],
+    )
+    wrapper = EntityWrapper(
+        locator=color_locator,
+        source_file=file_path,
+        entity=PropertyValue(name="Default", property="Color"),
+    )
+
+    was_file_deleted = file_ref.delete(wrappers=[wrapper])
+
+    assert was_file_deleted is False
+    assert file_path.exists()
+    assert file_ref.locators == [status_locator]
+
+    content = file_path.read_text(encoding="utf-8")
+    assert '"property": "Color"' not in content
+    assert '"property": "Status"' in content
 
 
 # @parametrize_with_cases("locator", cases=CasesLocator, glob="*_multiple")

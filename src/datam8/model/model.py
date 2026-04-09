@@ -1195,6 +1195,38 @@ class EntityFileRef:
                 self.locators = remaining_locators
                 return False
 
+            case b.EntityType.PROPERTY_VALUES:
+                current_content = b.BaseEntities.from_json_file(self.file_path)
+                entities: list[b.BaseEntityType] = getattr(current_content.root, self._type.value)
+
+                wrapper_keys = {(w.entity.property, w.entity.name) for w in wrappers}
+                entities = [
+                    e
+                    for e in entities
+                    if (getattr(e, "property", None), e.name) not in wrapper_keys
+                ]
+
+                remaining_locators = [
+                    loc for loc in self.locators if loc not in [w.locator for w in wrappers]
+                ]
+
+                if len(entities) == 0:
+                    utils.delete_path(self.file_path)
+                    self.locators = []
+                    return True
+
+                setattr(current_content.root, self._type.value, entities)
+
+                with open(self.file_path, "w", encoding="utf-8") as _file:
+                    _file.write(current_content.model_dump_json(**MODEL_DUMP_OPTIONS))
+
+                self.locators = remaining_locators
+
+                # NOTE: this should actually never not be case, if not then something went majorly wrong
+                assert len(self.locators) == len(entities)
+
+                return False
+
             case _:
                 current_content = b.BaseEntities.from_json_file(self.file_path)
                 entities: list[b.BaseEntityType] = getattr(current_content.root, self._type.value)
