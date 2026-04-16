@@ -1282,7 +1282,15 @@ class EntityFileRef:
                 for wrapper in wrappers:
                     replaced = False
                     for existing_idx, existing_entity in enumerate(entities):
-                        if existing_entity.name == wrapper.entity.name:
+                        if self._type == b.EntityType.PROPERTY_VALUES:
+                            same_key = (
+                                existing_entity.name == wrapper.entity.name
+                                and getattr(existing_entity, "property", None)
+                                == getattr(wrapper.entity, "property", None)
+                            )
+                        else:
+                            same_key = existing_entity.name == wrapper.entity.name
+                        if same_key:
                             entities[existing_idx] = wrapper.entity
                             replaced = True
                             break

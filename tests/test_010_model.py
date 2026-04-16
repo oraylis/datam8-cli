@@ -275,6 +275,43 @@ def test_entity_file_ref_delete_property_values_uses_property_and_name(tmp_path:
     assert '"property": "Status"' in content
 
 
+def test_entity_file_ref_update_property_values_uses_property_and_name(tmp_path: Path):
+    file_path = tmp_path / "PropertyValues.json"
+    file_path.write_text(
+        """{
+  "type": "propertyValues",
+  "propertyValues": [
+    { "name": "daily", "property": "schedules", "displayName": "Daily" },
+    { "name": "sales_daily", "property": "jobs", "displayName": "Sales (Daily)" }
+  ]
+}
+""",
+        encoding="utf-8",
+    )
+
+    schedules_daily = Locator.from_path("/propertyValues/schedules/daily")
+    jobs_sales_daily = Locator.from_path("/propertyValues/jobs/sales_daily")
+    file_ref = EntityFileRef(
+        _type=EntityType.PROPERTY_VALUES,
+        file_path=file_path,
+        locators=[schedules_daily, jobs_sales_daily],
+    )
+
+    wrapper = EntityWrapper(
+        locator=Locator.from_path("/propertyValues/jobs/daily"),
+        source_file=file_path,
+        entity=PropertyValue(name="daily", property="jobs", displayName="Sales (Daily)"),
+    )
+
+    file_ref.update(wrappers=[wrapper])
+
+    content = file_path.read_text(encoding="utf-8")
+    assert '"name": "daily",' in content
+    assert '"property": "schedules"' in content
+    assert '"property": "jobs"' in content
+    assert '"name": "sales_daily"' in content
+
+
 # @parametrize_with_cases("locator", cases=CasesLocator, glob="*_multiple")
 # def test_lookup_entity__multiple(locator, model):
 #     """Test Model.lookup_entity() with multiple resolve locators."""
