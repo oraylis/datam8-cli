@@ -83,6 +83,8 @@ class Plugin(abc.ABC):
             if cp.name not in base and cp.default is not None:
                 base[cp.name] = cp.default
             if cp.type == ConnectionPropertyValueType.SECRET:
+                if cp.name not in base:
+                    continue
                 secret_ref = base.pop(cp.name)
                 if not isinstance(secret_ref, str):
                     raise utils.create_error(ValueError("A secret ref needs to be of type string"))
