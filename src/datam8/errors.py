@@ -16,10 +16,29 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+import traceback
 from collections.abc import Sequence
 from typing import Any
 
 from pydantic import BaseModel
+
+
+def extract_details(err: Exception) -> tuple[str, str, int | None]:
+    """
+    Returns
+    -------
+    A tuple containing the file name, function name and line number
+    """
+    if err.__traceback__ is None:
+        return "unknown", "unknown", None
+
+    tb = traceback.extract_tb(err.__traceback__)
+    if len(tb) < 1:
+        return "unknown", "unknown", None
+
+    details = tb[-1]
+
+    return details.filename, details.name, details.lineno
 
 
 class PayloadRegisteredMultipleTimesError(Exception):

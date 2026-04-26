@@ -55,8 +55,7 @@ def generate_output(
     clean_output: bool,
 ) -> Path:
     """
-    Runs the output generation in a terminal context, which causes the cli to exit when a "known" error
-    occures.
+    Runs the output generation in a terminal context, which causes the cli to exit when a "known" error occurs.
     Mainly wraps `datam8.generate.__generate_output_unsafe` with `try-except` and `sys.exit()` calls.
 
     When running in api different error types get raised, which results in not triggering the except cases.
@@ -74,8 +73,7 @@ def generate_output(
     except errors.InvalidGeneratorTargetError as err:
         logger.error(err)
         sys.exit(1)
-    except RenderError as err:
-        logger.error(err)
+    except RenderError as _:
         sys.exit(1)
 
     return result
@@ -204,22 +202,33 @@ async def render_payload(
     try:
         payloads: Sequence[IPayload] = payload._function(model, cache)
     except Exception as err:
+        file_name, func_name, line_no = errors.extract_details(err)
+
         logger.error(
-            "payload '%s' threw errors during payload creation: %s - %s",
+            "payload '%s' threw errors during payload creation at line %s: %s",
             payload.name,
-            type(err).__name__,
+            line_no,
             err,
         )
         return err
 
     template_loader = jinja2.FileSystemLoader([_config.template_path, config.solution_folder_path])
-    template_env = jinja2.Environment(loader=template_loader, autoescape=True)
+    template_env = jinja2.Environment(loader=template_loader, undefined=jinja2.StrictUndefined)
     template_path = _config.target.sourcePath / payload.template_path
 
     try:
         template = template_env.get_template(template_path.as_posix())
     except jinja2.TemplateNotFound as err:
         logger.error(f"{payload.name}: {err}")
+        return err
+    except jinja2.TemplateSyntaxError as err:
+        file_name, func_name, line_no = errors.extract_details(err)
+        logger.error(
+            "Template '%s' contains errors at line %s: %s",
+            Path(file_name).relative_to(config.solution_folder_path),
+            line_no,
+            err,
+        )
         return err
 
     coros = [
@@ -235,7 +244,7 @@ async def render_payload(
     ]
 
     if len(results) > 0:
-        raise Exception(results)
+        return Exception(results)
 
     logger.info(f"Rendered template {payload.template_path} from payload {payload.name}")
     return None
@@ -270,7 +279,17 @@ async def render_template(
     _output_path = _config.output_path / output_path
     logger.debug(f"[{payload_name}] Write output {template.filename} -> {_output_path}")
 
-    output = template.render(data=data)
+    try:
+        output = template.render(data=data)
+    except Exception as err:
+        file_name, _, line_no = errors.extract_details(err)
+        logger.error(
+            "Template '%s' threw error during rendering at line %s: %s",
+            Path(file_name).relative_to(config.solution_folder_path),
+            line_no,
+            err,
+        )
+        return err
 
     if not _output_path.exists():
         os.makedirs(_output_path.parent, exist_ok=True)

@@ -70,17 +70,9 @@ def load_modules(module_path: pathlib.Path) -> dict[str, ModuleType]:
             sys.exit(1)
         except ModuleNotFoundError as err:
             msg = "%s at %s:%s"
-            line = -1
-            code_filename = "<unknown>"
+            file_name, _, line_no = errors.extract_details(err)
 
-            tb = err.__traceback__
-            while tb is not None:
-                if tb.tb_next is None:
-                    line = tb.tb_lineno
-                    code_filename = tb.tb_frame.f_code.co_filename
-                tb = tb.tb_next
-
-            logger.error(msg, err, code_filename, line)
+            logger.error(msg, err, file_name, line_no)
             sys.exit(1)
 
     return modules
