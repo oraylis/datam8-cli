@@ -389,7 +389,10 @@ class Model:
             raise utils.create_error(errors.InvalidLocatorError(str(wrapper.locator)))
 
         for zone in self.zones.values():
-            if zone.entity.localFolderName or zone.entity.name == wrapper.locator.folders[0]:
+            if (
+                zone.entity.localFolderName == wrapper.locator.folders[0]
+                or zone.entity.name == wrapper.locator.folders[0]
+            ):
                 return zone
 
         raise utils.create_error(errors.EntityNotFoundError(f"zones/{wrapper.locator.folders[0]}"))
