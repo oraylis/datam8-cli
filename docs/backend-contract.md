@@ -95,6 +95,25 @@ Status mapping in `src/datam8/api/app.py`:
 - `PUT /sources/{data_source}/tables/{table}/import` (currently returns 404 "comming soon...")
 - `GET /sources/{data_source}/usages`
 
+Source metadata payload notes:
+- Table list endpoints (`.../tables`) return items with at least:
+  - `schema?: string`
+  - `name: string`
+  - `type: string`
+  - `description?: string`
+  - `properties?: Array<{ property: string; value: string }>`
+- Table metadata endpoints (`.../tables/{table}`) return column items with at least:
+  - `name: string`
+  - `ordinal: number`
+  - `dataType: string`
+  - `maxLength?: number`
+  - `numericPrecision?: number`
+  - `numbericScale?: number`
+  - `isNullable: boolean`
+  - `isPrimaryKey?: boolean`
+  - `description?: string`
+  - `properties?: Array<{ property: string; value: string }>`
+
 ### Plugins
 
 - `GET /plugins/`

@@ -24,7 +24,7 @@ import polars as pl
 import pytest
 
 from datam8.plugins.builtins.sql_server import SqlServer
-from datam8_model.data_source import SourceField
+from datam8_model.data_source import SourceField, SourceObject
 
 
 def _make_plugin() -> SqlServer:
@@ -92,3 +92,35 @@ def test_sql_server_get_table_metadata_raises_for_missing_required_fields(
 
     with pytest.raises(Exception, match="Invalid source metadata row"):
         plugin.get_table_metadata("Product", "dbo")
+
+
+def test_source_models_allow_optional_description_and_properties() -> None:
+    table = SourceObject.from_dict(
+        {
+            "schema": "contract-a",
+            "name": "customers",
+            "type": "object",
+            "description": "Customer master entity",
+            "properties": [{"property": "classification", "value": "restricted"}],
+        }
+    )
+    assert table.description == "Customer master entity"
+    assert table.properties is not None
+    assert table.properties[0].property == "classification"
+    assert table.properties[0].value == "restricted"
+
+    column = SourceField.from_dict(
+        {
+            "name": "customer_id",
+            "ordinal": 1,
+            "dataType": "string",
+            "isNullable": False,
+            "isPrimaryKey": True,
+            "description": "Technical customer key",
+            "properties": [{"property": "classification", "value": "restricted"}],
+        }
+    )
+    assert column.description == "Technical customer key"
+    assert column.properties is not None
+    assert column.properties[0].property == "classification"
+    assert column.properties[0].value == "restricted"

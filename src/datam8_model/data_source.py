@@ -272,6 +272,8 @@ class SourceObject(BaseModel):
     schema_: Annotated[str | None, Field(alias="schema")] = None
     name: str
     type: str
+    description: str | None = None
+    properties: Sequence[property.PropertyReference] | None = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
@@ -318,6 +320,8 @@ class SourceField(BaseModel):
     numbericScale: Annotated[int | None, Field(ge=1)] = None
     isNullable: bool
     isPrimaryKey: bool | None = None
+    description: str | None = None
+    properties: Sequence[property.PropertyReference] | None = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
