@@ -102,12 +102,23 @@ def test_source_models_allow_optional_description_and_properties() -> None:
             "type": "object",
             "description": "Customer master entity",
             "properties": [{"property": "classification", "value": "restricted"}],
+            "sourceOverride": {
+                "dataSource": "crm_api",
+                "sourceLocation": "/customers",
+            },
         }
     )
     assert table.description == "Customer master entity"
     assert table.properties is not None
     assert table.properties[0].property == "classification"
     assert table.properties[0].value == "restricted"
+    assert table.sourceOverride is not None
+    assert table.sourceOverride.dataSource == "crm_api"
+    assert table.sourceOverride.sourceLocation == "/customers"
+    assert table.to_dict()["sourceOverride"] == {
+        "dataSource": "crm_api",
+        "sourceLocation": "/customers",
+    }
 
     column = SourceField.from_dict(
         {

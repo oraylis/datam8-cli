@@ -102,6 +102,7 @@ Source metadata payload notes:
   - `type: string`
   - `description?: string`
   - `properties?: Array<{ property: string; value: string }>`
+  - `sourceOverride?: { dataSource?: string; sourceLocation?: string }`
 - Table metadata endpoints (`.../tables/{table}`) return column items with at least:
   - `name: string`
   - `ordinal: number`

@@ -268,12 +268,25 @@ class DataSourceType(BaseModel):
             file.write(self.model_dump_json(**dump_options))
 
 
+class SourceOverride(BaseModel):
+    dataSource: str | None = None
+    sourceLocation: str | None = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj: Any) -> SourceOverride:
+        return SourceOverride.model_validate(obj, from_attributes=False)
+
+
 class SourceObject(BaseModel):
     schema_: Annotated[str | None, Field(alias="schema")] = None
     name: str
     type: str
     description: str | None = None
     properties: Sequence[property.PropertyReference] | None = None
+    sourceOverride: SourceOverride | None = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
