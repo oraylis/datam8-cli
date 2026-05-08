@@ -21,7 +21,7 @@ from __future__ import annotations
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 from threading import Lock
-from typing import Annotated, Any, cast
+from typing import Annotated, Any
 
 from pydantic import ConfigDict, Field, ValidationError
 
@@ -865,15 +865,14 @@ class EntityFileRef:
 
         match self._type:
             case b.EntityType.MODEL_ENTITIES:
-                current_content = m.ModelEntity.from_json_file(self.file_path)
                 if len(wrappers) > 1:
-                    utils.create_error(
+                    raise utils.create_error(
                         "Only one wrapper to update allowed when updating single model file"
                     )
-                current_content = cast(m.ModelEntity, wrappers[0].entity)
+                current_content = m.ModelEntity.from_json_file(self.file_path)
             case _:
                 current_content = b.BaseEntities.from_json_file(self.file_path)
-                entities: b.BaseEntityType = getattr(current_content.root, self._type.value)
+                entities: list[b.BaseEntityType] = getattr(current_content.root, self._type.value)
 
                 for idx in range(len(wrappers)):
                     for existing_entity in entities:
