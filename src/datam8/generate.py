@@ -202,13 +202,14 @@ async def render_payload(
     try:
         payloads: Sequence[IPayload] = payload._function(model, cache)
     except Exception as err:
-        file_name, func_name, line_no = errors.extract_details(err)
-
+        file_path, func_name, line_no, summary = errors.extract_details(err)
         logger.error(
-            "payload '%s' threw errors during payload creation at line %s: %s",
+            "payload '%s' threw errors during payload creation in '%s' at line %s: %s",
             payload.name,
+            file_path,
             line_no,
             err,
+            exc_info=err if logger.getEffectiveLevel() <= logging.INFO else None,
         )
         return err
 
@@ -222,10 +223,10 @@ async def render_payload(
         logger.error(f"{payload.name}: {err}")
         return err
     except jinja2.TemplateSyntaxError as err:
-        file_name, func_name, line_no = errors.extract_details(err)
+        file_path, func_name, line_no, _ = errors.extract_details(err)
         logger.error(
             "Template '%s' contains errors at line %s: %s",
-            Path(file_name).relative_to(config.solution_folder_path),
+            file_path,
             line_no,
             err,
         )
@@ -282,7 +283,7 @@ async def render_template(
     try:
         output = template.render(data=data)
     except Exception as err:
-        file_name, _, line_no = errors.extract_details(err)
+        file_name, _, line_no, _ = errors.extract_details(err)
         logger.error(
             "Template '%s' threw error during rendering at line %s: %s",
             Path(file_name).relative_to(config.solution_folder_path),

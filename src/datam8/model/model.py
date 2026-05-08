@@ -324,7 +324,7 @@ class Model:
 
             for _, wrapper in self[entity_type.value].items():
                 logger.log(5, f"Iterating... {str(wrapper.locator)}")
-                yield wrapper
+                yield wrapper  # type: ignore[ty:invalid-yield]
 
     def get_generator_target(self, name: str, /) -> s.GeneratorTarget:
         if name == opts.default_target:

@@ -70,7 +70,7 @@ def load_modules(module_path: pathlib.Path) -> dict[str, ModuleType]:
             sys.exit(1)
         except ModuleNotFoundError as err:
             msg = "%s at %s:%s"
-            file_name, _, line_no = errors.extract_details(err)
+            file_name, _, line_no, _ = errors.extract_details(err)
 
             logger.error(msg, err, file_name, line_no)
             sys.exit(1)

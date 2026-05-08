@@ -65,7 +65,7 @@ def create_error(err: Exception | str, /, status_code: int = 500, exit_code: int
         return err
 
     typer.echo(err)
-    return typer.Exit(exit_code)
+    return typer.Exit(exit_code).with_traceback(err.__traceback__)
 
 
 def emit_result(

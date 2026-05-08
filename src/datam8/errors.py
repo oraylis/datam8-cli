@@ -16,29 +16,37 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-import traceback
 from collections.abc import Sequence
+from pathlib import Path
+from traceback import StackSummary, extract_tb
 from typing import Any
 
 from pydantic import BaseModel
 
+from datam8 import config
 
-def extract_details(err: Exception) -> tuple[str, str, int | None]:
+
+def extract_details(err: Exception) -> tuple[Path, str, int | None, StackSummary]:
     """
     Returns
     -------
-    A tuple containing the file name, function name and line number
+    A tuple containing the file path, function name, line number and the remaining stack summary
     """
     if err.__traceback__ is None:
-        return "unknown", "unknown", None
+        return Path(), "unknown", None, StackSummary()
 
-    tb = traceback.extract_tb(err.__traceback__)
-    if len(tb) < 1:
-        return "unknown", "unknown", None
+    stack_summary = extract_tb(err.__traceback__)
 
-    details = tb[-1]
+    if len(stack_summary) < 1:
+        return Path(), "unknown", None, stack_summary
 
-    return details.filename, details.name, details.lineno
+    details = stack_summary.pop(-1)
+    file_path = Path(details.filename)
+
+    if file_path.is_relative_to(config.solution_folder_path):
+        file_path.relative_to(config.solution_folder_path)
+
+    return file_path, details.name, details.lineno, stack_summary
 
 
 class PayloadRegisteredMultipleTimesError(Exception):

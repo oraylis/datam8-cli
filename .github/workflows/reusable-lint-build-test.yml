@@ -32,10 +32,7 @@ jobs:
         run: uv sync --all-extras
 
       - name: Run ty code analysis
-        run: |
-          if [[ -z "$HOME" ]]; then
-            uvx ty check src
-          fi
+        run: uvx ty check src
 
       # TODO: deactivate for now due to false positives with generics
       # - name: Run pyright code analysis

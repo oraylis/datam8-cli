@@ -25,7 +25,6 @@ from __future__ import annotations
 import logging
 import os
 import pathlib
-import sys
 from datetime import datetime
 
 # directly imported to expose them via this module
@@ -71,9 +70,10 @@ def setup_logger(
 
         logging.root.addHandler(file_handler)
 
+    # FIXME: results in omitting tracebacks
     # when running in debug mode always print the full traceback
-    if logging.root.getEffectiveLevel() <= DEBUG:
-        sys.tracebacklimit = 0
+    # if logging.root.getEffectiveLevel() <= DEBUG:
+    #     sys.tracebacklimit = 0
 
 
 class ColorFormatter(Formatter):
