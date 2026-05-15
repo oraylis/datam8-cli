@@ -18,9 +18,11 @@ Top-level commands (from `uv run datam8 --help`):
 - `plugins`
 - `secrets`
 - `migrate`
+- `entities`
 
 Subcommands:
-- `sources`: `list-tables`, `list-schemas`, `preview`, `import`, `table-metadata`, `test-connection`
+- `entities`: `create`, `patch`, `delete`, `clone`, `move`, `import external`, `import internal`
+- `sources`: `list-tables`, `list-schemas`, `preview`, `table-metadata`, `test-connection`
 - `plugins`: `list`, `show`, `ui-schema`
 - `secrets`: `list`, `add`, `show`, `unset`, `clean`
 - `migrate`: `v1-to-v2`
@@ -45,4 +47,3 @@ See `docs/backend-contract.md` for the full endpoint list.
 - CLI command implementations: `src/datam8/cmd/*.py`
 - API app and middleware: `src/datam8/api/app.py`
 - API routes: `src/datam8/api/routes/*.py`
-

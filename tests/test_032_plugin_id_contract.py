@@ -20,6 +20,7 @@ import pytest
 
 from datam8 import plugins
 from datam8.plugins.manager import PluginManager
+from datam8_model.data_source import DataSourceType
 
 
 def test_builtin_manifest_lookup_uses_canonical_id() -> None:
@@ -35,7 +36,9 @@ def test_builtin_manifest_lookup_rejects_legacy_name() -> None:
         PluginManager().get_plugin_manifest("CsvFile")
 
 
-def test_init_builtin_plugins_rejects_legacy_sqlserver_name(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_init_builtin_plugins_rejects_legacy_sqlserver_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     called = False
 
     def _record() -> None:
@@ -59,5 +62,30 @@ def test_init_builtin_plugins_accepts_canonical_sqlserver_id(
 
     monkeypatch.setattr(plugins, "register_sql_server", _record)
     plugins.init_builtin_plugins(plugin_id="builtin:SQLServer")
+
+    assert called is True
+
+
+def test_init_builtin_plugins_accepts_type_with_canonical_sqlserver_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called = False
+
+    def _record() -> None:
+        nonlocal called
+        called = True
+
+    data_source_type = DataSourceType.from_dict(
+        {
+            "name": "SQLServer",
+            "dataTypeMapping": [{"sourceType": "int", "targetType": "int"}],
+            "pluginId": "builtin:SQLServer",
+            "connectionProperties": [{"name": "host", "required": True, "type": "string"}],
+            "authModes": [],
+        }
+    )
+
+    monkeypatch.setattr(plugins, "register_sql_server", _record)
+    plugins.init_builtin_plugins(data_source_type=data_source_type, plugin_id="builtin:SQLServer")
 
     assert called is True

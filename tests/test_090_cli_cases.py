@@ -22,7 +22,19 @@ from pytest_cases import parametrize
 class CasesCli:
     @parametrize(
         "command_name",
-        ["generate", "validate", "serve", "list", "show", "init"],
+        [
+            "generate",
+            "validate",
+            "serve",
+            "list",
+            "show",
+            "init",
+            "entities",
+            "sources",
+            "plugins",
+            "secrets",
+            "migrate",
+        ],
     )
     def case_top_level_commands(self, command_name):
         return command_name

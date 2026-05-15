@@ -18,8 +18,9 @@
 
 from __future__ import annotations
 
+import tomllib
 from enum import IntEnum
-from importlib.metadata import version
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 from datam8 import errors, opts
@@ -41,7 +42,16 @@ def latest_schema_version() -> str:
 
 
 def get_version() -> str:
-    return version("datam8")
+    try:
+        return version("datam8")
+    except PackageNotFoundError:
+        pyproject_path = Path(__file__).parents[2] / "pyproject.toml"
+        if pyproject_path.exists():
+            data = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
+            project_version = data.get("project", {}).get("version")
+            if isinstance(project_version, str):
+                return project_version
+        return "0.0.0"
 
 
 def get_name() -> str:

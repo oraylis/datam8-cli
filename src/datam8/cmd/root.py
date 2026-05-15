@@ -65,9 +65,11 @@ def __setup_model_for_cli(
     solution_path: opts.SolutionPath,
     log_level: opts.LogLevel,
     version: opts.Version,
+    *,
+    lazy: bool = True,
 ) -> model.Model:
-    config.lazy = True
     common.main_callback(solution_path, log_level, version)
+    config.lazy = lazy
 
     from datam8 import factory
 
@@ -188,9 +190,9 @@ def validate(
     version: opts.Version = False,
 ):
     """Validate solution model"""
-    _model = __setup_model_for_cli(solution_path, log_level, version)
+    _model = __setup_model_for_cli(solution_path, log_level, version, lazy=False)
 
-    typer.echo("Validation successfull")
+    typer.echo("Validation successful")
 
 
 @app.command(name="generate")
@@ -209,10 +211,11 @@ def generate_cmd(
     if generate_all:
         logger.warning("The --all option is set, but is currently ignored.")
 
-    model = __setup_model_for_cli(solution_path, log_level, version)
+    model = __setup_model_for_cli(solution_path, log_level, version, lazy=lazy)
 
     from datam8 import generate
 
+    generate.payload_functions.clear()
     _ = generate.generate_output(
         model,
         target=target,
@@ -221,7 +224,7 @@ def generate_cmd(
         clean_output=clean_output,
     )
 
-    typer.echo("Generation successfull")
+    typer.echo("Generation successful")
 
 
 @app.command()

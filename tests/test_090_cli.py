@@ -80,7 +80,7 @@ def test_cli_validate(config: DataM8TestConfig) -> None:
     result = CliRunner().invoke(app, ["validate", "-s", config.solution_file_path.as_posix()])
     result_lines = result.output.splitlines()
 
-    assert result_lines[-1] == "Validation successfull", (
+    assert result_lines[-1] == "Validation successful", (
         f"Validation did not finish successfully, output: {result_lines}"
     )
     _common_cli_assert(result)
@@ -90,7 +90,7 @@ def test_cli_generate(config: DataM8TestConfig) -> None:
     result = CliRunner().invoke(app, ["generate", "-s", config.solution_file_path.as_posix()])
     result_lines = result.output.splitlines()
 
-    assert result_lines[-1] == "Generation successfull", (
+    assert result_lines[-1] == "Generation successful", (
         f"Generation did not finish successfully, output: {result_lines}"
     )
     _common_cli_assert(result)

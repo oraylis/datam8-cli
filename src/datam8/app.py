@@ -16,9 +16,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-from .cmd import migrate, plugin, root, secret, sources
+from .cmd import entities, migrate, plugin, root, secret, sources
 
 app = root.app
+app.add_typer(entities.app)
 app.add_typer(sources.app)
 app.add_typer(plugin.app)
 app.add_typer(secret.app)

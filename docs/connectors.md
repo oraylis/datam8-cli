@@ -63,5 +63,6 @@ Secrets are managed via the keyring-backed resolver (`datam8.secrets.SecretResol
 ## CLI commands
 
 - `datam8 plugins list|show|ui-schema`
-- `datam8 sources list-schemas|list-tables|table-metadata|preview|import|test-connection`
+- `datam8 sources list-schemas|list-tables|table-metadata|preview|test-connection`
+- `datam8 entities import external|internal`
 - `datam8 secrets list|add|show|unset|clean`

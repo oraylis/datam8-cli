@@ -45,13 +45,13 @@ def init_builtin_plugins(
     possible_type_name = None if data_source_type is None else data_source_type.name
     possible_plugin_id = plugin_id
 
-    match [possible_type_name, possible_plugin_id]:
-        case ["AzureDataLake", None] | [None, "builtin:AzureDataLake"]:
-            register_lake_source()
+    if possible_type_name is None and possible_plugin_id is None:
+        register_lake_source()
+        register_sql_server()
+        return
 
-        case ["SQLServer", None] | [None, "builtin:SQLServer"]:
-            register_sql_server()
+    if possible_type_name == "AzureDataLake" or possible_plugin_id == "builtin:AzureDataLake":
+        register_lake_source()
 
-        case [None, None]:
-            register_lake_source()
-            register_sql_server()
+    if possible_type_name == "SQLServer" or possible_plugin_id == "builtin:SQLServer":
+        register_sql_server()

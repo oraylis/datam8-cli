@@ -1,0 +1,5 @@
+interface:
+  display_name: Datam8 CLI Agent
+  short_description: Operate datam8 solutions safely through the CLI.
+  icon: terminal
+  primary_color: "#3B82F6"

@@ -16,11 +16,9 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-from datetime import UTC, datetime
-
 import typer
 
-from datam8 import factory, logging, opts, utils
+from datam8 import factory, logging, opts
 
 from . import common
 
@@ -100,56 +98,6 @@ def preview(
         raise typer.Exit(0)
 
     typer.echo(f"No data found in {table_name}")
-
-
-@app.command("import")
-def import_(
-    data_source_name: opts.DataSource,
-    table_name: opts.TableName,
-    locator: opts.Locator,
-    solution_path: opts.SolutionPath,
-    schema_name: opts.SchemaName = None,
-    log_level: opts.LogLevel = opts.LogLevels.WARNING,
-    version: opts.Version = False,
-):
-    "Import a table from a source into the model at the provided locator"
-    common.main_callback(solution_path, log_level, version)
-
-    model_ = factory.get_model()
-    if model_.has_locator(locator):
-        raise utils.create_error("Entity already exists for this locator")
-
-    pm = factory.get_plugin_for_data_source(data_source_name)
-    metadata = pm.get_table_metadata(table_name, schema_name)
-    _ = model_.add_entity(
-        locator,
-        content={
-            "sources": [
-                {
-                    "dataSource": data_source_name,
-                    "sourceLocation": f"[{schema_name}].[{table_name}]",
-                }
-            ],
-            "attributes": [
-                {
-                    "ordinalNumber": 1,
-                    "name": row[0],
-                    "attributeType": "Generic String",
-                    "dataType": {
-                        "type": row[4],
-                        "nullable": True if row[2] == "YES" else False,
-                    },
-                    "dateAdded": datetime.now(UTC),
-                }
-                for row in metadata.rows()
-            ],
-            "transformations": [],
-            "relationships": [],
-        },
-    )
-    model_.save(locator)
-
-    typer.echo(f"Source table imported into model at {locator}")
 
 
 @app.command()
