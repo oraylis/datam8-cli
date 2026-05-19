@@ -19,10 +19,11 @@
 from __future__ import annotations
 
 import json
+import sys
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated, Any, cast
+from typing import Annotated, Any, NoReturn, cast
 
 import typer
 
@@ -53,6 +54,13 @@ JsonBodyOption = Annotated[
     typer.Option("--json-body", help="Inline JSON object request body."),
 ]
 JsonOutputOption = Annotated[bool, typer.Option("--json", help="Emit valid JSON only on stdout.")]
+ViewOption = Annotated[
+    str,
+    typer.Option(
+        "--view",
+        help="Entity view to emit: full, summary, attributes, sources, or transformations.",
+    ),
+]
 YesOption = Annotated[
     bool,
     typer.Option("--yes", "-y", help="Confirm a destructive operation without prompting."),
@@ -77,6 +85,16 @@ import_app = typer.Typer(
 )
 app.add_typer(import_app)
 
+function_app = typer.Typer(
+    name="function",
+    help="Manage transformation function source files for model entities",
+    no_args_is_help=True,
+    context_settings={
+        "help_option_names": ["-h", "--help"],
+    },
+)
+app.add_typer(function_app)
+
 
 def _load_model_for_cli(
     solution_path: opts.SolutionPath,
@@ -88,7 +106,7 @@ def _load_model_for_cli(
     return factory.create_model_or_exit()
 
 
-def _emit_json(payload: dict[str, Any]) -> None:
+def _emit_json(payload: Any) -> None:
     typer.echo(json.dumps(payload, default=str, separators=(",", ":")))
 
 
@@ -99,7 +117,7 @@ def _fail(
     operation: str,
     locator: str | None = None,
     code: str = "COMMAND_ERROR",
-) -> None:
+) -> NoReturn:
     if json_output:
         payload: dict[str, Any] = {
             "status": "error",
@@ -229,12 +247,78 @@ def _get_first(row: dict[str, Any], *keys: str, default: Any = None) -> Any:
     return default
 
 
+def _mapping_value(mapping: Any, key: str) -> Any:
+    if isinstance(mapping, dict):
+        return mapping.get(key)
+    return getattr(mapping, key, None)
+
+
+def _data_type_mapping_lookup(mappings: Sequence[Any] | None) -> dict[str, str]:
+    lookup: dict[str, str] = {}
+    for mapping in mappings or []:
+        source_type = _mapping_value(mapping, "sourceType")
+        target_type = _mapping_value(mapping, "targetType")
+        if source_type is None or target_type is None:
+            continue
+        lookup[str(source_type).lower()] = str(target_type)
+    return lookup
+
+
+def _map_source_data_type(source_type: str, mappings: Sequence[Any] | None) -> str:
+    return _data_type_mapping_lookup(mappings).get(source_type.lower(), source_type)
+
+
+def _optional_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    return int(value)
+
+
+def _source_data_type_from_metadata_row(row: dict[str, Any], data_type: str, nullable: bool) -> dict[str, Any]:
+    source_data_type = {
+        "type": data_type,
+        "nullable": nullable,
+        "charLen": _optional_int(_get_first(row, "maxLength", "CHARACTER_MAXIMUM_LENGTH", "max_length")),
+        "precision": _optional_int(
+            _get_first(row, "numericPrecision", "NUMERIC_PRECISION", "numeric_precision")
+        ),
+        "scale": _optional_int(
+            _get_first(
+                row,
+                "numericScale",
+                "numbericScale",
+                "NUMERIC_SCALE",
+                "numeric_scale",
+            )
+        ),
+    }
+    return {key: value for key, value in source_data_type.items() if value is not None}
+
+
+def _get_plugin_data_type_mappings(plugin: Any) -> Sequence[Any]:
+    get_mappings = getattr(plugin, "get_data_type_mappings", None)
+    if get_mappings is None:
+        return []
+    mappings = get_mappings()
+    return mappings or []
+
+
+def _locator_segment(value: Any, *, label: str) -> str:
+    segment = str(value).strip()
+    if not segment:
+        raise ValueError(f"{label} must not be empty.")
+    if "/" in segment or "\\" in segment:
+        raise ValueError(f"{label} must not contain path separators: {segment}")
+    return segment
+
+
 def _build_external_import_content(
     *,
     data_source: str,
     schema: str | None,
     table: str,
     metadata: Any,
+    data_type_mappings: Sequence[Any] | None = None,
     display_name: str | None,
     description: str | None,
     source_alias: str | None,
@@ -248,13 +332,14 @@ def _build_external_import_content(
 
     now = datetime.now(UTC)
     attributes: list[dict[str, Any]] = []
-    mapping: list[dict[str, str]] = []
+    mapping: list[dict[str, Any]] = []
     for index, row in enumerate(_metadata_rows(metadata), start=1):
         name = str(_get_first(row, "name", "COLUMN_NAME", "column_name"))
         ordinal = int(
             _get_first(row, "ordinal", "ORDINAL_POSITION", "ordinal_position", default=index)
         )
         data_type = str(_get_first(row, "dataType", "DATA_TYPE", "data_type", default="string"))
+        target_data_type = _map_source_data_type(data_type, data_type_mappings)
         nullable = bool(_get_first(row, "isNullable", "IS_NULLABLE", "is_nullable", default=True))
         attributes.append(
             {
@@ -262,13 +347,19 @@ def _build_external_import_content(
                 "name": name,
                 "attributeType": "Generic String",
                 "dataType": {
-                    "type": data_type,
+                    "type": target_data_type,
                     "nullable": nullable,
                 },
                 "dateAdded": now,
             }
         )
-        mapping.append({"sourceName": name, "targetName": name})
+        mapping.append(
+            {
+                "sourceName": name,
+                "targetName": name,
+                "sourceDataType": _source_data_type_from_metadata_row(row, data_type, nullable),
+            }
+        )
 
     if not attributes:
         raise ValueError(f"No metadata fields returned for {data_source}:{schema or ''}.{table}")
@@ -303,6 +394,207 @@ def _build_internal_import_content(
     return copied
 
 
+def _locator_payload(wrapper: model.EntityWrapperVariant) -> str:
+    return str(wrapper.locator)
+
+
+def _mapping_count(source: Any) -> int:
+    mapping = getattr(source, "mapping", None)
+    return len(mapping) if mapping is not None else 0
+
+
+def _json_scalar(value: Any) -> Any:
+    return getattr(value, "value", value)
+
+
+def _entity_summary(wrapper: model.EntityWrapperVariant) -> dict[str, Any]:
+    entity = wrapper.entity
+    attributes = getattr(entity, "attributes", None) or []
+    sources = getattr(entity, "sources", None) or []
+    transformations = getattr(entity, "transformations", None) or []
+    relationships = getattr(entity, "relationships", None) or []
+    return {
+        "id": getattr(entity, "id", None),
+        "locator": _locator_payload(wrapper),
+        "name": getattr(entity, "name", None),
+        "displayName": getattr(entity, "displayName", None),
+        "description": getattr(entity, "description", None),
+        "attributeCount": len(attributes),
+        "sourceCount": len(sources),
+        "transformationCount": len(transformations),
+        "relationshipCount": len(relationships),
+    }
+
+
+def _data_type_payload(data_type: Any) -> dict[str, Any] | None:
+    if data_type is None:
+        return None
+    payload = {
+        "type": getattr(data_type, "type", None),
+        "nullable": getattr(data_type, "nullable", None),
+        "charLen": getattr(data_type, "charLen", None),
+        "precision": getattr(data_type, "precision", None),
+        "scale": getattr(data_type, "scale", None),
+    }
+    return {key: value for key, value in payload.items() if value is not None}
+
+
+def _property_references_payload(properties: Sequence[Any] | None) -> list[dict[str, Any]]:
+    return [
+        {
+            "property": getattr(reference, "property", None),
+            "value": getattr(reference, "value", None),
+        }
+        for reference in (properties or [])
+    ]
+
+
+def _attribute_payload(attribute: Any) -> dict[str, Any]:
+    payload = {
+        "ordinalNumber": getattr(attribute, "ordinalNumber", None),
+        "name": getattr(attribute, "name", None),
+        "displayName": getattr(attribute, "displayName", None),
+        "description": getattr(attribute, "description", None),
+        "attributeType": getattr(attribute, "attributeType", None),
+        "dataType": _data_type_payload(getattr(attribute, "dataType", None)),
+        "isBusinessKey": getattr(attribute, "isBusinessKey", None),
+        "history": _json_scalar(getattr(attribute, "history", None)),
+        "expression": getattr(attribute, "expression", None),
+        "expressionLanguage": _json_scalar(getattr(attribute, "expressionLanguage", None)),
+        "unit": getattr(attribute, "unit", None),
+        "properties": _property_references_payload(getattr(attribute, "properties", None)),
+    }
+    return {key: value for key, value in payload.items() if value not in (None, [])}
+
+
+def _source_mapping_payload(mapping: Any) -> dict[str, Any]:
+    payload = {
+        "sourceName": getattr(mapping, "sourceName", None),
+        "targetName": getattr(mapping, "targetName", None),
+        "sourceDataType": _data_type_payload(getattr(mapping, "sourceDataType", None)),
+        "properties": _property_references_payload(getattr(mapping, "properties", None)),
+    }
+    return {key: value for key, value in payload.items() if value not in (None, [])}
+
+
+def _source_mappings_payload(source: Any) -> list[dict[str, Any]]:
+    return [_source_mapping_payload(mapping) for mapping in (getattr(source, "mapping", None) or [])]
+
+
+def _transformation_payload(transformation: Any) -> dict[str, Any]:
+    function = getattr(transformation, "function", None)
+    payload = {
+        "stepNo": getattr(transformation, "stepNo", None),
+        "kind": _json_scalar(getattr(transformation, "kind", None)),
+        "name": getattr(transformation, "name", None),
+        "function": {"source": getattr(function, "source", None)} if function is not None else None,
+        "properties": _property_references_payload(getattr(transformation, "properties", None)),
+    }
+    return {key: value for key, value in payload.items() if value not in (None, [])}
+
+
+def _entity_view_payload(
+    wrapper: model.EntityWrapperVariant,
+    view: str,
+    model_: model.Model | None = None,
+) -> dict[str, Any]:
+    normalized_view = view.lower()
+    base = {
+        "id": getattr(wrapper.entity, "id", None),
+        "locator": _locator_payload(wrapper),
+        "name": getattr(wrapper.entity, "name", None),
+    }
+
+    if normalized_view == "summary":
+        return _entity_summary(wrapper)
+    if normalized_view == "attributes":
+        return {
+            **base,
+            "attributes": [
+                _attribute_payload(attribute)
+                for attribute in (getattr(wrapper.entity, "attributes", None) or [])
+            ],
+        }
+    if normalized_view == "sources":
+        if model_ is None:
+            raise ValueError("A loaded model is required for the sources view.")
+        return _entity_sources_payload(wrapper, model_, resolve=True)
+    if normalized_view == "transformations":
+        return {
+            **base,
+            "transformations": [
+                _transformation_payload(transformation)
+                for transformation in (getattr(wrapper.entity, "transformations", None) or [])
+            ],
+        }
+
+    raise ValueError(
+        "--view must be one of: full, summary, attributes, sources, transformations"
+    )
+
+
+def _resolve_source_payload(source: Any, model_: model.Model, *, resolve: bool) -> dict[str, Any]:
+    source_location = getattr(source, "sourceLocation", None)
+    payload: dict[str, Any] = {
+        "mappingCount": _mapping_count(source),
+    }
+
+    data_source = getattr(source, "dataSource", None)
+    if data_source is not None:
+        payload.update(
+            {
+                "sourceKind": "external",
+                "dataSource": data_source,
+                "sourceLocation": source_location,
+                "sourceAlias": getattr(source, "sourceAlias", None),
+                "mapping": _source_mappings_payload(source),
+            }
+        )
+        return payload
+
+    payload.update(
+        {
+            "sourceKind": "internal",
+            "sourceId": source_location,
+            "mapping": _source_mappings_payload(source),
+        }
+    )
+    if resolve and isinstance(source_location, int):
+        resolved = model_.get_model_entity_by_id(source_location)
+        payload.update(
+            {
+                "resolvedId": resolved.entity.id,
+                "resolvedLocator": _locator_payload(resolved),
+                "resolvedName": resolved.entity.name,
+            }
+        )
+
+    return payload
+
+
+def _entity_sources_payload(
+    wrapper: model.EntityWrapperVariant, model_: model.Model, *, resolve: bool
+) -> dict[str, Any]:
+    return {
+        "id": getattr(wrapper.entity, "id", None),
+        "locator": _locator_payload(wrapper),
+        "name": getattr(wrapper.entity, "name", None),
+        "sources": [
+            _resolve_source_payload(source, model_, resolve=resolve)
+            for source in (getattr(wrapper.entity, "sources", None) or [])
+        ],
+    }
+
+
+def _normalize_function_source(source: str) -> str:
+    normalized = (source or "").strip().replace("\\", "/")
+    if not normalized:
+        raise ValueError("Source path must not be empty.")
+    if normalized.startswith("/") or any(part in {".", ".."} for part in normalized.split("/")):
+        raise ValueError("Invalid source path.")
+    return normalized
+
+
 def _get_function_root(locator: model.Locator | str) -> Path:
     loc = model.Locator.from_path(locator) if isinstance(locator, str) else locator
 
@@ -311,6 +603,20 @@ def _get_function_root(locator: model.Locator | str) -> Path:
 
     base_path = factory.get_model().get_base_path_for_entity_type(b.EntityType.MODEL_ENTITIES)
     return Path(base_path, *loc.folders, loc.entityName)
+
+
+def _get_function_source_path(locator: str, source: str) -> Path:
+    return _get_function_root(locator) / _normalize_function_source(source)
+
+
+def _prune_empty_dirs_until_entity_root(file_path: Path, entity_root: Path) -> None:
+    current = file_path.parent
+    while current.exists() and current != entity_root:
+        try:
+            current.rmdir()
+        except OSError:
+            break
+        current = current.parent
 
 
 def _move_function_directory_if_present(from_locator: str, to_locator: str) -> None:
@@ -536,6 +842,7 @@ def move(
 def show(
     locator: opts.Locator,
     solution_path: opts.SolutionPath,
+    view: ViewOption = "full",
     json_output: opts.JsonOutput = False,
     log_level: opts.LogLevel = opts.LogLevels.WARNING,
     version: opts.Version = False,
@@ -543,7 +850,68 @@ def show(
     """Show an entity by locator."""
     model_ = _load_model_for_cli(solution_path, log_level, version)
     wrapper = model_.get_entity_by_locator(locator)
+    if view != "full":
+        payload = _entity_view_payload(wrapper, view, model_)
+        if json_output:
+            _emit_json(payload)
+            return
+        typer.echo(json.dumps(payload, default=str, indent=2))
+        return
     utils.emit_result(wrapper.entity, models=[wrapper.entity], json=json_output, pretty=True)
+
+
+@app.command()
+def resolve(
+    selector: Annotated[str, typer.Argument(help="Entity id or locator")],
+    solution_path: opts.SolutionPath,
+    json_output: JsonOutputOption = False,
+    log_level: opts.LogLevel = opts.LogLevels.WARNING,
+    version: opts.Version = False,
+) -> None:
+    """Resolve a model entity id or locator to a compact entity summary."""
+    operation = "resolve"
+    try:
+        model_ = _load_model_for_cli(solution_path, log_level, version)
+        wrapper = (
+            model_.get_model_entity_by_id(int(selector))
+            if selector.isdigit()
+            else model_.get_entity_by_locator(selector)
+        )
+        payload = _entity_summary(wrapper)
+    except Exception as err:
+        _fail(str(err), json_output=json_output, operation=operation, locator=selector)
+
+    if json_output:
+        _emit_json(payload)
+        return
+    typer.echo(json.dumps(payload, default=str, indent=2))
+
+
+@app.command("sources")
+def sources_cmd(
+    locator: opts.Locator,
+    solution_path: opts.SolutionPath,
+    resolve_sources: Annotated[
+        bool,
+        typer.Option("--resolve", help="Resolve internal sourceLocation ids to locators."),
+    ] = False,
+    json_output: JsonOutputOption = False,
+    log_level: opts.LogLevel = opts.LogLevels.WARNING,
+    version: opts.Version = False,
+) -> None:
+    """Show sources for a model entity."""
+    operation = "sources"
+    try:
+        model_ = _load_model_for_cli(solution_path, log_level, version)
+        wrapper = model_.get_entity_by_locator(locator)
+        payload = _entity_sources_payload(wrapper, model_, resolve=resolve_sources)
+    except Exception as err:
+        _fail(str(err), json_output=json_output, operation=operation, locator=locator)
+
+    if json_output:
+        _emit_json(payload)
+        return
+    typer.echo(json.dumps(payload, default=str, indent=2))
 
 
 @app.command("list")
@@ -562,6 +930,130 @@ def list_entities(
         *[str(wrapper.locator) for wrapper in wrappers],
         models=[wrapper.entity for wrapper in wrappers],
         json=json_output,
+    )
+
+
+@function_app.command("show")
+def function_show(
+    locator: opts.Locator,
+    source: Annotated[str, typer.Option("--source", help="Function source file path")],
+    solution_path: opts.SolutionPath,
+    json_output: JsonOutputOption = False,
+    log_level: opts.LogLevel = opts.LogLevels.WARNING,
+    version: opts.Version = False,
+) -> None:
+    """Show a transformation function source file."""
+    operation = "function-show"
+    try:
+        _load_model_for_cli(solution_path, log_level, version)
+        normalized_source = _normalize_function_source(source)
+        path = _get_function_source_path(locator, normalized_source)
+        if not path.exists() or not path.is_file():
+            _fail(
+                "Function source not found.",
+                json_output=json_output,
+                operation=operation,
+                locator=locator,
+                code="FUNCTION_SOURCE_NOT_FOUND",
+            )
+        content = path.read_text(encoding="utf-8")
+    except typer.Exit:
+        raise
+    except Exception as err:
+        _fail(str(err), json_output=json_output, operation=operation, locator=locator)
+
+    if json_output:
+        _emit_json(
+            {
+                "status": "ok",
+                "operation": operation,
+                "locator": locator,
+                "source": normalized_source,
+                "content": content,
+            }
+        )
+        return
+    typer.echo(content)
+
+
+@function_app.command("save")
+def function_save(
+    locator: opts.Locator,
+    source: Annotated[str, typer.Option("--source", help="Function source file path")],
+    body: Annotated[
+        str,
+        typer.Option("--body", help="Path to source content file, or '-' to read stdin."),
+    ],
+    solution_path: opts.SolutionPath,
+    json_output: JsonOutputOption = False,
+    log_level: opts.LogLevel = opts.LogLevels.WARNING,
+    version: opts.Version = False,
+) -> None:
+    """Save a transformation function source file."""
+    operation = "function-save"
+    try:
+        _load_model_for_cli(solution_path, log_level, version)
+        normalized_source = _normalize_function_source(source)
+        path = _get_function_source_path(locator, normalized_source)
+        content = sys.stdin.read() if body == "-" else Path(body).read_text(encoding="utf-8")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+    except Exception as err:
+        _fail(str(err), json_output=json_output, operation=operation, locator=locator)
+
+    _emit_success(
+        {
+            "status": "ok",
+            "operation": operation,
+            "locator": locator,
+            "source": normalized_source,
+            "changed": True,
+        },
+        json_output=json_output,
+        message=f"Saved function source {normalized_source} for {locator}",
+    )
+
+
+@function_app.command("delete")
+def function_delete(
+    locator: opts.Locator,
+    source: Annotated[str, typer.Option("--source", help="Function source file path")],
+    solution_path: opts.SolutionPath,
+    json_output: JsonOutputOption = False,
+    log_level: opts.LogLevel = opts.LogLevels.WARNING,
+    version: opts.Version = False,
+) -> None:
+    """Delete a transformation function source file."""
+    operation = "function-delete"
+    try:
+        _load_model_for_cli(solution_path, log_level, version)
+        normalized_source = _normalize_function_source(source)
+        path = _get_function_source_path(locator, normalized_source)
+        if not path.exists() or not path.is_file():
+            _fail(
+                "Function source not found.",
+                json_output=json_output,
+                operation=operation,
+                locator=locator,
+                code="FUNCTION_SOURCE_NOT_FOUND",
+            )
+        path.unlink()
+        _prune_empty_dirs_until_entity_root(path, _get_function_root(locator))
+    except typer.Exit:
+        raise
+    except Exception as err:
+        _fail(str(err), json_output=json_output, operation=operation, locator=locator)
+
+    _emit_success(
+        {
+            "status": "ok",
+            "operation": operation,
+            "locator": locator,
+            "source": normalized_source,
+            "changed": True,
+        },
+        json_output=json_output,
+        message=f"Deleted function source {normalized_source} for {locator}",
     )
 
 
@@ -598,6 +1090,7 @@ def import_external(
             schema=schema,
             table=table,
             metadata=metadata,
+            data_type_mappings=_get_plugin_data_type_mappings(plugin),
             display_name=display_name,
             description=description,
             source_alias=source_alias,
@@ -621,6 +1114,136 @@ def import_external(
         },
         json_output=json_output,
         message=f"Imported {data_source}:{schema + '.' if schema else ''}{table} to {target_locator}",
+    )
+
+
+@import_app.command("external-all")
+def import_external_all(
+    data_source: Annotated[str, typer.Option("--data-source", help="Data source name")],
+    solution_path: opts.SolutionPath,
+    target_root: Annotated[
+        str,
+        typer.Option(
+            "--target-root",
+            help="Required target root locator prefix for imported entities.",
+        ),
+    ],
+    schemas: Annotated[
+        list[str] | None,
+        typer.Option("--schema", help="Source schema to include. May be repeated."),
+    ] = None,
+    exclude_schemas: Annotated[
+        list[str] | None,
+        typer.Option("--exclude-schema", help="Source schema to exclude. May be repeated."),
+    ] = None,
+    include_types: Annotated[
+        list[str] | None,
+        typer.Option("--include-type", help="Source object type to include. May be repeated."),
+    ] = None,
+    skip_existing: Annotated[
+        bool, typer.Option("--skip-existing", help="Skip targets that already exist.")
+    ] = False,
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="Plan imports without writing.")] = False,
+    json_output: JsonOutputOption = False,
+    log_level: opts.LogLevel = opts.LogLevels.WARNING,
+    version: opts.Version = False,
+) -> None:
+    """Import all matching external source objects as model entities."""
+    operation = "import-external-all"
+    imported: list[dict[str, Any]] = []
+    will_create: list[dict[str, Any]] = []
+    skipped_existing: list[dict[str, Any]] = []
+    excluded: list[dict[str, Any]] = []
+    try:
+        model_ = _load_model_for_cli(solution_path, log_level, version)
+        plugin = factory.get_plugin_for_data_source(data_source)
+        schema_filters = schemas or [None]
+        excluded_schema_set = set(exclude_schemas or [])
+        included_type_set = set(include_types or [])
+
+        for schema_filter in schema_filters:
+            rows = _metadata_rows(plugin.list_tables(schema_filter))
+            for row in rows:
+                schema_value = _get_first(row, "schema", "TABLE_SCHEMA", "table_schema", default=None)
+                schema_value = schema_value if schema_value is not None else schema_filter
+                schema = (
+                    _locator_segment(schema_value, label="schema")
+                    if schema_value is not None
+                    else None
+                )
+                table = _locator_segment(
+                    _get_first(row, "name", "TABLE_NAME", "table_name"),
+                    label="table",
+                )
+                source_type = str(_get_first(row, "type", "TABLE_TYPE", "table_type", default=""))
+                source_ref = {"schema": schema, "table": table, "type": source_type}
+
+                if schema in excluded_schema_set or (
+                    included_type_set and source_type not in included_type_set
+                ):
+                    excluded.append(source_ref)
+                    continue
+
+                target_locator = f"{target_root.rstrip('/')}/{table}"
+                plan_item = {**source_ref, "locator": target_locator}
+
+                if model_.has_locator(target_locator):
+                    if skip_existing:
+                        skipped_existing.append(plan_item)
+                        continue
+                    _fail(
+                        f"Entity already exists: {target_locator}",
+                        json_output=json_output,
+                        operation=operation,
+                        locator=target_locator,
+                        code="ENTITY_EXISTS",
+                    )
+
+                will_create.append(plan_item)
+                if dry_run:
+                    continue
+
+                metadata = plugin.get_table_metadata(table, schema)
+                content = _build_external_import_content(
+                    data_source=data_source,
+                    schema=schema,
+                    table=table,
+                    metadata=metadata,
+                    data_type_mappings=_get_plugin_data_type_mappings(plugin),
+                    display_name=None,
+                    description=None,
+                    source_alias=None,
+                )
+                model_.add_entity(target_locator, content)
+                imported.append(plan_item)
+
+        if not dry_run:
+            model_.save()
+    except typer.Exit:
+        raise
+    except Exception as err:
+        _fail(str(err), json_output=json_output, operation=operation)
+
+    payload = {
+        "status": "ok",
+        "operation": operation,
+        "data_source": data_source,
+        "target_root": target_root,
+        "dry_run": dry_run,
+        "changed": bool(imported),
+        "willCreate": will_create,
+        "imported": imported,
+        "skippedExisting": skipped_existing,
+        "excluded": excluded,
+    }
+    _emit_success(
+        payload,
+        json_output=json_output,
+        message=(
+            f"Planned {len(will_create)} imports"
+            if dry_run
+            else f"Imported {len(imported)} source object(s)"
+        ),
     )
 
 

@@ -30,7 +30,9 @@ to those imports are executed. This reduces startup time.
 
 # ruff: noqa: I001
 
+import json
 import sys
+from typing import Annotated
 
 import typer
 
@@ -44,6 +46,7 @@ from datam8 import (
 )
 
 from . import common
+from .entities import _emit_json, _entity_view_payload
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +81,7 @@ def __setup_model_for_cli(
 
 @app.callback(invoke_without_command=True)
 def _callback(
+    ctx: typer.Context,
     solution_path: opts.SolutionPath,
     log_level: opts.LogLevel = opts.LogLevels.WARNING,
     version: opts.Version = False,
@@ -85,6 +89,9 @@ def _callback(
     if version:
         typer.echo(config.get_version())
         raise typer.Exit(code=0)
+    parameter_source = ctx.get_parameter_source("solution_path")
+    if parameter_source is not None and parameter_source.name != "DEFAULT":
+        common.main_callback(solution_path, log_level, version)
 
 
 @app.command()
@@ -145,6 +152,13 @@ def show(
     selector: opts.Selector,
     solution_path: opts.SolutionPath,
     by: opts.SelectBy = opts.Selectors.LOCATOR,
+    view: Annotated[
+        str,
+        typer.Option(
+            "--view",
+            help="Entity view to emit: full, summary, attributes, sources, or transformations.",
+        ),
+    ] = "full",
     json_output: opts.JsonOutput = False,
     version: opts.Version = False,
     log_level: opts.LogLevel = opts.LogLevels.WARNING,
@@ -170,6 +184,18 @@ def show(
     except ValueError as err:
         typer.echo(err)
         sys.exit(1)
+
+    if view != "full":
+        try:
+            payload = _entity_view_payload(entity_wrapper, view, _model)
+        except ValueError as err:
+            typer.echo(err)
+            sys.exit(1)
+        if json_output:
+            _emit_json(payload)
+            return
+        typer.echo(json.dumps(payload, default=str, indent=2))
+        return
 
     utils.emit_result(
         f"File: {entity_wrapper.source_file}",

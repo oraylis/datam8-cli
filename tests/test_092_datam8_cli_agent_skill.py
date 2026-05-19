@@ -38,6 +38,9 @@ def test_skill_structure() -> None:
         "workflows.md",
         "safety-rules.md",
         "natural-language-examples.md",
+        "agent-command-selection.md",
+        "metadata-model-coverage.md",
+        "zone-locator-resolution.md",
     ]:
         assert (SKILL_DIR / "references" / reference).exists()
 
@@ -59,12 +62,80 @@ def test_skill_rules_and_references_are_present() -> None:
         "references/workflows.md",
         "references/safety-rules.md",
         "references/natural-language-examples.md",
+        "references/agent-command-selection.md",
+        "references/metadata-model-coverage.md",
+        "references/zone-locator-resolution.md",
     ]:
         assert reference in text
     assert "Never edit entity JSON files directly" in text
     assert "Never use `datam8 sources import`" in text
     assert "datam8 entities import external" in text
     assert "datam8 entities import internal" in text
+    assert "First-use bootstrap" in text
+    assert "datam8 --help" in text
+    assert "localFolderName" in text
+    assert "Do not invent commands from common CLI patterns" in text
+
+
+def test_first_use_bootstrap_is_documented() -> None:
+    skill = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
+    workflows = (SKILL_DIR / "references/workflows.md").read_text(encoding="utf-8")
+    contract = (SKILL_DIR / "references/cli-contract.md").read_text(encoding="utf-8")
+
+    for text in [skill, workflows, contract]:
+        assert "datam8 --help" in text
+        assert ".dm8s" in text
+        assert "CLI" in text or "cli" in text
+    assert "do not ask onboarding questions" in workflows
+    assert "do not ask generic onboarding questions" in contract
+
+
+def test_command_discovery_rules_are_documented() -> None:
+    skill = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
+    workflows = (SKILL_DIR / "references/workflows.md").read_text(encoding="utf-8")
+    selection = (SKILL_DIR / "references/agent-command-selection.md").read_text(encoding="utf-8")
+    contract = (SKILL_DIR / "references/cli-contract.md").read_text(encoding="utf-8")
+
+    for text in [skill, workflows, selection, contract]:
+        assert "datam8 sources --help" in text
+    for text in [skill, workflows, selection]:
+        assert "Do not invent commands from common CLI patterns" in text
+    assert "Command discovery" in contract
+    assert "use only listed subcommands and options" in contract
+
+
+def test_zone_locator_resolution_is_documented() -> None:
+    skill = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
+    workflows = (SKILL_DIR / "references/workflows.md").read_text(encoding="utf-8")
+    selection = (SKILL_DIR / "references/agent-command-selection.md").read_text(encoding="utf-8")
+    zone_reference = (SKILL_DIR / "references/zone-locator-resolution.md").read_text(
+        encoding="utf-8"
+    )
+
+    for text in [skill, workflows, selection, zone_reference]:
+        assert "localFolderName" in text
+        assert "zones/<" in text or "zones/" in text
+        assert "modelEntities/<" in text
+        assert "datam8 show zones/<zone-name> --json" in text
+    assert "Never use the natural zone word directly as a model folder" in zone_reference
+    assert "Ask for the target folder below the zone root" in zone_reference
+    assert "Mandatory zone preflight" in skill
+    assert "Mandatory preflight before mutations" in zone_reference
+    assert "blocking preflight" in workflows
+    assert "trailing slash" in skill
+    assert "modelEntities/010-Stage/" in zone_reference
+    assert "Folder locators" in (SKILL_DIR / "references/cli-contract.md").read_text(
+        encoding="utf-8"
+    )
+    assert "Do not run `entities import external` or `entities import external-all`" in (
+        SKILL_DIR / "references/cli-contract.md"
+    ).read_text(encoding="utf-8")
+    assert "Never import to `modelEntities/stage`" in selection
+    assert "Never run `datam8 entities import external modelEntities/stage/...`" in zone_reference
+    assert "final parent folder" in skill
+    assert "must not add a source-schema folder" in (SKILL_DIR / "references/cli-contract.md").read_text(
+        encoding="utf-8"
+    )
 
 
 def test_openai_agent_metadata() -> None:

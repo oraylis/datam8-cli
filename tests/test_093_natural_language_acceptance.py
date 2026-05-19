@@ -45,7 +45,7 @@ ACCEPTANCE_EXAMPLES = [
     "Kopiere modelEntities/020-Core/Sales/Customer/Customer nach modelEntities/020-Core/CliExamples/CustomerCopy.",
     "Verschiebe modelEntities/020-Core/CliExamples/CustomerCopy nach modelEntities/020-Core/CliSandbox/CustomerCopy.",
     "Lösche modelEntities/020-Core/CliSandbox/CustomerCopy, aber prüfe vorher den Scope.",
-    "Importiere SalesLT.Customer aus AdventureWorks nach modelEntities/010-Stage/Sales/Customer/CustomerImport.",
+    "Importiere SalesLT.Customer aus AdventureWorks nach modelEntities/020-Core/CliExamples/CustomerImport.",
     "Importiere modelEntities/020-Core/Sales/Customer/Customer intern als modelEntities/020-Core/CliExamples/InternalCustomer.",
     "Prüfe nach der Änderung, ob validate noch erfolgreich ist.",
     "Führe generate aus und fasse Fehler zusammen.",

@@ -9,5 +9,5 @@
 - Validate after mutations.
 - Do not dump secret values.
 - Do not run broad migrations, broad deletes, or secret cleanup without explicit confirmation.
-- Do not promise background work for `datam8 serve` or other long-running processes.
+- Do not promise background work for `<cli> serve` or other long-running processes.
 - Treat file paths passed to `--body` as payload transport only, not entity identity.

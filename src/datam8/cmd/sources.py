@@ -16,6 +16,9 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+import json
+from typing import Any
+
 import typer
 
 from datam8 import factory, logging, opts
@@ -34,11 +37,16 @@ app = typer.Typer(
 )
 
 
+def _emit_json_rows(rows: Any) -> None:
+    typer.echo(json.dumps(rows.to_dicts(), default=str, separators=(",", ":")))
+
+
 @app.command()
 def list_tables(
     data_source_name: opts.DataSource,
     solution_path: opts.SolutionPath,
     schema_name: opts.SchemaName = None,
+    json_output: opts.JsonOutput = False,
     log_level: opts.LogLevel = opts.LogLevels.WARNING,
     version: opts.Version = False,
 ):
@@ -48,6 +56,10 @@ def list_tables(
     plugin = factory.get_plugin_for_data_source(data_source_name)
     tables = plugin.list_tables(schema_name)
 
+    if json_output:
+        _emit_json_rows(tables)
+        return
+
     typer.echo(f"Found {len(tables.rows())} source objects")
     tables.show(None, tbl_hide_column_data_types=True, tbl_hide_dataframe_shape=True)
 
@@ -56,6 +68,7 @@ def list_tables(
 def list_schemas(
     data_source_name: opts.DataSource,
     solution_path: opts.SolutionPath,
+    json_output: opts.JsonOutput = False,
     log_level: opts.LogLevel = opts.LogLevels.WARNING,
     version: opts.Version = False,
 ):
@@ -64,6 +77,10 @@ def list_schemas(
 
     plugin = factory.get_plugin_for_data_source(data_source_name)
     schemas = plugin.list_schemas()
+
+    if json_output:
+        _emit_json_rows(schemas)
+        return
 
     typer.echo(f"Found {len(schemas.rows())} schemas")
     schemas.show(None, tbl_hide_column_data_types=True, tbl_hide_dataframe_shape=True)
@@ -106,6 +123,7 @@ def table_metadata(
     table_name: opts.TableName,
     solution_path: opts.SolutionPath,
     schema_name: opts.SchemaName = None,
+    json_output: opts.JsonOutput = False,
     log_level: opts.LogLevel = opts.LogLevels.WARNING,
     version: opts.Version = False,
 ):
@@ -114,6 +132,10 @@ def table_metadata(
 
     plugin = factory.get_plugin_for_data_source(data_source_name)
     metadata = plugin.get_table_metadata(table_name, schema_name)
+    if json_output:
+        _emit_json_rows(metadata)
+        return
+
     metadata.show(
         limit=None,
         tbl_hide_dataframe_shape=True,

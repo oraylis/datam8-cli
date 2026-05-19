@@ -73,14 +73,51 @@ def _show(locator: str, solution_path: Path) -> dict:
         ["entities", "delete", "--help"],
         ["entities", "clone", "--help"],
         ["entities", "move", "--help"],
+        ["entities", "resolve", "--help"],
+        ["entities", "sources", "--help"],
+        ["entities", "function", "--help"],
+        ["entities", "function", "show", "--help"],
+        ["entities", "function", "save", "--help"],
+        ["entities", "function", "delete", "--help"],
         ["entities", "import", "--help"],
         ["entities", "import", "external", "--help"],
+        ["entities", "import", "external-all", "--help"],
         ["entities", "import", "internal", "--help"],
     ],
 )
 def test_cli_help_and_registration(args: list[str]) -> None:
     result = CliRunner().invoke(app, args)
     assert result.exit_code == 0, result.output
+
+
+def test_solution_path_works_as_root_option(tmp_path: Path, config: DataM8TestConfig) -> None:
+    solution_path = _copy_solution(tmp_path, config)
+
+    short_option = CliRunner().invoke(
+        app,
+        [
+            "-s",
+            solution_path.as_posix(),
+            "show",
+            "zones/stage",
+            "--json",
+        ],
+    )
+    assert short_option.exit_code == 0, short_option.output
+    assert json.loads(short_option.output)["localFolderName"] == "010-Stage"
+
+    long_option = CliRunner().invoke(
+        app,
+        [
+            "--solution-path",
+            solution_path.as_posix(),
+            "show",
+            "zones/stage",
+            "--json",
+        ],
+    )
+    assert long_option.exit_code == 0, long_option.output
+    assert json.loads(long_option.output)["localFolderName"] == "010-Stage"
 
 
 def test_sources_import_is_not_public() -> None:
@@ -250,6 +287,88 @@ def test_move_moves_function_directory(tmp_path: Path, config: DataM8TestConfig)
     assert (target_dir / "transform.py").read_text(encoding="utf-8").startswith("def transform")
 
 
+def test_compact_entity_views_and_resolved_sources(
+    tmp_path: Path, config: DataM8TestConfig
+) -> None:
+    solution_path = _copy_solution(tmp_path, config)
+    locator = "modelEntities/020-Core/Sales/Customer/Customer"
+
+    summary = _json(_run(["show", locator, "--view", "summary", "--json"], solution_path))
+    assert summary["locator"] == locator
+    assert summary["attributeCount"] > 0
+    assert "attributes" not in summary
+
+    attributes = _json(_run(["entities", "show", locator, "--view", "attributes", "--json"], solution_path))
+    assert [attr["name"] for attr in attributes["attributes"]]
+    assert "sources" not in attributes
+    assert "dateAdded" not in attributes["attributes"][0]
+    assert attributes["attributes"][0]["dataType"] == {"type": "int", "nullable": False}
+
+    transformations = _json(
+        _run(["show", locator, "--view", "transformations", "--json"], solution_path)
+    )
+    assert transformations["transformations"][0]["function"]["source"] == "CustomerNew.py"
+
+    resolved = _json(_run(["entities", "resolve", str(summary["id"]), "--json"], solution_path))
+    assert resolved["locator"] == locator
+
+    sources = _json(_run(["entities", "sources", locator, "--resolve", "--json"], solution_path))
+    assert sources["sources"][0]["sourceKind"] == "internal"
+    assert "sourceLocation" not in sources["sources"][0]
+    assert sources["sources"][0]["sourceId"] == sources["sources"][0]["resolvedId"]
+    assert sources["sources"][0]["resolvedLocator"].startswith("modelEntities/")
+    assert sources["sources"][0]["mappingCount"] > 0
+
+    sources_view = _json(_run(["show", locator, "--view", "sources", "--json"], solution_path))
+    assert sources_view == sources
+
+
+def test_function_source_cli_roundtrip(tmp_path: Path, config: DataM8TestConfig) -> None:
+    solution_path = _copy_solution(tmp_path, config)
+    locator = "modelEntities/020-Core/CliTest/FunctionSource"
+    _run(["entities", "create", locator, "--set", "description=x", "--json"], solution_path)
+    body = tmp_path / "transform.py"
+    body.write_text("business_function = None\n", encoding="utf-8")
+
+    saved = _json(
+        _run(
+            [
+                "entities",
+                "function",
+                "save",
+                locator,
+                "--source",
+                "Transform.py",
+                "--body",
+                body.as_posix(),
+                "--json",
+            ],
+            solution_path,
+        )
+    )
+    assert saved["changed"] is True
+
+    shown = _json(
+        _run(
+            ["entities", "function", "show", locator, "--source", "Transform.py", "--json"],
+            solution_path,
+        )
+    )
+    assert shown["content"] == "business_function = None\n"
+
+    deleted = _json(
+        _run(
+            ["entities", "function", "delete", locator, "--source", "Transform.py", "--json"],
+            solution_path,
+        )
+    )
+    assert deleted["changed"] is True
+    assert _run(
+        ["entities", "function", "show", locator, "--source", "Transform.py", "--json"],
+        solution_path,
+    ).exit_code != 0
+
+
 def test_internal_import(tmp_path: Path, config: DataM8TestConfig) -> None:
     solution_path = _copy_solution(tmp_path, config)
     source = "modelEntities/020-Core/Sales/Customer/Customer"
@@ -285,13 +404,25 @@ def test_external_import_with_fake_plugin(
     target = "modelEntities/020-Core/CliTest/ExternalCustomer"
 
     class FakePlugin:
+        def get_data_type_mappings(self) -> list[dict[str, str]]:
+            return [
+                {"sourceType": "varchar", "targetType": "string"},
+                {"sourceType": "nvarchar", "targetType": "string"},
+            ]
+
         def get_table_metadata(self, table: str, schema: str | None = None) -> pl.DataFrame:
             assert table == "Customer"
             assert schema == "Sales"
             return pl.DataFrame(
                 [
                     {"name": "CustomerID", "ordinal": 1, "dataType": "int", "isNullable": False},
-                    {"name": "Name", "ordinal": 2, "dataType": "varchar", "isNullable": True},
+                    {
+                        "name": "Name",
+                        "ordinal": 2,
+                        "dataType": "nvarchar",
+                        "maxLength": 60,
+                        "isNullable": True,
+                    },
                 ]
             )
 
@@ -319,6 +450,182 @@ def test_external_import_with_fake_plugin(
     assert entity["sources"][0]["dataSource"] == "AdventureWorks"
     assert entity["sources"][0]["sourceLocation"] == "[Sales].[Customer]"
     assert [attr["name"] for attr in entity["attributes"]] == ["CustomerID", "Name"]
+    assert [attr["dataType"]["type"] for attr in entity["attributes"]] == ["int", "string"]
+    assert entity["sources"][0]["mapping"][1]["sourceDataType"] == {
+        "type": "nvarchar",
+        "nullable": True,
+        "charLen": 60,
+        "precision": None,
+        "scale": None,
+    }
+
+
+def test_source_json_output_and_external_all_import(
+    tmp_path: Path, config: DataM8TestConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    solution_path = _copy_solution(tmp_path, config)
+
+    class FakePlugin:
+        def get_data_type_mappings(self) -> list[dict[str, str]]:
+            return [{"sourceType": "varchar", "targetType": "string"}]
+
+        def list_schemas(self) -> pl.DataFrame:
+            return pl.DataFrame([{"schema": "Sales"}, {"schema": "sys"}])
+
+        def list_tables(self, schema: str | None = None) -> pl.DataFrame:
+            return pl.DataFrame(
+                [
+                    {"schema": schema or "Sales", "name": "Customer", "type": "BASE TABLE"},
+                    {
+                        "schema": schema or "Sales",
+                        "name": "SalesOrderHeader",
+                        "type": "BASE TABLE",
+                    },
+                    {"schema": "sys", "name": "database_firewall_rules", "type": "VIEW"},
+                ]
+            )
+
+        def get_table_metadata(self, table: str, schema: str | None = None) -> pl.DataFrame:
+            assert schema == "Sales"
+            return pl.DataFrame(
+                [
+                    {"name": f"{table}ID", "ordinal": 1, "dataType": "int", "isNullable": False},
+                    {
+                        "name": "Name",
+                        "ordinal": 2,
+                        "dataType": "varchar",
+                        "maxLength": 50,
+                        "isNullable": True,
+                    },
+                ]
+            )
+
+    monkeypatch.setattr(factory, "get_plugin_for_data_source", lambda _name: FakePlugin())
+
+    schemas = json.loads(_run(["sources", "list-schemas", "AdventureWorks", "--json"], solution_path).output)
+    assert schemas == [{"schema": "Sales"}, {"schema": "sys"}]
+
+    tables = json.loads(
+        _run(
+            ["sources", "list-tables", "AdventureWorks", "--schema", "Sales", "--json"],
+            solution_path,
+        ).output
+    )
+    assert tables[0]["name"] == "Customer"
+
+    metadata = json.loads(
+        _run(
+            [
+                "sources",
+                "table-metadata",
+                "AdventureWorks",
+                "Customer",
+                "--schema-name",
+                "Sales",
+                "--json",
+            ],
+            solution_path,
+        ).output
+    )
+    assert metadata[0]["name"] == "CustomerID"
+
+    missing_target_root = _run(
+        [
+            "entities",
+            "import",
+            "external-all",
+            "--data-source",
+            "AdventureWorks",
+            "--dry-run",
+            "--json",
+        ],
+        solution_path,
+    )
+    assert missing_target_root.exit_code != 0
+    assert "--target-root" in missing_target_root.output
+
+    dry_run = _json(
+        _run(
+            [
+                "entities",
+                "import",
+                "external-all",
+                "--data-source",
+                "AdventureWorks",
+                "--target-root",
+                "modelEntities/020-Core/CliBulk",
+                "--schema",
+                "Sales",
+                "--exclude-schema",
+                "sys",
+                "--include-type",
+                "BASE TABLE",
+                "--dry-run",
+                "--json",
+            ],
+            solution_path,
+        )
+    )
+    assert dry_run["dry_run"] is True
+    assert len(dry_run["willCreate"]) == 2
+    assert dry_run["willCreate"][0]["locator"] == "modelEntities/020-Core/CliBulk/Customer"
+    assert all("/Sales/" not in item["locator"] for item in dry_run["willCreate"])
+    assert _run(["show", "modelEntities/020-Core/CliBulk/Customer", "--json"], solution_path).exit_code != 0
+
+    _run(
+        [
+            "entities",
+            "import",
+            "external",
+            "modelEntities/020-Core/CliBulk/Customer",
+            "--data-source",
+            "AdventureWorks",
+            "--schema",
+            "Sales",
+            "--table",
+            "Customer",
+            "--json",
+        ],
+        solution_path,
+    )
+    imported = _json(
+        _run(
+            [
+                "entities",
+                "import",
+                "external-all",
+                "--data-source",
+                "AdventureWorks",
+                "--target-root",
+                "modelEntities/020-Core/CliBulk",
+                "--schema",
+                "Sales",
+                "--exclude-schema",
+                "sys",
+                "--include-type",
+                "BASE TABLE",
+                "--skip-existing",
+                "--json",
+            ],
+            solution_path,
+        )
+    )
+    assert len(imported["skippedExisting"]) == 1
+    assert len(imported["imported"]) == 1
+    assert imported["imported"][0]["locator"] == "modelEntities/020-Core/CliBulk/SalesOrderHeader"
+    imported_entity = _show("modelEntities/020-Core/CliBulk/SalesOrderHeader", solution_path)
+    assert imported_entity["name"] == "SalesOrderHeader"
+    assert [attr["dataType"]["type"] for attr in imported_entity["attributes"]] == [
+        "int",
+        "string",
+    ]
+    assert imported_entity["sources"][0]["mapping"][1]["sourceDataType"] == {
+        "type": "varchar",
+        "nullable": True,
+        "charLen": 50,
+        "precision": None,
+        "scale": None,
+    }
 
 
 @pytest.mark.parametrize(

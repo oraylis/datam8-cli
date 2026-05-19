@@ -242,7 +242,9 @@ ColLimit = Annotated[
     int | None, typer.Option("--column-limit", "-cn", help="Number of columns to display", min=1)
 ]
 
-SchemaName = Annotated[str | None, typer.Option(help="Name of a source schema")]
+SchemaName = Annotated[
+    str | None, typer.Option("--schema", "--schema-name", help="Name of a source schema")
+]
 TableName = Annotated[str, typer.Argument(help="Name of table in source")]
 
 SecretPath = Annotated[Path, typer.Argument(help="Path to store the secret in the keyring backend")]

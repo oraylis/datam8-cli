@@ -16,6 +16,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+from pathlib import Path
+
 import typer
 
 from datam8 import config, errors, logging, opts
@@ -32,6 +34,12 @@ def main_callback(
     version_callback(version)
 
     try:
+        if (
+            Path(solution_path).expanduser() == Path.cwd()
+            and config.solution_path != Path.cwd()
+            and config.solution_path.suffix == ".dm8s"
+        ):
+            solution_path = config.solution_path
         config.set_solution(solution_path)
     except errors.Datam8Error as err:
         typer.echo(err.message)

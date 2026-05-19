@@ -221,7 +221,7 @@ class DataSourceType(BaseModel):
     """
     pluginId: str | None = None
     """
-    Canonical plugin ID used to connect to this source type (e.g. `builtin:SQLServer`).
+    ID of the plugin used to connect to the source type. If not provided falls back to builtin plugins matching the  name
     """
     connectionProperties: Annotated[Sequence[ConnectionProperty], Field(min_length=1)]
     """
@@ -268,25 +268,10 @@ class DataSourceType(BaseModel):
             file.write(self.model_dump_json(**dump_options))
 
 
-class SourceOverride(BaseModel):
-    dataSource: str | None = None
-    sourceLocation: str | None = None
-
-    def to_dict(self) -> dict:
-        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
-
-    @staticmethod
-    def from_dict(obj: Any) -> SourceOverride:
-        return SourceOverride.model_validate(obj, from_attributes=False)
-
-
 class SourceObject(BaseModel):
     schema_: Annotated[str | None, Field(alias="schema")] = None
     name: str
     type: str
-    description: str | None = None
-    properties: Sequence[property.PropertyReference] | None = None
-    sourceOverride: SourceOverride | None = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
@@ -333,8 +318,6 @@ class SourceField(BaseModel):
     numbericScale: Annotated[int | None, Field(ge=1)] = None
     isNullable: bool
     isPrimaryKey: bool | None = None
-    description: str | None = None
-    properties: Sequence[property.PropertyReference] | None = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
