@@ -65,10 +65,9 @@ async def get_table_metadata_for_schema(
     data_source: str, schema: str, table: str
 ) -> MultiItemResponse[SourceField]:
     plugin = factory.get_plugin_for_data_source(data_source)
-    metadata = [
-        SourceField.from_dict(sf) for sf in plugin.get_table_metadata(table, schema).to_dicts()
-    ]
-    return MultiItemResponse.from_list(metadata)
+    metadata = plugin.get_table_metadata(table, schema)
+    source_fields = list(metadata.iter_source_fields())
+    return MultiItemResponse.from_list(source_fields)
 
 
 @sources_router.get("/{data_source}/schemas/{schema}/tables/{table}/preview")
@@ -106,8 +105,9 @@ async def list_tables(data_source: str) -> MultiItemResponse[SourceObject]:
 @sources_router.get("/{data_source}/tables/{table}")
 async def get_table_metadata(data_source: str, table: str) -> MultiItemResponse[SourceField]:
     plugin = factory.get_plugin_for_data_source(data_source)
-    metadata = [SourceField.from_dict(o) for o in plugin.get_table_metadata(table).to_dicts()]
-    return MultiItemResponse.from_list(metadata)
+    metadata = plugin.get_table_metadata(table)
+    source_fields = list(metadata.iter_source_fields())
+    return MultiItemResponse.from_list(source_fields)
 
 
 @sources_router.get("/{data_source}/tables/{table}/preview")

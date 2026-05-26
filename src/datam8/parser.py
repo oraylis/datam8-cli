@@ -79,7 +79,7 @@ async def parse_full_solution_async(solution_path: pathlib.Path, /) -> Model:
 
     model = Model(
         solution,
-        modelEntities=model_entities, # type: ignore[ty:invalid-argument-type]
+        modelEntities=model_entities,  # type: ignore[ty:invalid-argument-type]
         **base_entities,
     )
 

@@ -23,7 +23,7 @@ import polars as pl
 import typer
 
 from datam8 import config, logging, utils
-from datam8.plugins.base import Plugin
+from datam8.plugins.base import Plugin, TableMetadata
 from datam8_model.data_source import (
     AuthMode,
     ConnectionProperty,
@@ -90,7 +90,7 @@ class SqlServer(Plugin):
                 assert "password" in optional
                 assert "username" in optional
 
-                mandatory["username"] = optional.pop("username")
+                mandatory["username"] = urllib.parse.quote_plus(optional.pop("username"))
                 mandatory["password"] = urllib.parse.quote_plus(optional.pop("password"))
 
                 uri = "mssql://{username}:{password}@{host}:{port}/{database}"
@@ -102,10 +102,10 @@ class SqlServer(Plugin):
 
             case {"authMode": _ as auth_mode, **rest}:  # noqa: F841
                 raise utils.create_error(
-                    ValueError(f"Unkown authMode {auth_mode} in {self._data_source.name}")
+                    ValueError(f"Unknown authMode {auth_mode} in {self._data_source.name}")
                 )
 
-        uri = uri.format(**mandatory)
+        uri: str = uri.format(**mandatory)
 
         if len(optional) > 0:
             uri += "?" + "&".join([f"{k}={v}" for k, v in optional.items()])
@@ -116,8 +116,8 @@ class SqlServer(Plugin):
                 cp.name in {**mandatory, **optional}
                 and cp.type == ConnectionPropertyValueType.SECRET
             ):
-                to_replace = mandatory.get(cp.name, optional.get(cp.name))
-                masked_uri = masked_uri.replace(to_replace, "*****")
+                to_replace: Any = mandatory.get(cp.name, optional.get(cp.name))
+                masked_uri = masked_uri.replace(str(to_replace), "*****")
 
         self.logger.debug(f"Created connection string: {masked_uri}")
 
@@ -179,17 +179,40 @@ class SqlServer(Plugin):
         query = f"select top {limit} * from [{schema}].[{table}]"
         return self._execute_query(query).lazy()
 
-    def get_table_metadata(self, table: str, schema: str | None = None) -> pl.DataFrame:
+    def get_table_metadata(self, table: str, schema: str | None = None) -> TableMetadata:
         if schema is None:
             raise utils.create_error("A schema needs to be provided for SQL Server sources")
 
         query = f"""
-            select c.*
+            select
+                c.ordinal_position as [ordinal]
+            ,   c.column_name as [name]
+            ,   c.data_type as [dataType]
+            ,   c.numeric_precision as [numericPrecision]
+            ,   c.numeric_scale as [numericScale]
+            ,   coalesce(c.character_maximum_length, c.datetime_precision) as [maxLength]
+            ,   c.is_nullable as [isNullable]
+            ,   case when pk.column_name is not null then 1 else 0 end as [isPrimaryKey]
             from [information_schema].[tables] as t
                 join [information_schema].[columns] as c
                     on c.table_name = t.table_name
                     and c.table_schema = t.table_schema
                     and c.table_catalog = t.table_catalog
+                left join (
+                    select
+                        kcu.table_schema
+                    ,   kcu.table_name
+                    ,   kcu.column_name
+                    from [information_schema].[table_constraints] as tc
+                        join [information_schema].[key_column_usage] as kcu
+                            on kcu.constraint_name = tc.constraint_name
+                            and kcu.table_schema = tc.table_schema
+                            and kcu.table_catalog = tc.table_catalog
+                    where tc.constraint_type = 'PRIMARY KEY'
+                ) as pk
+                    on pk.table_schema = c.table_schema
+                    and pk.table_name = c.table_name
+                    and pk.column_name = c.column_name
             where 1=1
                 and t.table_name = '{table}'
                 and t.table_schema = '{schema}'
@@ -197,13 +220,23 @@ class SqlServer(Plugin):
                 ordinal_position
         """
 
-        result = self._execute_query(query).drop("TABLE_CATALOG", "TABLE_SCHEMA", "TABLE_NAME")
+        result = self._execute_query(query)
+        result = result.with_columns(
+            isNullable=(
+                # convert YES/NO into True/False for isNullable
+                pl.when(pl.col("isNullable") == "YES").then(pl.lit(True)).otherwise(pl.lit(False))
+            ),
+            isPrimaryKey=(
+                # convert 1/0 into True/False for isPrimaryKey
+                pl.when(pl.col("isPrimaryKey") == 1).then(pl.lit(True)).otherwise(pl.lit(False))
+            ),
+        )
         if result.is_empty():
             raise utils.create_error(
                 f"Table [{schema}].[{table}] does not exist in '{self._data_source.name}'"
             )
 
-        return result
+        return TableMetadata(result)
 
     @classmethod
     def validate_connection(
@@ -215,6 +248,10 @@ class SqlServer(Plugin):
     @classmethod
     def manifest(cls) -> PluginManifest:
         return cls.__manifest
+
+    @staticmethod
+    def create_source_location(table: str, schema: str | None = None) -> str:
+        return f"[{schema}].[{table}]"
 
     @staticmethod
     @functools.lru_cache(maxsize=1)

@@ -20,7 +20,7 @@
 
 from datam8_model.data_source import DataSourceType
 
-from .base import Plugin
+from .base import Plugin, TableMetadata
 from .builtins.file import CsvFile
 from .manager import PluginManager
 

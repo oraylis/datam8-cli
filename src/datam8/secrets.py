@@ -24,6 +24,7 @@ from pathlib import PurePosixPath
 from threading import Lock
 
 import keyring
+from keyring.backends import fail as keyring_fail
 
 from datam8 import config, logging, utils
 
@@ -64,8 +65,25 @@ class SecretResolver:
 
     def __init__(self) -> None:
         self.__service_name = f"{SECRET_PREFIX}{config.get_name()}"
-        self.__username = os.getlogin()
+        user_from_env = os.getenv("USER") or os.getenv("USERNAME")
+
+        # os.getlogin() fails in WSL, so if there is also no env variable we cannot determine the
+        # username
+        if utils.is_wsl() and user_from_env is None:
+            raise utils.create_error("could not determine username in WSL")
+
+        self.__username = user_from_env or os.getlogin()
         self.lock = Lock()
+
+        # test if a viable backend is available
+        backend = keyring.get_keyring()
+        if isinstance(backend, keyring_fail.Keyring):
+            raise utils.create_error(
+                keyring_fail.NoKeyringError(
+                    "No available secret backend available. "
+                    "https://pypi.org/project/keyring for details."
+                )
+            )
 
     #
     # private methods with thread safety

@@ -29,6 +29,7 @@ Utility Module to make working with datam8 models more comfortable in jinja2 tem
 * coalesce
 * get_locator
 * start_logger
+* is_wsl
 
 ### classes
 * JsonFileParseException
@@ -37,6 +38,7 @@ Utility Module to make working with datam8 models more comfortable in jinja2 tem
 
 import functools
 import os
+import platform
 from collections.abc import Callable
 from logging import FileHandler, StreamHandler
 from pathlib import Path
@@ -66,6 +68,19 @@ def create_error(err: Exception | str, /, status_code: int = 500, exit_code: int
 
     typer.echo(err)
     return typer.Exit(exit_code).with_traceback(err.__traceback__)
+
+
+def is_wsl() -> bool:
+    # if no running on linux, it cannot be wsl
+    if platform.system() != "Linux":
+        return False
+
+    # get kernel release information and check if if contains wsl or microsoft
+    rel = platform.release().lower()
+    if "wsl" in rel or "microsoft" in rel:
+        return True
+
+    return False
 
 
 def emit_result(

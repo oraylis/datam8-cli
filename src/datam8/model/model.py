@@ -594,7 +594,7 @@ class Model:
                     ) from err
                 return self.modelEntities.get_by_id(id)
             case opts.Selectors.LOCATOR:
-                return self.modelEntities.get(selector)
+                return self.get_entity_by_locator(selector)
             case _:
                 raise NotImplementedError(f"by {by}")
 

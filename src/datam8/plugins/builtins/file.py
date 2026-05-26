@@ -92,6 +92,10 @@ class CsvFile(Plugin):
         return cls.__manifest
 
     @staticmethod
+    def create_source_location(table: str, schema: str | None = None) -> str:
+        return table
+
+    @staticmethod
     @functools.lru_cache(maxsize=1)
     def get_auth_modes() -> list[AuthMode]:
         auth_modes = [

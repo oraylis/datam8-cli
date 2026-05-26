@@ -315,7 +315,7 @@ class SourceField(BaseModel):
     dataType: str
     maxLength: Annotated[int | None, Field(ge=1)] = None
     numericPrecision: Annotated[int | None, Field(ge=1)] = None
-    numbericScale: Annotated[int | None, Field(ge=1)] = None
+    numbericScale: Annotated[int | None, Field(ge=0)] = None
     isNullable: bool
     isPrimaryKey: bool | None = None
 

@@ -51,7 +51,12 @@ def list_tables(
     tables = plugin.list_tables(schema_name)
 
     typer.echo(f"Found {len(tables.rows())} source objects")
-    tables.show(None, tbl_hide_column_data_types=True, tbl_hide_dataframe_shape=True)
+    tables.show(
+        None,
+        tbl_hide_column_data_types=True,
+        tbl_hide_dataframe_shape=True,
+        fmt_str_lengths=50,
+    )
 
 
 @app.command()
@@ -88,16 +93,19 @@ def preview(
     plugin = factory.get_plugin_for_data_source(data_source_name)
     preview = plugin.preview_data(table_name, schema_name, limit=limit)
 
-    for df in preview.collect_batches(chunk_size=limit):
-        df.show(
-            limit=limit,
-            tbl_hide_dataframe_shape=True,
-            tbl_cols=col_limit or len(preview.collect_schema().names()),
-        )
+    batches = preview.collect_batches(chunk_size=limit)
 
-        # since the limit is pushed down to the source, there will be only one batch
-        # batches are mostly used to safely get a dataframe from a LazyFrame
-        raise typer.Exit(0)
+    # since the limit is pushed down to the source, there will be only one batch
+    # batches are mostly used to safely get a dataframe from a LazyFrame
+    df = next(batches)
+
+    df.show(
+        limit=limit,
+        tbl_hide_dataframe_shape=True,
+        tbl_cols=col_limit or len(preview.collect_schema().names()),
+    )
+
+    raise typer.Exit(0)
 
     typer.echo(f"No data found in {table_name}")
 
@@ -119,29 +127,27 @@ def import_(
     if model_.has_locator(locator):
         raise utils.create_error("Entity already exists for this locator")
 
-    pm = factory.get_plugin_for_data_source(data_source_name)
-    metadata = pm.get_table_metadata(table_name, schema_name)
+    plugin = factory.get_plugin_for_data_source(data_source_name)
+    metadata = plugin.get_table_metadata(table_name, schema_name)
     _ = model_.add_entity(
         locator,
         content={
             "sources": [
                 {
                     "dataSource": data_source_name,
-                    "sourceLocation": f"[{schema_name}].[{table_name}]",
+                    "sourceLocation": plugin.create_source_location(table_name, schema_name),
                 }
             ],
             "attributes": [
                 {
-                    "ordinalNumber": 1,
-                    "name": row[0],
+                    "ordinalNumber": field.ordinal,
+                    "name": field.name,
                     "attributeType": "Generic String",
-                    "dataType": {
-                        "type": row[4],
-                        "nullable": True if row[2] == "YES" else False,
-                    },
+                    "dataType": {"type": field.dataType, "nullable": field.isNullable},
+                    "isBusinessKey": field.isPrimaryKey,
                     "dateAdded": datetime.now(UTC),
                 }
-                for row in metadata.rows()
+                for field in metadata.iter_source_fields()
             ],
             "transformations": [],
             "relationships": [],
@@ -166,10 +172,10 @@ def table_metadata(
 
     plugin = factory.get_plugin_for_data_source(data_source_name)
     metadata = plugin.get_table_metadata(table_name, schema_name)
-    metadata.show(
+    metadata.dataframe.show(
         limit=None,
         tbl_hide_dataframe_shape=True,
-        tbl_cols=len(metadata.columns),
+        tbl_cols=8,
     )
 
 
