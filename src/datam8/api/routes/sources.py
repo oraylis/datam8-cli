@@ -38,84 +38,32 @@ async def test_connection(data_source: str) -> None:
         raise HTTPException(status_code=500, detail=str(error))
 
 
-#
-# schema support
-#
-
-
-@sources_router.get("/{data_source}/schemas")
-async def list_schemas(data_source: str) -> MultiItemResponse[str]:
-    "List available source schema for a data source"
-    plugin = factory.get_plugin_for_data_source(data_source)
-    schemas = [x["schema"] for x in plugin.list_schemas().to_dicts()]
-
-    return MultiItemResponse.from_list(schemas)
-
-
-@sources_router.get("/{data_source}/schemas/{schema}/tables")
-async def list_tables_for_schema(data_source: str, schema: str) -> MultiItemResponse[SourceObject]:
-    "List available source tables for a datasource connector"
-    plugin = factory.get_plugin_for_data_source(data_source)
-    tables = [SourceObject.from_dict(o) for o in plugin.list_tables(schema).to_dicts()]
-    return MultiItemResponse.from_list(tables)
-
-
-@sources_router.get("/{data_source}/schemas/{schema}/tables/{table}")
-async def get_table_metadata_for_schema(
-    data_source: str, schema: str, table: str
-) -> MultiItemResponse[SourceField]:
-    plugin = factory.get_plugin_for_data_source(data_source)
-    metadata = plugin.get_table_metadata(table, schema)
-    source_fields = list(metadata.iter_source_fields())
-    return MultiItemResponse.from_list(source_fields)
-
-
-@sources_router.get("/{data_source}/schemas/{schema}/tables/{table}/preview")
-async def preview_for_schema(
-    data_source: str, schema: str, table: str, limit: int = 10
+@sources_router.get("/{data_source}/locations")
+async def list_tables(
+    data_source: str, source_location: str | None = None
 ) -> MultiItemResponse[dict[str, Any]]:
-    plugin = factory.get_plugin_for_data_source(data_source)
-    preview = plugin.preview_data(table, schema, limit=limit)
-
-    for df in preview.collect_batches(chunk_size=limit):
-        rows = df.to_dicts()
-        return MultiItemResponse.from_list(rows)
-
-    raise HTTPException(status_code=404, detail="No data to preview")
-
-
-@sources_router.put("/{data_source}/schemas/{schema}/tables/{table}/import")
-async def import_for_schema(data_source: str, schema: str, table: str) -> list[dict[str, Any]]:
-    raise HTTPException(status_code=404, detail="comming soon...")
-
-
-#
-# no schema support
-#
-
-
-@sources_router.get("/{data_source}/tables")
-async def list_tables(data_source: str) -> MultiItemResponse[SourceObject]:
     "List available source tables if a source does not support schemas"
     plugin = factory.get_plugin_for_data_source(data_source)
-    tables = [SourceObject.from_dict(o) for o in plugin.list_tables().to_dicts()]
-    return MultiItemResponse.from_list(tables)
+    locations = plugin.list_source(source_location).to_dicts()
+    return MultiItemResponse.from_list(locations)
 
 
-@sources_router.get("/{data_source}/tables/{table}")
-async def get_table_metadata(data_source: str, table: str) -> MultiItemResponse[SourceField]:
+@sources_router.get("/{data_source}/locations/metadata")
+async def get_table_metadata(
+    data_source: str, source_location: str
+) -> MultiItemResponse[SourceField]:
     plugin = factory.get_plugin_for_data_source(data_source)
-    metadata = plugin.get_table_metadata(table)
+    metadata = plugin.get_table_metadata(source_location)
     source_fields = list(metadata.iter_source_fields())
     return MultiItemResponse.from_list(source_fields)
 
 
-@sources_router.get("/{data_source}/tables/{table}/preview")
+@sources_router.get("/{data_source}/locations/preview")
 async def preview(
-    data_source: str, table: str, limit: int = 10
+    data_source: str, source_location: str, limit: int = 10
 ) -> MultiItemResponse[dict[str, Any]]:
     plugin = factory.get_plugin_for_data_source(data_source)
-    preview = plugin.preview_data(table, limit=limit)
+    preview = plugin.preview_data(source_location, limit=limit)
 
     for df in preview.collect_batches(chunk_size=limit):
         rows = df.to_dicts()
@@ -124,9 +72,14 @@ async def preview(
     raise HTTPException(status_code=404, detail="No data to preview")
 
 
-@sources_router.put("/{data_source}/tables/{table}/import")
-async def import_for_table(data_source: str, table: str) -> list[dict[str, Any]]:
-    raise HTTPException(status_code=404, detail="comming soon...")
+@sources_router.put("/{data_source}/locations/{source_location}/import")
+async def import_for_table(data_source: str, source_location: str) -> list[dict[str, Any]]:
+    raise HTTPException(status_code=404, detail="coming soon...")
+
+
+@sources_router.get("/compare/{locator}")
+async def compare_with_source(locator: str):
+    raise HTTPException(status_code=404, detail="coming soon...")
 
 
 #

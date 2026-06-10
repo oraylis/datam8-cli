@@ -268,93 +268,6 @@ class DataSourceType(BaseModel):
             file.write(self.model_dump_json(**dump_options))
 
 
-class SourceObject(BaseModel):
-    schema_: Annotated[str | None, Field(alias="schema")] = None
-    name: str
-    type: str
-
-    def to_dict(self) -> dict:
-        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
-
-    @staticmethod
-    def from_dict(obj: Any) -> SourceObject:
-        return SourceObject.model_validate(obj, from_attributes=False)
-
-    @staticmethod
-    def from_json_file(path: Path) -> SourceObject:
-        """Loads ands validates a json file from the given path.
-
-        Parameters
-        ----------
-        path : Path
-          The path to the json to be loaded into the model.
-
-        Returns
-        -------
-        SourceObject
-            Instantiated and validated pydantic model
-
-        Raises
-        ------
-        ValidationError
-            If the data in the json file does not much the model constraints.
-        """
-        with open(path) as file:
-            model = SourceObject.model_validate_json(file.read())
-
-        return model
-
-    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
-        with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
-
-
-class SourceField(BaseModel):
-    name: str
-    ordinal: Annotated[int, Field(ge=1)]
-    dataType: str
-    maxLength: Annotated[int | None, Field(ge=1)] = None
-    numericPrecision: Annotated[int | None, Field(ge=1)] = None
-    numbericScale: Annotated[int | None, Field(ge=0)] = None
-    isNullable: bool
-    isPrimaryKey: bool | None = None
-
-    def to_dict(self) -> dict:
-        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
-
-    @staticmethod
-    def from_dict(obj: Any) -> SourceField:
-        return SourceField.model_validate(obj, from_attributes=False)
-
-    @staticmethod
-    def from_json_file(path: Path) -> SourceField:
-        """Loads ands validates a json file from the given path.
-
-        Parameters
-        ----------
-        path : Path
-          The path to the json to be loaded into the model.
-
-        Returns
-        -------
-        SourceField
-            Instantiated and validated pydantic model
-
-        Raises
-        ------
-        ValidationError
-            If the data in the json file does not much the model constraints.
-        """
-        with open(path) as file:
-            model = SourceField.model_validate_json(file.read())
-
-        return model
-
-    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
-        with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
-
-
 class DataSource(BaseModel):
     """
     Defines an external source of data to be loaded with datam8.
@@ -408,6 +321,96 @@ class DataSource(BaseModel):
         """
         with open(path) as file:
             model = DataSource.model_validate_json(file.read())
+
+        return model
+
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode) as file:
+            file.write(self.model_dump_json(**dump_options))
+
+
+class SourceObject(BaseModel):
+    schema_: Annotated[str | None, Field(alias="schema")] = None
+    name: str
+    type: str
+    description: str | None = None
+    properties: Sequence[property.PropertyReference] | None = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj: Any) -> SourceObject:
+        return SourceObject.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> SourceObject:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        SourceObject
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
+        with open(path) as file:
+            model = SourceObject.model_validate_json(file.read())
+
+        return model
+
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode) as file:
+            file.write(self.model_dump_json(**dump_options))
+
+
+class SourceField(BaseModel):
+    name: str
+    ordinal: Annotated[int, Field(ge=1)]
+    dataType: str
+    maxLength: Annotated[int | None, Field(ge=1)] = None
+    numericPrecision: Annotated[int | None, Field(ge=1)] = None
+    numbericScale: Annotated[int | None, Field(ge=0)] = None
+    isNullable: bool
+    isPrimaryKey: bool | None = None
+    properties: Sequence[property.PropertyReference] | None = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj: Any) -> SourceField:
+        return SourceField.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> SourceField:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        SourceField
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
+        with open(path) as file:
+            model = SourceField.model_validate_json(file.read())
 
         return model
 

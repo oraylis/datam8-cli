@@ -66,8 +66,10 @@ def get_plugin_manager(
     return _plugin_manager
 
 
-def get_plugin_for_data_source(data_source: ds.DataSource | str) -> plugins.Plugin:
-    _model = get_model()
+def get_plugin_for_data_source(
+    data_source: ds.DataSource | str, *, model: model.Model | None = None
+) -> plugins.Plugin:
+    _model = model or get_model()
 
     if isinstance(data_source, str):
         data_source_ = get_model().dataSources.get(data_source).entity

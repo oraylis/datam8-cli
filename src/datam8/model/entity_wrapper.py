@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Callable, Generator
 from pathlib import Path
 from threading import Lock
@@ -134,18 +135,33 @@ class EntityRepository[T: b.BaseEntityType]:
         wrappers = self.get_many_where(filter_)
 
         if len(wrappers) > 1:
-            raise utils.create_error(f"More than one entity found for filter: {str(filter_)}")
+            logger.error(inspect.getsource(filter_))
+            raise utils.create_error("More than one entity found for filter.")
 
         if len(wrappers) < 1:
-            raise utils.create_error(f"No entity found for filter: {str(filter_)}")
+            logger.error(inspect.getsource(filter_))
+            raise utils.create_error("No entity found for filter")
 
         return wrappers.pop()
 
     def get_by_id(self, id: int, /) -> EntityWrapper[T]:
-        return self.get_where(lambda w: w.entity.id == id)
+        try:
+
+            def filter_on_id(wrapper: EntityWrapper[T]):
+                assert hasattr(wrapper.entity, "id"), (
+                    f"EntityType '{wrapper.locator.entityType}' does not provide an id"
+                )
+                return wrapper.entity.id == id
+
+            return self.get_where(filter_on_id)
+        except Exception as err:
+            raise utils.create_error(f"No entity found for id: '{id}'") from err
 
     def get_by_name(self, name: str, /) -> EntityWrapper[T]:
-        return self.get_where(lambda w: w.entity.name == name)
+        try:
+            return self.get_where(lambda w: w.entity.name == name)
+        except Exception as err:
+            raise utils.create_error(f"No entity found for name: '{name}'") from err
 
     def get_many_where(
         self, filter_: Callable[[EntityWrapper[T]], bool], /, locator: LocatorOrString | None = None

@@ -21,7 +21,7 @@ from __future__ import annotations
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 from threading import Lock
-from typing import Annotated, Any
+from typing import Annotated, Any, overload
 
 from pydantic import ConfigDict, Field, ValidationError
 
@@ -38,7 +38,7 @@ from datam8_model import solution as s
 from datam8_model import zone as z
 
 from .entity_wrapper import EntityRepository, EntityWrapper, EntityWrapperVariant
-from .locator import ROOT_LOCATOR, Locator, _ensure_locator
+from .locator import ROOT_LOCATOR, Locator, LocatorOrString, _ensure_locator
 
 logger = logging.getLogger(__name__)
 
@@ -154,8 +154,9 @@ class Model:
         return getattr(self, type_)
 
     def get_next_model_id(self) -> int:
-        next = self.__next_model_id
-        self.__next_model_id += 1
+        with self.lock:
+            next = self.__next_model_id
+            self.__next_model_id += 1
         return next
 
     def init_file_references(self) -> None:
@@ -364,9 +365,12 @@ class Model:
         if len(wrapper.locator.folders) == 0:
             raise utils.create_error(errors.InvalidLocatorError(str(wrapper.locator)))
 
-        zone = self.zones.get_where(
-            lambda w: (w.entity.localFolderName or w.entity.name) == wrapper.locator.folders[0]
-        )
+        try:
+            zone = self.zones.get_where(
+                lambda w: (w.entity.localFolderName or w.entity.name) == wrapper.locator.folders[0]
+            )
+        except Exception as err:
+            raise utils.create_error(f"No Zone found for '{wrapper.locator}'") from err
 
         return zone
 
@@ -382,6 +386,9 @@ class Model:
     def has_locator(self, locator: Locator | str, /) -> bool:
         locator_ = _ensure_locator(locator)
         return locator_ in self[locator_.entityType]
+
+    def __contains__(self, locator: LocatorOrString, /) -> bool:
+        return self.has_locator(locator)
 
     def get_entity_by_locator(self, locator: str | Locator, /) -> EntityWrapperVariant:
         """
@@ -417,21 +424,45 @@ class Model:
 
         return base_file_path
 
+    @overload
     def add_entity(
         self, locator: Locator | str, /, content: dict[str, Any]
-    ) -> EntityWrapper[b.BaseEntityType]:
+    ) -> EntityWrapper[b.BaseEntityType]: ...
+
+    @overload
+    def add_entity[T: b.BaseEntityType](
+        self, locator: Locator | str, /, content: T
+    ) -> EntityWrapper[T]: ...
+
+    def add_entity[T: b.BaseEntityType](
+        self, locator: Locator | str, /, content: dict[str, Any] | T
+    ) -> EntityWrapper[b.BaseEntityType] | EntityWrapper[T]:
         _locator = _ensure_locator(locator)
         _type = b.EntityType(_locator.entityType)
         base_file_path = self.get_base_path_for_entity_type(_type)
         source_file_path = Path(base_file_path, *_locator.folders) / f"{_locator.entityName}.json"
 
-        content.update({"id": self.get_next_model_id(), "name": _locator.entityName})
+        assert _locator.entityName is not None, (
+            "Only locators for entities should be provided to 'add_entity'"
+        )
+
+        match content:
+            case dict() as c:
+                if c.get("type") == b.EntityType.MODEL_ENTITIES.value:
+                    c.update({"id": self.get_next_model_id(), "name": _locator.entityName})
+                new_entity = class_from_type(_type).from_dict(content)
+            case m.ModelEntity() as me:
+                new_entity = me
+                new_entity.id = self.get_next_model_id()
+                new_entity.name = _locator.entityName
+            case _ as rest:
+                new_entity = rest
 
         try:
             new_wrapper = EntityWrapper(
                 locator=_locator,
                 source_file=source_file_path,
-                entity=class_from_type(_type).from_dict(content),
+                entity=new_entity,
             )
             new_wrapper._changed = True
             self.resolve_wrapper(new_wrapper)
@@ -869,7 +900,7 @@ class EntityFileRef:
                     raise utils.create_error(
                         "Only one wrapper to update allowed when updating single model file"
                     )
-                current_content = m.ModelEntity.from_json_file(self.file_path)
+                current_content = wrappers[0].entity
             case _:
                 current_content = b.BaseEntities.from_json_file(self.file_path)
                 entities: list[b.BaseEntityType] = getattr(current_content.root, self._type.value)

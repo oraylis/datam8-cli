@@ -120,6 +120,9 @@ class TableMetadata:
         if "numericScale" not in df_columns:
             optional_columns["numericScale"] = pl.lit(None)
 
+        if "properties" not in df_columns:
+            optional_columns["properties"] = pl.lit(None)
+
         if "isPrimaryKey" not in df_columns:
             optional_columns["isPrimaryKey"] = pl.lit(False)
         else:
@@ -147,6 +150,7 @@ class TableMetadata:
                 numbericScale=row.get("numericScale"),
                 isNullable=row["isNullable"],
                 isPrimaryKey=row["isPrimaryKey"],
+                properties=row["properties"],
             )
 
 
@@ -287,7 +291,7 @@ class Plugin(abc.ABC):
 
     # TODO: find way to type hint the DataFrame to make plugin development smoother?
 
-    def list_schemas(self) -> pl.DataFrame:
+    def list_source(self, source_location: str | None = None, /) -> pl.DataFrame:
         """
         List all schemas (databases, file systems, containers) in the data source.
 
@@ -307,38 +311,7 @@ class Plugin(abc.ABC):
             NotImplementedError(f"list_schemas not implemented by {self.manifest().id}")
         )
 
-    def list_tables(self, schema: str | None = None, /) -> pl.DataFrame:
-        """
-        List all tables (files, paths) in the data source.
-
-        Parameters
-        ----------
-        schema : str | None, optional
-            The schema name to filter tables. If None, lists tables from all schemas.
-
-        Returns
-        -------
-        pl.DataFrame
-            DataFrame with columns:
-            - schema : str
-                Schema or container name
-            - name : str
-                Table, file, or path name
-            - type : str
-                Object type (e.g., 'TABLE', 'VIEW', 'FILE', 'DIRECTORY')
-
-        Raises
-        ------
-        MissingCapabilityError
-            If the plugin does not support metadata operations.
-        """
-        if not self.is_capable_of(METADATA):
-            raise utils.create_error(MissingCapabilityError(METADATA))
-        raise utils.create_error(
-            NotImplementedError(f"list_tables not implemented by {self.manifest().id}")
-        )
-
-    def get_table_metadata(self, table: str, /, schema: str | None = None) -> TableMetadata:
+    def get_table_metadata(self, source_location: str, /) -> TableMetadata:
         """
         Get column metadata for a specific table or file.
 
@@ -371,9 +344,7 @@ class Plugin(abc.ABC):
             NotImplementedError(f"get_table_metadata not implemented by {self.manifest().id}")
         )
 
-    def preview_data(
-        self, table: str, /, schema: str | None = None, *, limit: int = 10
-    ) -> pl.LazyFrame:
+    def preview_data(self, source_location: str, *, limit: int = 10) -> pl.LazyFrame:
         """
         Preview data from a table or file.
 
@@ -481,6 +452,10 @@ class Plugin(abc.ABC):
         ...
 
     @classmethod
+    @abc.abstractmethod
+    def resolve_source_type(cls, source_type: str, /) -> str: ...
+
+    @classmethod
     def get_ui_schema(cls) -> UiSchema:
         """
         Generate UI schema for the plugin's connection configuration.
@@ -523,26 +498,7 @@ class Plugin(abc.ABC):
 
     @staticmethod
     @abc.abstractmethod
-    def create_source_location(table: str, schema: str | None = None) -> str:
-        """
-        Create a source location identifier for a table.
-
-        Generates a unique identifier or path for a table within the data source.
-        The format depends on the specific data source type.
-
-        Parameters
-        ----------
-        table : str
-            The table or file name.
-        schema : str | None, optional
-            The schema or container name.
-
-        Returns
-        -------
-        str
-            Source location identifier (e.g., "schema.table", "container/path").
-        """
-        ...
+    def parse_source_location(source_location: str) -> tuple[str, ...]: ...
 
     @staticmethod
     @functools.lru_cache

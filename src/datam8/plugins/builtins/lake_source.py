@@ -17,6 +17,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 import enum
 import functools
+from typing import Final
 
 import polars as pl
 import typer
@@ -30,6 +31,7 @@ from datam8_model.data_source import (
     DataSource,
     DataSourceType,
     SourceDataTypeMapping,
+    SourceObject,
 )
 from datam8_model.plugin import Capability, PluginManifest
 
@@ -58,6 +60,32 @@ class AzureAuthMode(enum.StrEnum):
     DEFAULT = "default"
     SERVICE_PRINCIPAL = "service_principal"
     MANAGED_IDENTITY = "managed_identity"
+
+
+DATA_TYPE_MAPPINGS: Final[dict[str, str]] = {
+    "Boolean": "bit",
+    "Int8": "int",
+    "Int16": "int",
+    "Int32": "int",
+    "Int64": "long",
+    "UInt8": "int",
+    "UInt16": "int",
+    "UInt32": "long",
+    "UInt64": "long",
+    "Float32": "double",
+    "Float64": "double",
+    "Decimal": "decimal",
+    "String": "string",
+    "Utf8": "string",
+    "Binary": "binary",
+    "Date": "date",
+    "Datetime": "datetime",
+    "Time": "datetime",
+    "Duration": "string",
+    "List": "string",
+    "Struct": "string",
+}
+"Mapping from source type to DataM8 internal type"
 
 
 manifest_azure = PluginManifest(
@@ -156,10 +184,9 @@ class AzureDataLake(Plugin):
 
         return storage_options
 
-    def _build_abfss_url(self, schema: str, table: str) -> str:
+    def _build_abfss_url(self, container: str, path: str) -> str:
         account_name = self.extended_properties["storageAccountName"]
-        file_system, path = schema.split("/", 1) if "/" in schema else (schema, "")
-        return f"abfss://{file_system}@{account_name}.dfs.core.windows.net/{path}/{table}"
+        return f"abfss://{container}@{account_name}.dfs.core.windows.net/{path}"
 
     def test_connection(self) -> Exception | None:
         try:
@@ -171,73 +198,58 @@ class AzureDataLake(Plugin):
             self.logger.error(f"Connection test failed: {err}")
             return utils.create_error(err)
 
-    def list_schemas(self) -> pl.DataFrame:
+    def list_container(self) -> pl.DataFrame:
         """
         In ADLS Gen2, file systems are equivalent to schemas or databases.
         """
         try:
             file_systems = self._service_client.list_file_systems()
-            schemas = [{"schema": fs.name} for fs in file_systems]
+            schemas = [{"container": fs.name} for fs in file_systems]
             return pl.DataFrame(schemas)
         except Exception as err:
             raise utils.create_error(err)
 
-    def list_tables(self, schema: str | None = None) -> pl.DataFrame:
-        tables = []
-
+    def list_blobs(self, container: str, path: str) -> pl.DataFrame:
+        blobs = []
         try:
-            if schema is not None:
-                file_system, rel_path = schema.split("/", 1) if "/" in schema else (schema, "")
-                file_system_client = self._service_client.get_file_system_client(file_system)
-                paths = file_system_client.get_paths(rel_path, recursive=False)
+            fs_client = self._service_client.get_file_system_client(container)
+            paths = fs_client.get_paths(path, recursive=False)
 
-                for path in paths:
-                    tables.append(
-                        {
-                            "schema": schema,
-                            "name": path.name.replace(f"{rel_path}/", ""),
-                            "type": "DIRECTORY" if path.is_directory else "FILE",
-                        }
-                    )
-            else:
-                file_systems = self._service_client.list_file_systems()
-                for fs in file_systems:
-                    file_system_client = self._service_client.get_file_system_client(fs)
-                    paths = file_system_client.get_paths(recursive=False)
-
-                    for rel_path in paths:
-                        tables.append(
-                            {
-                                "schema": fs.name,
-                                "name": rel_path.name,
-                                "type": "DIRECTORY" if rel_path.is_directory else "FILE",
-                            }
-                        )
+            for p in paths:
+                blobs.append(
+                    {
+                        "container": container,
+                        "name": p.name,
+                        "type": "DIRECTORY" if p.is_directory else "BLOB",
+                    }
+                )
         except Exception as err:
             raise utils.create_error(err)
 
-        return pl.DataFrame(tables)
+        return pl.DataFrame(blobs)
 
-    def preview_data(
-        self, table: str, /, schema: str | None = None, *, limit: int = 10
-    ) -> pl.LazyFrame:
+    def list_source(self, source_location: str | None = None, /) -> pl.DataFrame:
+        if source_location is None or source_location == "":
+            return self.list_container()
+
+        container, path = self.parse_source_location(source_location)
+        return self.list_blobs(container, path)
+
+    def preview_data(self, source_location: str, *, limit: int = 10) -> pl.LazyFrame:
         """
         Supports Parquet, CSV, and JSON file formats using Polars native cloud storage.
         """
-        if schema is None:
-            raise utils.create_error(
-                "A schema (file system / container) needs to be provided for Azure Data Lake sources"
-            )
+        container, path = self.parse_source_location(source_location)
 
         try:
-            url = self._build_abfss_url(schema, table)
+            url = self._build_abfss_url(container, path)
 
             # Determine file type and read accordingly using Polars lazy API
-            if table.endswith(".parquet"):
+            if path.endswith(".parquet"):
                 lf = pl.scan_parquet(url, storage_options=self._storage_options)
-            elif table.endswith(".csv"):
+            elif path.endswith(".csv"):
                 lf = pl.scan_csv(url, storage_options=self._storage_options)
-            elif table.endswith((".json", ".jsonl", ".ndjson")):
+            elif path.endswith((".json", ".jsonl", ".ndjson")):
                 lf = pl.scan_ndjson(url, storage_options=self._storage_options)
             else:
                 lf = pl.scan_delta(url, storage_options=self._storage_options)
@@ -246,29 +258,30 @@ class AzureDataLake(Plugin):
         except Exception as err:
             raise utils.create_error(err)
 
-    def get_table_metadata(self, table: str, schema: str | None = None) -> TableMetadata:
+    def get_table_metadata(self, source_location: str, /) -> TableMetadata:
         """
         Extracts column information from structured files (Parquet, CSV, JSON).
         For non-structured files, returns basic binary content metadata.
         Uses Polars lazy scanning to read only schema information efficiently.
         """
-        if schema is None:
+        container, path_ = self.parse_source_location(source_location)
+        if container == "":
             raise utils.create_error(
-                "A schema (file system) needs to be provided for Azure Data Lake sources"
+                "A container (file system) needs to be provided for Azure Data Lake sources"
             )
 
         try:
-            url = self._build_abfss_url(schema, table)
+            url = self._build_abfss_url(container, path_)
 
             # TODO: needs to be more dynamic like reading from a directory
             # does not necessarily be reading a single file
 
             # For structured files, try to get column information using lazy scanning
-            if table.endswith(".parquet"):
+            if path_.endswith(".parquet"):
                 lf = pl.scan_parquet(url, storage_options=self._storage_options)
-            elif table.endswith(".csv"):
+            elif path_.endswith(".csv"):
                 lf = pl.scan_csv(url, storage_options=self._storage_options)
-            elif table.endswith((".json", ".jsonl", ".ndjson")):
+            elif path_.endswith((".json", ".jsonl", ".ndjson")):
                 lf = pl.scan_ndjson(url, storage_options=self._storage_options)
             else:
                 # if something else is provided assume delta table/directory
@@ -297,7 +310,7 @@ class AzureDataLake(Plugin):
                 },
             )
 
-            return TableMetadata(metadata)
+            return TableMetadata(metadata, SourceObject(schema_=container, name=path_, type="FILE"))
 
         except Exception as err:
             raise utils.create_error(err)
@@ -314,8 +327,11 @@ class AzureDataLake(Plugin):
         return cls.__manifest
 
     @staticmethod
-    def create_source_location(table: str, schema: str | None = None) -> str:
-        return f"{schema}/{table}" if schema else table
+    def parse_source_location(source_location: str) -> tuple[str, str]:
+        if "@" in source_location:
+            container, path_ = source_location.rsplit("@", maxsplit=1)
+            return container, path_
+        return source_location, "/"
 
     @staticmethod
     @functools.lru_cache(maxsize=1)
@@ -386,28 +402,18 @@ class AzureDataLake(Plugin):
         """
         Maps Polars data types (read from Parquet, CSV, JSON files) to target types.
         """
-        data_types = [
-            # Polars data types to target types
-            SourceDataTypeMapping(sourceType="Boolean", targetType="boolean"),
-            SourceDataTypeMapping(sourceType="Int8", targetType="int"),
-            SourceDataTypeMapping(sourceType="Int16", targetType="int"),
-            SourceDataTypeMapping(sourceType="Int32", targetType="int"),
-            SourceDataTypeMapping(sourceType="Int64", targetType="long"),
-            SourceDataTypeMapping(sourceType="UInt8", targetType="int"),
-            SourceDataTypeMapping(sourceType="UInt16", targetType="int"),
-            SourceDataTypeMapping(sourceType="UInt32", targetType="long"),
-            SourceDataTypeMapping(sourceType="UInt64", targetType="long"),
-            SourceDataTypeMapping(sourceType="Float32", targetType="double"),
-            SourceDataTypeMapping(sourceType="Float64", targetType="double"),
-            SourceDataTypeMapping(sourceType="Decimal", targetType="decimal"),
-            SourceDataTypeMapping(sourceType="String", targetType="string"),
-            SourceDataTypeMapping(sourceType="Utf8", targetType="string"),
-            SourceDataTypeMapping(sourceType="Binary", targetType="binary"),
-            SourceDataTypeMapping(sourceType="Date", targetType="datetime"),
-            SourceDataTypeMapping(sourceType="Datetime", targetType="datetime"),
-            SourceDataTypeMapping(sourceType="Time", targetType="datetime"),
-            SourceDataTypeMapping(sourceType="Duration", targetType="string"),
-            SourceDataTypeMapping(sourceType="List", targetType="string"),
-            SourceDataTypeMapping(sourceType="Struct", targetType="string"),
+        global DATA_TYPE_MAPPINGS
+
+        return [
+            SourceDataTypeMapping(sourceType=src, targetType=trg)
+            for src, trg in DATA_TYPE_MAPPINGS.items()
         ]
-        return data_types
+
+    @classmethod
+    def resolve_source_type(cls, source_type: str, /) -> str:
+        global DATA_TYPE_MAPPINGS
+
+        if source_type not in DATA_TYPE_MAPPINGS:
+            raise ValueError(f"'{source_type}' is not a configured type for '{cls.manifest().id}'")
+
+        return DATA_TYPE_MAPPINGS[source_type]

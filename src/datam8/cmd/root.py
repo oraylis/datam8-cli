@@ -32,6 +32,8 @@ to those imports are executed. This reduces startup time.
 import os
 
 import sys
+import pathlib
+import json
 
 import typer
 
@@ -269,6 +271,7 @@ def serve(
     host: opts.ApiHost = "127.0.0.1",
     port: opts.ApiPort = 0,
     openapi: opts.OpenApi = False,
+    export_openapi: opts.ExportOpenApi = False,
     log_level: opts.LogLevel = opts.LogLevels.INFO,
     version: opts.Version = False,
 ):
@@ -279,13 +282,22 @@ def serve(
     config.mode = config.RunMode.API
     common.main_callback(solution_path, log_level, version)
 
+    datam8_app = api_app.create_app(
+        token=token.strip() if token is not None else token,
+        enable_openapi=openapi,
+    )
+
+    if export_openapi:
+        with open(pathlib.Path.cwd() / "datam8-openapi.json", "w") as f_:
+            json.dump(datam8_app.openapi(), f_, indent=4)
+        raise typer.Exit(0)
+
     _ = factory.create_model()
 
     sock, actual_port = api_app._bind(host, port)
     server = api_app.create_server(
-        host,
-        actual_port,
-        token=token.strip() if token is not None else token,
-        enable_openapi=openapi,
+        host=host,
+        port=actual_port,
+        app=datam8_app,
     )
     server.run(sockets=[sock])

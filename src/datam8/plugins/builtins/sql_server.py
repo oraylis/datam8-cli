@@ -17,7 +17,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 import functools
 import urllib.parse
-from typing import Any
+from typing import Any, Final
 
 import polars as pl
 import typer
@@ -31,6 +31,7 @@ from datam8_model.data_source import (
     DataSource,
     DataSourceType,
     SourceDataTypeMapping,
+    SourceObject,
 )
 from datam8_model.plugin import Capability, PluginManifest
 
@@ -54,6 +55,43 @@ manifest = PluginManifest(
         Capability.VALIDATION_CONNECTION,
     ],
 )
+
+DATA_TYPE_MAPPINGS: Final[dict[str, str]] = {
+    "bit": "bit",
+    # texts
+    "uniqueidentifier": "string",
+    "varbinary": "string",
+    "varchar": "string",
+    "xml": "string",
+    "sql_variant": "string",
+    "text": "text",
+    "timestamp": "string",
+    "nvarchar": "string",
+    "nchar": "string",
+    "ntext": "string",
+    "image": "string",
+    "char": "string",
+    "binary": "string",
+    # numbers
+    "bigint": "long",
+    "tinyint": "int",
+    "real": "double",
+    "smallint": "int",
+    "smallmoney": "decimal",
+    "numeric": "decimal",
+    "int": "int",
+    "money": "decimal",
+    "decimal": "decimal",
+    "float": "double",
+    # dates / times
+    "date": "date",
+    "smalldatetime": "datetime",
+    "datetime": "datetime",
+    "datetime2": "datetime",
+    "datetimeoffset": "datetime",
+    "time": "datetime",
+}
+"Mapping from source type to DataM8 internal type"
 
 
 class SqlServer(Plugin):
@@ -139,6 +177,13 @@ class SqlServer(Plugin):
             return result
         return None
 
+    def list_source(self, source_location: str | None = None, /) -> pl.DataFrame:
+        if source_location == "" or source_location is None:
+            return self.list_schemas()
+
+        schema, _ = self.parse_source_location(source_location)
+        return self.list_tables(schema)
+
     def list_schemas(self) -> pl.DataFrame:
         database = (self._data_source.extendedProperties or {})["database"]
         query = f"""
@@ -170,18 +215,14 @@ class SqlServer(Plugin):
 
         return self._execute_query(query)
 
-    def preview_data(
-        self, table: str, /, schema: str | None = None, *, limit: int = 10
-    ) -> pl.LazyFrame:
-        if schema is None:
-            raise utils.create_error("A schema needs to be provided for SQL Server sources")
+    def preview_data(self, source_location: str, *, limit: int = 10) -> pl.LazyFrame:
+        schema, table = self.parse_source_location(source_location)
 
         query = f"select top {limit} * from [{schema}].[{table}]"
         return self._execute_query(query).lazy()
 
-    def get_table_metadata(self, table: str, schema: str | None = None) -> TableMetadata:
-        if schema is None:
-            raise utils.create_error("A schema needs to be provided for SQL Server sources")
+    def get_table_metadata(self, source_location: str) -> TableMetadata:
+        schema, table = self.parse_source_location(source_location)
 
         query = f"""
             select
@@ -230,13 +271,17 @@ class SqlServer(Plugin):
                 # convert 1/0 into True/False for isPrimaryKey
                 pl.when(pl.col("isPrimaryKey") == 1).then(pl.lit(True)).otherwise(pl.lit(False))
             ),
+            properties=(
+                # TODO: just for testing remove before merging
+                pl.lit([{"property": "test", "value": "testtest"}])
+            ),
         )
         if result.is_empty():
             raise utils.create_error(
                 f"Table [{schema}].[{table}] does not exist in '{self._data_source.name}'"
             )
 
-        return TableMetadata(result)
+        return TableMetadata(result, SourceObject(schema_=schema, name=table, type="TABLE/VIEW"))
 
     @classmethod
     def validate_connection(
@@ -250,8 +295,11 @@ class SqlServer(Plugin):
         return cls.__manifest
 
     @staticmethod
-    def create_source_location(table: str, schema: str | None = None) -> str:
-        return f"[{schema}].[{table}]"
+    def parse_source_location(source_location: str) -> tuple[str, str]:
+        if "." in source_location:
+            schema, table = source_location.split(".", maxsplit=1)
+            return schema.strip("[").strip("]"), table.strip("]").strip("[")
+        return source_location.strip("[").strip("]"), ""
 
     @staticmethod
     @functools.lru_cache(maxsize=1)
@@ -326,39 +374,19 @@ class SqlServer(Plugin):
     @staticmethod
     @functools.lru_cache(maxsize=1)
     def get_data_type_mappings() -> list[SourceDataTypeMapping]:
+        global DATA_TYPE_MAPPINGS
+
         data_types = [
-            SourceDataTypeMapping(sourceType="bit", targetType="boolean"),
-            # texts
-            SourceDataTypeMapping(sourceType="uniqueidentifier", targetType="string"),
-            SourceDataTypeMapping(sourceType="varbinary", targetType="string"),
-            SourceDataTypeMapping(sourceType="varchar", targetType="string"),
-            SourceDataTypeMapping(sourceType="xml", targetType="string"),
-            SourceDataTypeMapping(sourceType="sql_variant", targetType="string"),
-            SourceDataTypeMapping(sourceType="text", targetType="text"),
-            SourceDataTypeMapping(sourceType="timestamp", targetType="string"),
-            SourceDataTypeMapping(sourceType="nvarchar", targetType="string"),
-            SourceDataTypeMapping(sourceType="nchar", targetType="string"),
-            SourceDataTypeMapping(sourceType="ntext", targetType="string"),
-            SourceDataTypeMapping(sourceType="image", targetType="string"),
-            SourceDataTypeMapping(sourceType="char", targetType="string"),
-            SourceDataTypeMapping(sourceType="binary", targetType="string"),
-            # numbers
-            SourceDataTypeMapping(sourceType="bigint", targetType="long"),
-            SourceDataTypeMapping(sourceType="tinyint", targetType="int"),
-            SourceDataTypeMapping(sourceType="real", targetType="double"),
-            SourceDataTypeMapping(sourceType="smallint", targetType="int"),
-            SourceDataTypeMapping(sourceType="smallmoney", targetType="decimal"),
-            SourceDataTypeMapping(sourceType="numeric", targetType="decimal"),
-            SourceDataTypeMapping(sourceType="int", targetType="int"),
-            SourceDataTypeMapping(sourceType="money", targetType="decimal"),
-            SourceDataTypeMapping(sourceType="decimal", targetType="decimal"),
-            SourceDataTypeMapping(sourceType="float", targetType="double"),
-            # dates / times
-            SourceDataTypeMapping(sourceType="date", targetType="datetime"),
-            SourceDataTypeMapping(sourceType="smalldatetime", targetType="datetime"),
-            SourceDataTypeMapping(sourceType="datetime", targetType="datetime"),
-            SourceDataTypeMapping(sourceType="datetime2", targetType="datetime"),
-            SourceDataTypeMapping(sourceType="datetimeoffset", targetType="datetime"),
-            SourceDataTypeMapping(sourceType="time", targetType="datetime"),
+            SourceDataTypeMapping(sourceType=src, targetType=trg)
+            for src, trg in DATA_TYPE_MAPPINGS.items()
         ]
         return data_types
+
+    @classmethod
+    def resolve_source_type(cls, source_type: str, /) -> str:
+        global DATA_TYPE_MAPPINGS
+
+        if source_type not in DATA_TYPE_MAPPINGS:
+            raise ValueError(f"'{source_type}' is not a configured type for '{cls.manifest().id}'")
+
+        return DATA_TYPE_MAPPINGS[source_type]
