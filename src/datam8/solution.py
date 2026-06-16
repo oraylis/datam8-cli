@@ -560,6 +560,7 @@ DEFAULT_DATA_PRODUCTS_JSON = """{
 }
 """
 
+
 def _write_default_base_entities(base_path: Path) -> None:
     files = {
         "AttributeTypes.json": DEFAULT_ATTRIBUTE_TYPES_JSON,

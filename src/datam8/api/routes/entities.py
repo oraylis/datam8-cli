@@ -80,6 +80,7 @@ class MoveBody(BaseModel):
     from_: Annotated[str, Field(alias="from")]
     to: Annotated[str, Field(alias="to")]
 
+
 def _get_function_root(locator: model.Locator | str) -> Path:
     loc = model.Locator.from_path(locator) if isinstance(locator, str) else locator
 
@@ -119,6 +120,7 @@ def _move_function_directory_if_present(from_locator: str, to_locator: str) -> N
         raise FileExistsError(f"Target function directory already exists: {to_dir}")
 
     from_dir.rename(to_dir)
+
 
 @entities_router.post("/move")
 async def move_entities(body: MoveBody) -> MultiItemResponse[model.EntityWrapperVariant]:

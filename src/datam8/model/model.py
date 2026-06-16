@@ -565,7 +565,9 @@ class Model:
 
         base_file_path = self.get_base_path_for_entity_type(_type)
         if _type == b.EntityType.MODEL_ENTITIES:
-            source_file_path = Path(base_file_path, *_locator.folders, f"{_locator.entityName}.json")
+            source_file_path = Path(
+                base_file_path, *_locator.folders, f"{_locator.entityName}.json"
+            )
         elif _type == b.EntityType.FOLDERS:
             if _locator.entityName is None:
                 raise utils.create_error(
@@ -579,14 +581,14 @@ class Model:
             )
         else:
             existing_refs = [
-                ref.file_path
-                for ref in self._model_files.values()
-                if ref._type == _type
+                ref.file_path for ref in self._model_files.values() if ref._type == _type
             ]
             if existing_refs:
                 source_file_path = sorted(existing_refs, key=lambda p: len(str(p)))[0]
             else:
-                source_file_path = Path(base_file_path, *_locator.folders) / _default_base_file_name_for_type(_type)
+                source_file_path = Path(
+                    base_file_path, *_locator.folders
+                ) / _default_base_file_name_for_type(_type)
 
         content["name"] = _locator.entityName
         if _type == b.EntityType.MODEL_ENTITIES:
@@ -649,7 +651,6 @@ class Model:
             entityName=None,
         )
 
-
     def get_entities_for_locator(self, locator: Locator | str) -> list[EntityWrapperVariant]:
         search_locator = _ensure_locator(locator)
         entities: list[EntityWrapperVariant] = []
@@ -694,7 +695,6 @@ class Model:
                 _add(wrapper)
 
         return entities
-
 
     def _get_rebased_locator(
         self,
@@ -1042,7 +1042,10 @@ class Model:
         self.cleanup_entity_file_references()
 
         for wrapper in deleted_wrappers:
-            if wrapper.locator.entityType == b.EntityType.FOLDERS.value and wrapper.locator.entityName:
+            if (
+                wrapper.locator.entityType == b.EntityType.FOLDERS.value
+                and wrapper.locator.entityName
+            ):
                 self.cleanup_directories(
                     Path(
                         config.solution_folder_path / self.solution.basePath,
@@ -1169,9 +1172,7 @@ class EntityFileRef:
                 return True
             case b.EntityType.FOLDERS:
                 wrapper_locators = [w.locator for w in wrappers]
-                remaining_locators = [
-                    loc for loc in self.locators if loc not in wrapper_locators
-                ]
+                remaining_locators = [loc for loc in self.locators if loc not in wrapper_locators]
 
                 if len(remaining_locators) == 0:
                     utils.delete_path(self.file_path)
@@ -1179,12 +1180,8 @@ class EntityFileRef:
                     return True
 
                 current_content = b.BaseEntities.from_json_file(self.file_path)
-                entities: list[b.BaseEntityType] = getattr(
-                    current_content.root, self._type.value
-                )
-                remaining_names = {
-                    loc.entityName for loc in remaining_locators if loc.entityName
-                }
+                entities: list[b.BaseEntityType] = getattr(current_content.root, self._type.value)
+                remaining_names = {loc.entityName for loc in remaining_locators if loc.entityName}
                 entities = [e for e in entities if e.name in remaining_names]
 
                 if len(entities) == 0:
@@ -1287,11 +1284,9 @@ class EntityFileRef:
                     replaced = False
                     for existing_idx, existing_entity in enumerate(entities):
                         if self._type == b.EntityType.PROPERTY_VALUES:
-                            same_key = (
-                                existing_entity.name == wrapper.entity.name
-                                and getattr(existing_entity, "property", None)
-                                == getattr(wrapper.entity, "property", None)
-                            )
+                            same_key = existing_entity.name == wrapper.entity.name and getattr(
+                                existing_entity, "property", None
+                            ) == getattr(wrapper.entity, "property", None)
                         else:
                             same_key = existing_entity.name == wrapper.entity.name
                         if same_key:

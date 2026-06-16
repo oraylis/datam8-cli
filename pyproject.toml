@@ -30,6 +30,9 @@ api = [
 sql = [
   "connectorx~=0.4.0",
 ]
+databricks = [
+  "databricks-sdk~=0.117.0",
+]
 
 [project.scripts]
 datam8 = "datam8.app:app"
@@ -76,7 +79,7 @@ packages = ["src/datam8", "src/datam8_model"]
 path = "hatch_build_datamodel.py"
 dependencies = [
   "datamodel-code-generator~=0.33.0",
-  "ruff~=0.15.0",
+  # "ruff~=0.15.0", # issues with defender
 ]
 
 ###############

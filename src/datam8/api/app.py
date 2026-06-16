@@ -21,13 +21,15 @@ from __future__ import annotations
 import os
 import socket
 import uuid
+from collections.abc import Callable, Coroutine, Awaitable
 from contextlib import asynccontextmanager
+from typing import Any
 
 import typer
 
 try:
     import uvicorn
-    from fastapi import FastAPI, Request
+    from fastapi import FastAPI, Request, Response
     from fastapi.exceptions import RequestValidationError
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import JSONResponse
@@ -90,8 +92,21 @@ def create_server(
         )
         yield
 
+    exception_handlers: dict[
+        int | type[Exception], Callable[[Request, Any], Coroutine[Any, Any, Response]]
+    ] = {
+        Exception: error_handler_unexpected,
+        Datam8Error: error_handler_datam8,
+        RequestValidationError: error_handler_request_validation,
+    }
+
     if enable_openapi:
-        app = FastAPI(title="DataM8 API", version=config.get_version(), lifespan=lifespan)
+        app = FastAPI(
+            title="DataM8 API",
+            version=config.get_version(),
+            lifespan=lifespan,
+            exception_handlers=exception_handlers,
+        )
     else:
         app = FastAPI(
             title="DataM8 API",
@@ -100,6 +115,7 @@ def create_server(
             redoc_url=None,
             openapi_url=None,
             lifespan=lifespan,
+            exception_handlers=exception_handlers,
         )
 
     origins_env = os.environ.get("DATAM8_CORS_ORIGINS")
@@ -117,9 +133,14 @@ def create_server(
         allow_origin_regex = r"^http://(localhost|127\.0\.0\.1):\d+$"
 
     @app.middleware("http")
-    async def trace_middleware(request: Request, call_next):
+    async def trace_middleware(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ):
         request.state.trace_id = str(uuid.uuid4())
-        return await call_next(request)
+        try:
+            return await call_next(request)
+        except Exception as err:
+            return await error_handler_unexpected(request, err)
 
     if token is not None:
 
@@ -166,31 +187,6 @@ def create_server(
         allow_headers=["*"],
     )
 
-    @app.exception_handler(Datam8Error)
-    async def datam8_error_handler(request: Request, exc: Datam8Error):
-        trace_id = getattr(request.state, "trace_id", None)
-        env = exc.to_envelope(trace_id=trace_id)
-        return JSONResponse(status_code=_status_for_error(exc), content=env.model_dump())
-
-    @app.exception_handler(RequestValidationError)
-    async def request_validation_error_handler(request: Request, exc: RequestValidationError):
-        trace_id = getattr(request.state, "trace_id", None)
-        err = Datam8ValidationError(message="Invalid request.", details={"errors": exc.errors()})
-        env = err.to_envelope(trace_id=trace_id)
-        return JSONResponse(status_code=400, content=env.model_dump())
-
-    @app.exception_handler(Exception)
-    async def unexpected_error_handler(request: Request, exc: Exception):
-        trace_id = getattr(request.state, "trace_id", None)
-        env = Datam8Error(
-            code="unexpected",
-            message="Unexpected error.",
-            details=None,
-            hint=None,
-            exit_code=10,
-        ).to_envelope(trace_id=trace_id)
-        return JSONResponse(status_code=500, content=env.model_dump())
-
     app.include_router(router)
 
     server = uvicorn.Server(
@@ -204,3 +200,30 @@ def create_server(
     )
 
     return server
+
+
+async def error_handler_datam8(request: Request, exc: Datam8Error) -> Response:
+    trace_id = getattr(request.state, "trace_id", None)
+    env = exc.to_envelope(trace_id=trace_id)
+    return JSONResponse(status_code=_status_for_error(exc), content=env.model_dump())
+
+
+async def error_handler_request_validation(
+    request: Request, exc: RequestValidationError
+) -> Response:
+    trace_id = getattr(request.state, "trace_id", None)
+    err = Datam8ValidationError(message="Invalid request.", details={"errors": exc.errors()})
+    env = err.to_envelope(trace_id=trace_id)
+    return JSONResponse(status_code=400, content=env.model_dump())
+
+
+async def error_handler_unexpected(request: Request, exc: Exception) -> Response:
+    trace_id = getattr(request.state, "trace_id", None)
+    env = Datam8Error(
+        code="unexpected",
+        message=str(exc),
+        details={"type": type(exc).__name__},
+        hint=None,
+        exit_code=10,
+    ).to_envelope(trace_id=trace_id)
+    return JSONResponse(status_code=500, content=env.model_dump())

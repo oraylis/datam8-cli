@@ -280,14 +280,17 @@ class SqlServer(Plugin):
                         )
                     ),
                     "numericPrecision": _to_nullable_int(
-                        _first_non_null(row, ["numericPrecision", "NUMERIC_PRECISION", "numeric_precision"])
+                        _first_non_null(
+                            row, ["numericPrecision", "NUMERIC_PRECISION", "numeric_precision"]
+                        )
                     ),
                     "numbericScale": _to_nullable_int(
                         _first_non_null(row, ["numbericScale", "NUMERIC_SCALE", "numeric_scale"])
                     ),
                     "isNullable": _to_bool(is_nullable),
                     "isPrimaryKey": _to_bool(
-                        _first_non_null(row, ["isPrimaryKey", "IS_PRIMARY_KEY", "is_primary_key"]) or False
+                        _first_non_null(row, ["isPrimaryKey", "IS_PRIMARY_KEY", "is_primary_key"])
+                        or False
                     ),
                 }
             )
