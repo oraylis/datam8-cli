@@ -80,6 +80,29 @@ Status mapping in `src/datam8/api/app.py`:
 - `PUT /entities/{locator:path}`
 - `PUT /entities/clone`
 - `POST /entities/move`
+- `POST /entities/rename`
+
+`POST /entities/rename` renames a single Base entity inside its existing Base collection file. It is not used for model entities or folders; those continue to use `POST /entities/move`.
+
+Request:
+
+```json
+{
+  "from": "/dataTypes/OldName",
+  "to": "/dataTypes/NewName",
+  "content": { "name": "NewName" }
+}
+```
+
+`propertyValues` locators include the property folder segment:
+
+```json
+{
+  "from": "/propertyValues/old_property/old_value",
+  "to": "/propertyValues/new_property/new_value",
+  "content": { "property": "new_property", "name": "new_value" }
+}
+```
 
 ### Sources
 

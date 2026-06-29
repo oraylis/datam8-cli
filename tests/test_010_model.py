@@ -27,6 +27,7 @@ from datam8 import errors
 from datam8.model import EntityWrapper, Locator, Model
 from datam8.model.model import EntityFileRef
 from datam8_model.base import EntityType
+from datam8_model.data_type import DataTypeDefinition
 from datam8_model.data_product import DataModule, DataProduct
 from datam8_model.property import PropertyReference, PropertyValue
 
@@ -310,6 +311,83 @@ def test_entity_file_ref_update_property_values_uses_property_and_name(tmp_path:
     assert '"property": "schedules"' in content
     assert '"property": "jobs"' in content
     assert '"name": "sales_daily"' in content
+
+
+def test_entity_file_ref_update_renamed_base_entity_replaces_old_key(tmp_path: Path):
+    file_path = tmp_path / "DataTypes.json"
+    file_path.write_text(
+        """{
+  "type": "dataTypes",
+  "dataTypes": [
+    { "name": "Text", "displayName": "Text", "targets": { "databricks": "string" } },
+    { "name": "Number", "displayName": "Number", "targets": { "databricks": "int" } }
+  ]
+}
+""",
+        encoding="utf-8",
+    )
+
+    old_locator = Locator.from_path("/dataTypes/Text")
+    new_locator = Locator.from_path("/dataTypes/String")
+    file_ref = EntityFileRef(
+        _type=EntityType.DATA_TYPES,
+        file_path=file_path,
+        locators=[new_locator, Locator.from_path("/dataTypes/Number")],
+    )
+    file_ref.renamed_locators[old_locator] = new_locator
+    wrapper = EntityWrapper(
+        locator=new_locator,
+        source_file=file_path,
+        entity=DataTypeDefinition(
+            name="String",
+            displayName="String",
+            targets={"databricks": "string"},
+        ),
+    )
+
+    file_ref.update(wrappers=[wrapper])
+
+    content = file_path.read_text(encoding="utf-8")
+    assert '"name": "Text"' not in content
+    assert '"name": "String"' in content
+    assert '"name": "Number"' in content
+
+
+def test_entity_file_ref_update_renamed_property_value_replaces_old_compound_key(tmp_path: Path):
+    file_path = tmp_path / "PropertyValues.json"
+    file_path.write_text(
+        """{
+  "type": "propertyValues",
+  "propertyValues": [
+    { "name": "daily", "property": "schedules", "displayName": "Daily" },
+    { "name": "daily", "property": "jobs", "displayName": "Daily Job" }
+  ]
+}
+""",
+        encoding="utf-8",
+    )
+
+    old_locator = Locator.from_path("/propertyValues/schedules/daily")
+    new_locator = Locator.from_path("/propertyValues/jobs/weekly")
+    file_ref = EntityFileRef(
+        _type=EntityType.PROPERTY_VALUES,
+        file_path=file_path,
+        locators=[new_locator, Locator.from_path("/propertyValues/jobs/daily")],
+    )
+    file_ref.renamed_locators[old_locator] = new_locator
+    wrapper = EntityWrapper(
+        locator=new_locator,
+        source_file=file_path,
+        entity=PropertyValue(name="weekly", property="jobs", displayName="Weekly Job"),
+    )
+
+    file_ref.update(wrappers=[wrapper])
+
+    content = file_path.read_text(encoding="utf-8")
+    assert '"property": "schedules"' not in content
+    assert '"name": "weekly"' in content
+    assert '"displayName": "Weekly Job"' in content
+    assert '"displayName": "Daily Job"' in content
 
 
 # @parametrize_with_cases("locator", cases=CasesLocator, glob="*_multiple")

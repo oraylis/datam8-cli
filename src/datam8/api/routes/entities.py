@@ -80,6 +80,20 @@ class MoveBody(BaseModel):
     from_: Annotated[str, Field(alias="from")]
     to: Annotated[str, Field(alias="to")]
 
+
+class RenameBody(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    from_: Annotated[str, Field(alias="from")]
+    to: str
+    content: dict[str, Any] | None = None
+
+
+@entities_router.post("/rename")
+async def rename_entity(body: RenameBody) -> SingleItemResponse[model.EntityWrapperVariant]:
+    entity = factory.get_model().rename_entity(body.from_, body.to, body.content)
+    return SingleItemResponse(item=entity)
+
+
 def _get_function_root(locator: model.Locator | str) -> Path:
     loc = model.Locator.from_path(locator) if isinstance(locator, str) else locator
 
