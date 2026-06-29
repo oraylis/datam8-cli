@@ -221,7 +221,7 @@ class DataSourceType(BaseModel):
     """
     pluginId: str | None = None
     """
-    Canonical plugin ID used to connect to this source type (e.g. `builtin:SQLServer`).
+    ID of the plugin used to connect to the source type. If not provided falls back to builtin plugins matching the  name
     """
     connectionProperties: Annotated[Sequence[ConnectionProperty], Field(min_length=1)]
     """
@@ -278,6 +278,95 @@ class SourceOverride(BaseModel):
     @staticmethod
     def from_dict(obj: Any) -> SourceOverride:
         return SourceOverride.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> SourceOverride:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        SourceOverride
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
+        with open(path) as file:
+            model = SourceOverride.model_validate_json(file.read())
+
+        return model
+
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode) as file:
+            file.write(self.model_dump_json(**dump_options))
+
+
+class DataSource(BaseModel):
+    """
+    Defines an external source of data to be loaded with datam8.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
+    name: str
+    displayName: str | None = None
+    description: str | None = None
+    properties: Sequence[property.PropertyReference] | None = None
+    type: str
+    dataTypeMapping: Sequence[SourceDataTypeMapping] | None = None
+    """
+    Optional data type mappings. If not specified, uses defaults from DataSourceTypes. Individual mappings override defaults.
+    """
+    extendedProperties: Mapping[str, str | bool | int | float]
+    """
+    Additional properties specific to the data source
+    """
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj: Any) -> DataSource:
+        return DataSource.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> DataSource:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        DataSource
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
+        with open(path) as file:
+            model = DataSource.model_validate_json(file.read())
+
+        return model
+
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode) as file:
+            file.write(self.model_dump_json(**dump_options))
 
 
 class SourceObject(BaseModel):
@@ -364,67 +453,6 @@ class SourceField(BaseModel):
         """
         with open(path) as file:
             model = SourceField.model_validate_json(file.read())
-
-        return model
-
-    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
-        with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
-
-
-class DataSource(BaseModel):
-    """
-    Defines an external source of data to be loaded with datam8.
-    """
-
-    model_config = ConfigDict(
-        extra="forbid",
-        populate_by_name=True,
-        validate_assignment=True,
-        revalidate_instances="always",
-    )
-    name: str
-    displayName: str | None = None
-    description: str | None = None
-    properties: Sequence[property.PropertyReference] | None = None
-    type: str
-    dataTypeMapping: Sequence[SourceDataTypeMapping] | None = None
-    """
-    Optional data type mappings. If not specified, uses defaults from DataSourceTypes. Individual mappings override defaults.
-    """
-    extendedProperties: Mapping[str, str | bool | int | float]
-    """
-    Additional properties specific to the data source
-    """
-
-    def to_dict(self) -> dict:
-        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
-
-    @staticmethod
-    def from_dict(obj: Any) -> DataSource:
-        return DataSource.model_validate(obj, from_attributes=False)
-
-    @staticmethod
-    def from_json_file(path: Path) -> DataSource:
-        """Loads ands validates a json file from the given path.
-
-        Parameters
-        ----------
-        path : Path
-          The path to the json to be loaded into the model.
-
-        Returns
-        -------
-        DataSource
-            Instantiated and validated pydantic model
-
-        Raises
-        ------
-        ValidationError
-            If the data in the json file does not much the model constraints.
-        """
-        with open(path) as file:
-            model = DataSource.model_validate_json(file.read())
 
         return model
 

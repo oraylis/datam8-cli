@@ -134,6 +134,7 @@ def _move_function_directory_if_present(from_locator: str, to_locator: str) -> N
 
     from_dir.rename(to_dir)
 
+
 @entities_router.post("/move")
 async def move_entities(body: MoveBody) -> MultiItemResponse[model.EntityWrapperVariant]:
     entities = factory.get_model().move_entities(body.from_, body.to)

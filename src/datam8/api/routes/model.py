@@ -104,6 +104,7 @@ class UnsavedResponse(BaseModel):
     changed: list[model.Locator]
     deleted: list[model.Locator]
 
+
 class FunctionSourceBody(BaseModel):
     locator: str
     source: str
@@ -162,6 +163,7 @@ def _prune_empty_dirs_until_entity_root(file_path: Path, entity_root: Path) -> N
             break
         current = current.parent
 
+
 @model_router.get("/unsaved")
 async def get_unsaved() -> UnsavedResponse:
     changed, deleted = factory.get_model().get_unsaved_entities()
@@ -171,6 +173,7 @@ async def get_unsaved() -> UnsavedResponse:
         deleted=deleted,
     )
     return response
+
 
 @model_router.get("/function/source")
 async def get_function_source(

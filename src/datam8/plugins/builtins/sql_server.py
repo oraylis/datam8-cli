@@ -77,13 +77,14 @@ class SqlServer(Plugin):
         optional: dict[str, Any] = {}
 
         for cp in self.get_connection_properties():
-            match [cp.required, cp.default, cp.name]:
-                case [True, _, _]:
-                    mandatory[cp.name] = self.extended_properties[cp.name]
-                case [False, None, name] if name in self.extended_properties:
+            name = str(cp.name)
+            if cp.required:
+                mandatory[name] = self.extended_properties[name]
+            elif cp.default is None:
+                if name in self.extended_properties:
                     optional[name] = self.extended_properties[name]
-                case [False, _ as default, _ as name] if name in self.extended_properties:
-                    optional[name] = self.extended_properties.get(name, default)
+            elif name in self.extended_properties:
+                optional[name] = self.extended_properties.get(name, cp.default)
 
         match mandatory:
             case {"authMode": "sql_user", **rest}:  # noqa: F841
@@ -112,12 +113,13 @@ class SqlServer(Plugin):
 
         masked_uri = uri
         for cp in self.get_connection_properties():
+            name = str(cp.name)
             if (
-                cp.name in {**mandatory, **optional}
+                name in {**mandatory, **optional}
                 and cp.type == ConnectionPropertyValueType.SECRET
             ):
-                to_replace = mandatory.get(cp.name, optional.get(cp.name))
-                masked_uri = masked_uri.replace(to_replace, "*****")
+                to_replace = mandatory.get(name, optional.get(name))
+                masked_uri = masked_uri.replace(str(to_replace), "*****")
 
         self.logger.debug(f"Created connection string: {masked_uri}")
 
@@ -280,14 +282,17 @@ class SqlServer(Plugin):
                         )
                     ),
                     "numericPrecision": _to_nullable_int(
-                        _first_non_null(row, ["numericPrecision", "NUMERIC_PRECISION", "numeric_precision"])
+                        _first_non_null(
+                            row, ["numericPrecision", "NUMERIC_PRECISION", "numeric_precision"]
+                        )
                     ),
                     "numbericScale": _to_nullable_int(
                         _first_non_null(row, ["numbericScale", "NUMERIC_SCALE", "numeric_scale"])
                     ),
                     "isNullable": _to_bool(is_nullable),
                     "isPrimaryKey": _to_bool(
-                        _first_non_null(row, ["isPrimaryKey", "IS_PRIMARY_KEY", "is_primary_key"]) or False
+                        _first_non_null(row, ["isPrimaryKey", "IS_PRIMARY_KEY", "is_primary_key"])
+                        or False
                     ),
                 }
             )

@@ -535,7 +535,7 @@ class Model:
         locator = _ensure_locator(locator)
 
         if self.has_locator(locator):
-            wrapper: EntityWrapper[b.BaseEntityType] = getattr(self, locator.entityType)[locator]
+            wrapper = cast(EntityWrapperVariant, getattr(self, locator.entityType)[locator])
         else:
             raise utils.create_error(errors.EntityNotFoundError(str(locator)))
 
@@ -565,7 +565,9 @@ class Model:
 
         base_file_path = self.get_base_path_for_entity_type(_type)
         if _type == b.EntityType.MODEL_ENTITIES:
-            source_file_path = Path(base_file_path, *_locator.folders, f"{_locator.entityName}.json")
+            source_file_path = Path(
+                base_file_path, *_locator.folders, f"{_locator.entityName}.json"
+            )
         elif _type == b.EntityType.FOLDERS:
             if _locator.entityName is None:
                 raise utils.create_error(
@@ -579,14 +581,14 @@ class Model:
             )
         else:
             existing_refs = [
-                ref.file_path
-                for ref in self._model_files.values()
-                if ref._type == _type
+                ref.file_path for ref in self._model_files.values() if ref._type == _type
             ]
             if existing_refs:
                 source_file_path = sorted(existing_refs, key=lambda p: len(str(p)))[0]
             else:
-                source_file_path = Path(base_file_path, *_locator.folders) / _default_base_file_name_for_type(_type)
+                source_file_path = Path(
+                    base_file_path, *_locator.folders
+                ) / _default_base_file_name_for_type(_type)
 
         content["name"] = _locator.entityName
         if _type == b.EntityType.MODEL_ENTITIES:
@@ -682,8 +684,8 @@ class Model:
         elif len(to_locator.folders) != 0:
             raise utils.create_error(errors.InvalidLocatorError(str(to_locator)))
 
-        entity_dict: EntityDict[b.BaseEntityType] = getattr(self, from_locator.entityType)
-        wrapper = self.get_entity_by_locator(from_locator)
+        entity_dict = cast(EntityDict[b.BaseEntityType], getattr(self, from_locator.entityType))
+        wrapper = cast(EntityWrapper[b.BaseEntityType], self.get_entity_by_locator(from_locator))
         source_file = wrapper.source_file
 
         del entity_dict[from_locator]
@@ -711,7 +713,7 @@ class Model:
 
         logger.debug(f"Renamed {from_locator} to {to_locator}")
 
-        return wrapper
+        return cast(EntityWrapperVariant, wrapper)
 
     def _get_subtree_root_locator(self, locator: Locator) -> Locator:
         if locator.entityName is None:
@@ -722,7 +724,6 @@ class Model:
             folders=[*locator.folders, locator.entityName],
             entityName=None,
         )
-
 
     def get_entities_for_locator(self, locator: Locator | str) -> list[EntityWrapperVariant]:
         search_locator = _ensure_locator(locator)
@@ -768,7 +769,6 @@ class Model:
                 _add(wrapper)
 
         return entities
-
 
     def _get_rebased_locator(
         self,
@@ -908,10 +908,10 @@ class Model:
                 Exception(f"Target of entity move does already exist: {new_locator}")
             )
 
-        entity_dict: EntityDict[b.BaseEntityType] = getattr(self, _from.entityType)
+        entity_dict = cast(EntityDict[b.BaseEntityType], getattr(self, _from.entityType))
 
         # create a copy from the old wrapper and mark it for deletion
-        from_wrapper = self.get_entity_by_locator(_from)
+        from_wrapper = cast(EntityWrapper[b.BaseEntityType], self.get_entity_by_locator(_from))
         from_wrapper._deleted = True
 
         # reset the cloned wrapper with the new locator and mark it as changed and resolv property references
@@ -949,7 +949,7 @@ class Model:
 
         logger.debug(f"Moved {_from} to {new_locator}")
 
-        return to_wrapper
+        return cast(EntityWrapperVariant, to_wrapper)
 
     def get_entities_by_property(
         self,
@@ -1116,7 +1116,10 @@ class Model:
         self.cleanup_entity_file_references()
 
         for wrapper in deleted_wrappers:
-            if wrapper.locator.entityType == b.EntityType.FOLDERS.value and wrapper.locator.entityName:
+            if (
+                wrapper.locator.entityType == b.EntityType.FOLDERS.value
+                and wrapper.locator.entityName
+            ):
                 self.cleanup_directories(
                     Path(
                         config.solution_folder_path / self.solution.basePath,
@@ -1244,9 +1247,7 @@ class EntityFileRef:
                 return True
             case b.EntityType.FOLDERS:
                 wrapper_locators = [w.locator for w in wrappers]
-                remaining_locators = [
-                    loc for loc in self.locators if loc not in wrapper_locators
-                ]
+                remaining_locators = [loc for loc in self.locators if loc not in wrapper_locators]
 
                 if len(remaining_locators) == 0:
                     utils.delete_path(self.file_path)
@@ -1254,12 +1255,8 @@ class EntityFileRef:
                     return True
 
                 current_content = b.BaseEntities.from_json_file(self.file_path)
-                entities: list[b.BaseEntityType] = getattr(
-                    current_content.root, self._type.value
-                )
-                remaining_names = {
-                    loc.entityName for loc in remaining_locators if loc.entityName
-                }
+                entities: list[b.BaseEntityType] = getattr(current_content.root, self._type.value)
+                remaining_names = {loc.entityName for loc in remaining_locators if loc.entityName}
                 entities = [e for e in entities if e.name in remaining_names]
 
                 if len(entities) == 0:
@@ -1276,9 +1273,12 @@ class EntityFileRef:
 
             case b.EntityType.PROPERTY_VALUES:
                 current_content = b.BaseEntities.from_json_file(self.file_path)
-                entities: list[b.BaseEntityType] = getattr(current_content.root, self._type.value)
+                entities = cast(
+                    list[b.BaseEntityType], getattr(current_content.root, self._type.value)
+                )
 
-                wrapper_keys = {(w.entity.property, w.entity.name) for w in wrappers}
+                property_wrappers = cast(list[EntityWrapper[p.PropertyValue]], wrappers)
+                wrapper_keys = {(w.entity.property, w.entity.name) for w in property_wrappers}
                 entities = [
                     e
                     for e in entities
@@ -1308,7 +1308,9 @@ class EntityFileRef:
 
             case _:
                 current_content = b.BaseEntities.from_json_file(self.file_path)
-                entities: list[b.BaseEntityType] = getattr(current_content.root, self._type.value)
+                entities = cast(
+                    list[b.BaseEntityType], getattr(current_content.root, self._type.value)
+                )
 
                 wrapper_names = [w.entity.name for w in wrappers]
                 entities = [e for e in entities if e.name not in wrapper_names]
@@ -1356,7 +1358,9 @@ class EntityFileRef:
                 current_content = cast(m.ModelEntity, wrappers[0].entity)
             case _:
                 current_content = b.BaseEntities.from_json_file(self.file_path)
-                entities: b.BaseEntityType = getattr(current_content.root, self._type.value)
+                entities = cast(
+                    list[b.BaseEntityType], getattr(current_content.root, self._type.value)
+                )
 
                 for wrapper in wrappers:
                     previous_locator = next(

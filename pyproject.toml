@@ -30,6 +30,9 @@ api = [
 sql = [
   "connectorx~=0.4.0",
 ]
+databricks = [
+  "databricks-sdk~=0.117.0",
+]
 
 [project.scripts]
 datam8 = "datam8.app:app"
