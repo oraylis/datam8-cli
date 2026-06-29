@@ -27,8 +27,8 @@ from datam8 import errors
 from datam8.model import EntityWrapper, Locator, Model
 from datam8.model.model import EntityFileRef
 from datam8_model.base import EntityType
-from datam8_model.data_type import DataTypeDefinition
 from datam8_model.data_product import DataModule, DataProduct
+from datam8_model.data_type import DataTypeDefinition
 from datam8_model.property import PropertyReference, PropertyValue
 
 
