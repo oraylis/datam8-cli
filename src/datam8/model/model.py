@@ -436,7 +436,7 @@ class Model:
 
     def add_entity[T: b.BaseEntityType](
         self, locator: Locator | str, /, content: dict[str, Any] | T
-    ) -> EntityWrapper[b.BaseEntityType] | EntityWrapper[T]:
+    ) -> EntityWrapper[T]:
         _locator = _ensure_locator(locator)
         _type = b.EntityType(_locator.entityType)
         base_file_path = self.get_base_path_for_entity_type(_type)

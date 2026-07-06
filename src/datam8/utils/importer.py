@@ -41,7 +41,7 @@ def enable_target_modules(module_path: pathlib.Path) -> None:
         TargetModuleFinder._path.append(module_path.absolute().as_posix())
 
     if TargetModuleFinder not in sys.meta_path:
-        sys.meta_path.append(TargetModuleFinder)  # type: ignore
+        sys.meta_path.append(TargetModuleFinder)
 
     logger.debug("Configured module paths: %s", TargetModuleFinder._path)
 

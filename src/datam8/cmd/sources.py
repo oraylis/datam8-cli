@@ -17,9 +17,9 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 
+import deepdiff
 import rich
 import typer
-import deepdiff
 from click import Choice
 
 from datam8 import factory, logging, opts, source, utils

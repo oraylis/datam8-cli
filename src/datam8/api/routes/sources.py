@@ -15,14 +15,16 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
-from typing import Any
+import json
+from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, ConfigDict, Field
 
-from datam8 import factory
-from datam8.model import Locator
-from datam8_model.data_source import SourceField, SourceObject
-from datam8_model.model import ExternalModelSource
+from datam8 import factory, source
+from datam8.model import EntityWrapper, Locator
+from datam8_model.data_source import SourceField
+from datam8_model.model import ExternalModelSource, ModelEntity
 
 from .responses import MultiItemResponse
 
@@ -72,14 +74,38 @@ async def preview(
     raise HTTPException(status_code=404, detail="No data to preview")
 
 
-@sources_router.put("/{data_source}/locations/{source_location}/import")
-async def import_for_table(data_source: str, source_location: str) -> list[dict[str, Any]]:
-    raise HTTPException(status_code=404, detail="coming soon...")
+class ImportBody(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    locator: str
+    source_location: Annotated[str, Field(alias="sourceLocation")]
 
 
-@sources_router.get("/compare/{locator}")
-async def compare_with_source(locator: str):
-    raise HTTPException(status_code=404, detail="coming soon...")
+@sources_router.put("/{data_source}/import")
+async def import_(data_source: str, body: ImportBody) -> EntityWrapper[ModelEntity]:
+    model_ = factory.get_model()
+    new_wrapper = source.import_from_source(
+        data_source, body.source_location, body.locator, model=model_
+    )
+    model_.save(body.locator)
+    return new_wrapper
+
+
+class CompareResponse(BaseModel):
+    wrapper: EntityWrapper[ModelEntity]
+    diff: dict[str, Any]
+    has_changes: bool
+
+
+@sources_router.get("/compare")
+async def compare_with_source(locator: str) -> CompareResponse:
+    model_ = factory.get_model()
+    wrapper, diff = source.compare_entity_with_source(locator, model=model_)
+    return CompareResponse(
+        # convert custom objects from DeepDiff into plain dicts/objects
+        wrapper=wrapper,
+        diff=json.loads(diff.to_json()),
+        has_changes=wrapper._changed,
+    )
 
 
 #

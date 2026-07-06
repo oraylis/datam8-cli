@@ -139,7 +139,7 @@ class CsvFile(Plugin):
                 "maxLength": pl.Int64,
             },
         )
-        return TableMetadata(metadata, SourceObject(schema_=None, name=table, type="FILE"))
+        return TableMetadata(metadata, SourceObject(schema=None, name=table, type="FILE"))
 
     @classmethod
     def manifest(cls) -> PluginManifest:
@@ -158,7 +158,7 @@ class CsvFile(Plugin):
     def get_auth_modes() -> list[AuthMode]:
         auth_modes = [
             AuthMode(
-                name="no_auth", displayName="No Auth / Anonymouse", required=["path", "protocol"]
+                name="no_auth", displayName="No Auth / Anonymous", required=["path", "protocol"]
             ),
         ]
         return auth_modes

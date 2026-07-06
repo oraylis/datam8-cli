@@ -118,13 +118,13 @@ class SqlServer(Plugin):
             match [cp.required, cp.default, cp.name]:
                 case [True, _, _]:
                     mandatory[cp.name] = self.extended_properties[cp.name]
-                case [False, None, name] if name in self.extended_properties:
+                case [False, None, str() as name] if name in self.extended_properties:
                     optional[name] = self.extended_properties[name]
-                case [False, _ as default, _ as name] if name in self.extended_properties:
+                case [False, _ as default, str() as name] if name in self.extended_properties:
                     optional[name] = self.extended_properties.get(name, default)
 
         match mandatory:
-            case {"authMode": "sql_user", **rest}:  # noqa: F841
+            case {"authMode": "sql_user"}:
                 assert "password" in optional
                 assert "username" in optional
 
@@ -133,12 +133,12 @@ class SqlServer(Plugin):
 
                 uri = "mssql://{username}:{password}@{host}:{port}/{database}"
 
-            case {"authMode": "windows", **rest}:  # noqa: F841
+            case {"authMode": "windows"}:
                 assert "trusted_connection" in optional
 
                 uri = "mssql://@{host}:{port}/{database}"
 
-            case {"authMode": _ as auth_mode, **rest}:  # noqa: F841
+            case {"authMode": _ as auth_mode}:
                 raise utils.create_error(
                     ValueError(f"Unknown authMode {auth_mode} in {self._data_source.name}")
                 )
@@ -281,7 +281,7 @@ class SqlServer(Plugin):
                 f"Table [{schema}].[{table}] does not exist in '{self._data_source.name}'"
             )
 
-        return TableMetadata(result, SourceObject(schema_=schema, name=table, type="TABLE/VIEW"))
+        return TableMetadata(result, SourceObject(schema=schema, name=table, type="TABLE/VIEW"))
 
     @classmethod
     def validate_connection(

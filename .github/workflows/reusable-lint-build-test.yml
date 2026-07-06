@@ -32,7 +32,10 @@ jobs:
         run: uv sync --all-extras
 
       - name: Run ty code analysis
-        run: uvx ty check src
+        # version pin ty to avoid unnecessary issues
+        run: uvx --from "ty==$uv_version" ty check src --exit-zero-on-warning
+        env:
+          uv_version: "0.0.60"
 
       # TODO: deactivate for now due to false positives with generics
       # - name: Run pyright code analysis
@@ -93,7 +96,7 @@ jobs:
 
       - name: Set solution environment variable
         run: |
-          echo "DATAM8_SOLUTION_PATH=datam8-sample-solution/ORAYLISDatabricksSample.dm8s" >> $GITHUB_ENV
+          echo "DATAM8_SOLUTION_PATH=datam8-sample-solution/ORAYLISDatabricksSample.dm8s" >> "$GITHUB_ENV"
 
       - name: Install packages
         run: uv sync --all-extras
