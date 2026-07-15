@@ -24,7 +24,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from . import attribute, data_type, property
 
@@ -355,7 +355,7 @@ class ModelTransformation(BaseModel):
 
 class ModelRelationship(BaseModel):
     """
-    Maps attributes to a target location.
+    Maps attributes to an internal or external target location.
     """
 
     model_config = ConfigDict(
@@ -364,9 +364,18 @@ class ModelRelationship(BaseModel):
         validate_assignment=True,
         revalidate_instances="always",
     )
-    targetLocation: int
+    dataSource: Annotated[str, Field(min_length=1)] | None = None
+    targetLocation: int | Annotated[str, Field(min_length=1)]
     alias: str | None = None
     attributes: Annotated[Sequence[ModelAttributeMapping], Field(min_length=1)]
+
+    @model_validator(mode="after")
+    def validate_target_kind(self) -> ModelRelationship:
+        if self.dataSource is None and not isinstance(self.targetLocation, int):
+            raise ValueError("Internal relationships require an integer targetLocation.")
+        if self.dataSource is not None and not isinstance(self.targetLocation, str):
+            raise ValueError("External relationships require a string targetLocation.")
+        return self
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")

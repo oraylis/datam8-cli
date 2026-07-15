@@ -72,6 +72,18 @@ Status mapping in `src/datam8/api/app.py`:
 - `DELETE /model/function/source`
 - `POST /model/function/rename`
 
+Model entity relationships support internal and external targets:
+- Internal relationship:
+  ```json
+  { "targetLocation": 1, "attributes": [{ "sourceName": "CustomerId", "targetName": "Id" }] }
+  ```
+- External relationship:
+  ```json
+  { "dataSource": "crm", "targetLocation": "dbo.Customer", "attributes": [{ "sourceName": "CustomerId", "targetName": "Id" }] }
+  ```
+
+`dataSource` identifies external relationships. Relationships without `dataSource` use an internal model entity id in `targetLocation`.
+
 ### Entities
 
 - `GET /entities/{locator:path}`
