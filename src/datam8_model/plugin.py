@@ -35,6 +35,7 @@ class Capability(Enum):
     UI_SCHEMA = "uiSchema"
     VALIDATION_CONNECTION = "validationConnection"
     METADATA = "metadata"
+    PREVIEW_DATA = "previewData"
 
 
 class UiField(BaseModel):

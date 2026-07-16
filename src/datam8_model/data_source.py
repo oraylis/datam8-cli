@@ -424,6 +424,7 @@ class SourceField(BaseModel):
     isPrimaryKey: bool | None = None
     description: str | None = None
     properties: Sequence[property.PropertyReference] | None = None
+    relationships: Sequence[dict[str, Any]] | None = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")

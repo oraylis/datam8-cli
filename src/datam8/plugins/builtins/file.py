@@ -40,6 +40,7 @@ manifest_csv = PluginManifest(
     entryPoint="datam8.plugins.builtins.file:CsvFile",
     capabilities=[
         Capability.METADATA,
+        Capability.PREVIEW_DATA,
         Capability.UI_SCHEMA,
         Capability.VALIDATION_CONNECTION,
     ],

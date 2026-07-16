@@ -22,6 +22,12 @@ Plugin metadata uses `datam8_model.plugin.PluginManifest` and includes:
 - `entryPoint` (`module.path:ClassName`)
 - `capabilities`
 
+Known capabilities:
+- `uiSchema`
+- `validationConnection`
+- `metadata`
+- `previewData` for plugins that support the existing source preview endpoints.
+
 ## Loading model
 
 `PluginManager` combines:
@@ -53,6 +59,7 @@ Source browsing/testing endpoints:
 - `GET /sources/{data_source}/usages`
 
 Note: import endpoints exist but currently return `404` with "comming soon...".
+Table metadata fields may include optional per-column `relationships` entries for external model relationships discovered by source metadata plugins.
 
 ## Secrets
 

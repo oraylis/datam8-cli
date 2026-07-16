@@ -129,9 +129,19 @@ def test_source_models_allow_optional_description_and_properties() -> None:
             "isPrimaryKey": True,
             "description": "Technical customer key",
             "properties": [{"property": "classification", "value": "restricted"}],
+            "relationships": [
+                {
+                    "dataSource": "edwh-drillisch-prod",
+                    "targetLocation": "[dm_dom_contract].[contract_instance]",
+                    "sourceName": "customer_id",
+                    "targetName": "subscriber_id",
+                }
+            ],
         }
     )
     assert column.description == "Technical customer key"
     assert column.properties is not None
     assert column.properties[0].property == "classification"
     assert column.properties[0].value == "restricted"
+    assert column.relationships is not None
+    assert column.relationships[0]["targetName"] == "subscriber_id"
