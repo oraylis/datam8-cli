@@ -44,6 +44,7 @@ class UiField(BaseModel):
     type: str
     required: bool
     default: str | bool | int | float | None = None
+    enum: Sequence[str] | None = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
