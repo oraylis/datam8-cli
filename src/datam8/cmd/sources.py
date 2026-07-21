@@ -16,11 +16,13 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-from datetime import UTC, datetime
 
+import deepdiff
+import rich
 import typer
+from click import Choice
 
-from datam8 import factory, logging, opts, utils
+from datam8 import factory, logging, opts, source, utils
 
 from . import common
 
@@ -36,79 +38,59 @@ app = typer.Typer(
 )
 
 
-@app.command()
-def list_tables(
+@app.command("list")
+def list_(
     data_source_name: opts.DataSource,
     solution_path: opts.SolutionPath,
-    schema_name: opts.SchemaName = None,
+    source_location: opts.SourceLocation | None = None,
     log_level: opts.LogLevel = opts.LogLevels.WARNING,
     version: opts.Version = False,
 ):
-    "List available source tables"
+    "List available objects in a source (schema, tables, etc.)"
     common.main_callback(solution_path, log_level, version)
 
     plugin = factory.get_plugin_for_data_source(data_source_name)
-    tables = plugin.list_tables(schema_name)
+    schemas = plugin.list_source(source_location)
 
-    typer.echo(f"Found {len(tables.rows())} source objects")
-    tables.show(None, tbl_hide_column_data_types=True, tbl_hide_dataframe_shape=True)
-
-
-@app.command()
-def list_schemas(
-    data_source_name: opts.DataSource,
-    solution_path: opts.SolutionPath,
-    log_level: opts.LogLevel = opts.LogLevels.WARNING,
-    version: opts.Version = False,
-):
-    "List availabe sources schemas"
-    common.main_callback(solution_path, log_level, version)
-
-    plugin = factory.get_plugin_for_data_source(data_source_name)
-    schemas = plugin.list_schemas()
-
-    typer.echo(f"Found {len(schemas.rows())} schemas")
+    typer.echo(f"Found {len(schemas.rows())} source objects")
     schemas.show(None, tbl_hide_column_data_types=True, tbl_hide_dataframe_shape=True)
 
 
 @app.command()
 def preview(
     data_source_name: opts.DataSource,
-    table_name: opts.TableName,
+    source_location: opts.SourceLocation,
     solution_path: opts.SolutionPath,
-    schema_name: opts.SchemaName = None,
     limit: opts.Limit = 10,
     col_limit: opts.ColLimit = None,
     log_level: opts.LogLevel = opts.LogLevels.WARNING,
     version: opts.Version = False,
 ):
-    "List available plugins"
+    "Preview data from a source location"
     common.main_callback(solution_path, log_level, version)
 
     plugin = factory.get_plugin_for_data_source(data_source_name)
-    preview = plugin.preview_data(table_name, schema_name, limit=limit)
+    preview = plugin.preview_data(source_location, limit=limit)
 
-    for df in preview.collect_batches(chunk_size=limit):
-        df.show(
-            limit=limit,
-            tbl_hide_dataframe_shape=True,
-            tbl_cols=col_limit or len(preview.collect_schema().names()),
-        )
+    batches = preview.collect_batches(chunk_size=limit)
 
-        # since the limit is pushed down to the source, there will be only one batch
-        # batches are mostly used to safely get a dataframe from a LazyFrame
-        raise typer.Exit(0)
+    # since the limit is pushed down to the source, there will be only one batch
+    # batches are mostly used to safely get a dataframe from a LazyFrame
+    df = next(batches)
 
-    typer.echo(f"No data found in {table_name}")
+    df.show(
+        limit=limit,
+        tbl_hide_dataframe_shape=True,
+        tbl_cols=col_limit or len(preview.collect_schema().names()),
+    )
 
 
 @app.command("import")
 def import_(
-    data_source_name: opts.DataSource,
-    table_name: opts.TableName,
+    data_source: opts.DataSource,
+    source_location: opts.SourceLocation,
     locator: opts.Locator,
     solution_path: opts.SolutionPath,
-    schema_name: opts.SchemaName = None,
     log_level: opts.LogLevel = opts.LogLevels.WARNING,
     version: opts.Version = False,
 ):
@@ -116,60 +98,98 @@ def import_(
     common.main_callback(solution_path, log_level, version)
 
     model_ = factory.get_model()
+
     if model_.has_locator(locator):
         raise utils.create_error("Entity already exists for this locator")
 
-    pm = factory.get_plugin_for_data_source(data_source_name)
-    metadata = pm.get_table_metadata(table_name, schema_name)
-    _ = model_.add_entity(
-        locator,
-        content={
-            "sources": [
-                {
-                    "dataSource": data_source_name,
-                    "sourceLocation": f"[{schema_name}].[{table_name}]",
-                }
-            ],
-            "attributes": [
-                {
-                    "ordinalNumber": 1,
-                    "name": row[0],
-                    "attributeType": "Generic String",
-                    "dataType": {
-                        "type": row[4],
-                        "nullable": True if row[2] == "YES" else False,
-                    },
-                    "dateAdded": datetime.now(UTC),
-                }
-                for row in metadata.rows()
-            ],
-            "transformations": [],
-            "relationships": [],
-        },
-    )
+    _ = source.import_from_source(data_source, source_location, locator, model=model_)
+
     model_.save(locator)
 
     typer.echo(f"Source table imported into model at {locator}")
 
 
 @app.command()
-def table_metadata(
-    data_source_name: opts.DataSource,
-    table_name: opts.TableName,
+def refresh(
+    locator: opts.Locator,
     solution_path: opts.SolutionPath,
-    schema_name: opts.SchemaName = None,
     log_level: opts.LogLevel = opts.LogLevels.WARNING,
     version: opts.Version = False,
 ):
-    "Retrieve table metadata from a source"
+    common.main_callback(solution_path, log_level, version)
+
+    model_ = factory.get_model()
+
+    wrapper, diff = source.compare_entity_with_source(locator, model=model_)
+
+    if not diff:
+        typer.echo(f"No changes detected for '{locator}'")
+        raise typer.Exit(0)
+
+    typer.echo(
+        f"Detected changes from sources: {[src.sourceLocation for src in wrapper.entity.sources]}"
+    )
+
+    # visualize the diff in a custom format, because the DeepDiffs COLOZRED_[COMPACT_]VIEW contain a
+    # bug that messes up the visual diff
+
+    if "values_changed" in diff:
+        typer.echo("\nChanged Values")
+        for path, change in diff["values_changed"].items():
+            typer.echo(f" - {path}: ", nl=False)
+            rich.print(f"{change['old_value']} -> {change['new_value']}")
+
+    change_types = ("attribute", "iterable_item", "dictionary_item")
+    change_operations = ("added", "removed")
+    plain_entity = wrapper.entity.model_dump(mode="json")
+
+    def print_change(key: str, diff, t, co):
+        typer.echo(f"\n{co.capitalize()} {t}")
+        for _, path in enumerate(diff[key]):
+            typer.echo(f" - {path}: ", nl=False)
+            rich.print(deepdiff.extract(plain_entity, path))
+
+    for t in change_types:
+        for co in change_operations:
+            key = f"{t}_{co}"
+            if key in diff:
+                print_change(key, diff, t, co)
+
+    ok = typer.prompt(
+        "Should these changes be imported [yN]",
+        default="n",
+        show_choices=False,
+        show_default=False,
+        type=Choice(choices=["y", "Y", "n", "N"]),
+        value_proc=lambda val: val.lower() == "y",
+    )
+
+    if not ok:
+        raise typer.Exit(1)
+
+    model_.modelEntities[wrapper.locator].update(**wrapper.entity.model_dump())
+    model_.save()
+
+    typer.echo("Saved detected changes")
+
+
+@app.command()
+def metadata(
+    data_source_name: opts.DataSource,
+    source_location: opts.SourceLocation,
+    solution_path: opts.SolutionPath,
+    log_level: opts.LogLevel = opts.LogLevels.WARNING,
+    version: opts.Version = False,
+):
+    "Retrieve metadata from a source object"
     common.main_callback(solution_path, log_level, version)
 
     plugin = factory.get_plugin_for_data_source(data_source_name)
-    metadata = plugin.get_table_metadata(table_name, schema_name)
-    metadata.show(
+    metadata = plugin.get_table_metadata(source_location)
+    metadata.dataframe.show(
         limit=None,
         tbl_hide_dataframe_shape=True,
-        tbl_cols=len(metadata.columns),
+        tbl_cols=8,
     )
 
 

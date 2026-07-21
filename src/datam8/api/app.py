@@ -76,11 +76,8 @@ def _bind(host: str, port: int) -> tuple[socket.socket, int]:
     return sock, actual_port
 
 
-def create_server(
-    host: str, port: int, token: str | None = None, enable_openapi: bool = False
-) -> uvicorn.Server:
+def create_app(*, token: str | None = None, enable_openapi: bool = False) -> FastAPI:
     """Create and configure the HTTP API application."""
-    base_url = f"http://{host}:{port}"
 
     if enable_openapi:
         app = FastAPI(title="DataM8 API", version=config.get_version())
@@ -183,6 +180,12 @@ def create_server(
         return JSONResponse(status_code=500, content=env.model_dump())
 
     app.include_router(router)
+
+    return app
+
+
+def create_server(*, host: str, port: int, app: FastAPI) -> uvicorn.Server:
+    base_url = f"http://{host}:{port}"
 
     @app.on_event("startup")
     async def _emit_ready() -> None:

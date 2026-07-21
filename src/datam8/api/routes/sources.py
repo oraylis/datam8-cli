@@ -15,14 +15,16 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
-from typing import Any
+import json
+from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, ConfigDict, Field
 
-from datam8 import factory
-from datam8.model import Locator
-from datam8_model.data_source import SourceField, SourceObject
-from datam8_model.model import ExternalModelSource
+from datam8 import factory, source
+from datam8.model import EntityWrapper, Locator
+from datam8_model.data_source import SourceField
+from datam8_model.model import ExternalModelSource, ModelEntity
 
 from .responses import MultiItemResponse
 
@@ -38,84 +40,32 @@ async def test_connection(data_source: str) -> None:
         raise HTTPException(status_code=500, detail=str(error))
 
 
-#
-# schema support
-#
-
-
-@sources_router.get("/{data_source}/schemas")
-async def list_schemas(data_source: str) -> MultiItemResponse[str]:
-    "List available source schema for a data source"
-    plugin = factory.get_plugin_for_data_source(data_source)
-    schemas = [x["schema"] for x in plugin.list_schemas().to_dicts()]
-
-    return MultiItemResponse.from_list(schemas)
-
-
-@sources_router.get("/{data_source}/schemas/{schema}/tables")
-async def list_tables_for_schema(data_source: str, schema: str) -> MultiItemResponse[SourceObject]:
-    "List available source tables for a datasource connector"
-    plugin = factory.get_plugin_for_data_source(data_source)
-    tables = [SourceObject.from_dict(o) for o in plugin.list_tables(schema).to_dicts()]
-    return MultiItemResponse.from_list(tables)
-
-
-@sources_router.get("/{data_source}/schemas/{schema}/tables/{table}")
-async def get_table_metadata_for_schema(
-    data_source: str, schema: str, table: str
-) -> MultiItemResponse[SourceField]:
-    plugin = factory.get_plugin_for_data_source(data_source)
-    metadata = [
-        SourceField.from_dict(sf) for sf in plugin.get_table_metadata(table, schema).to_dicts()
-    ]
-    return MultiItemResponse.from_list(metadata)
-
-
-@sources_router.get("/{data_source}/schemas/{schema}/tables/{table}/preview")
-async def preview_for_schema(
-    data_source: str, schema: str, table: str, limit: int = 10
+@sources_router.get("/{data_source}/locations")
+async def list_tables(
+    data_source: str, source_location: str | None = None
 ) -> MultiItemResponse[dict[str, Any]]:
-    plugin = factory.get_plugin_for_data_source(data_source)
-    preview = plugin.preview_data(table, schema, limit=limit)
-
-    for df in preview.collect_batches(chunk_size=limit):
-        rows = df.to_dicts()
-        return MultiItemResponse.from_list(rows)
-
-    raise HTTPException(status_code=404, detail="No data to preview")
-
-
-@sources_router.put("/{data_source}/schemas/{schema}/tables/{table}/import")
-async def import_for_schema(data_source: str, schema: str, table: str) -> list[dict[str, Any]]:
-    raise HTTPException(status_code=404, detail="comming soon...")
-
-
-#
-# no schema support
-#
-
-
-@sources_router.get("/{data_source}/tables")
-async def list_tables(data_source: str) -> MultiItemResponse[SourceObject]:
     "List available source tables if a source does not support schemas"
     plugin = factory.get_plugin_for_data_source(data_source)
-    tables = [SourceObject.from_dict(o) for o in plugin.list_tables().to_dicts()]
-    return MultiItemResponse.from_list(tables)
+    locations = plugin.list_source(source_location).to_dicts()
+    return MultiItemResponse.from_list(locations)
 
 
-@sources_router.get("/{data_source}/tables/{table}")
-async def get_table_metadata(data_source: str, table: str) -> MultiItemResponse[SourceField]:
+@sources_router.get("/{data_source}/locations/metadata")
+async def get_table_metadata(
+    data_source: str, source_location: str
+) -> MultiItemResponse[SourceField]:
     plugin = factory.get_plugin_for_data_source(data_source)
-    metadata = [SourceField.from_dict(o) for o in plugin.get_table_metadata(table).to_dicts()]
-    return MultiItemResponse.from_list(metadata)
+    metadata = plugin.get_table_metadata(source_location)
+    source_fields = list(metadata.iter_source_fields())
+    return MultiItemResponse.from_list(source_fields)
 
 
-@sources_router.get("/{data_source}/tables/{table}/preview")
+@sources_router.get("/{data_source}/locations/preview")
 async def preview(
-    data_source: str, table: str, limit: int = 10
+    data_source: str, source_location: str, limit: int = 10
 ) -> MultiItemResponse[dict[str, Any]]:
     plugin = factory.get_plugin_for_data_source(data_source)
-    preview = plugin.preview_data(table, limit=limit)
+    preview = plugin.preview_data(source_location, limit=limit)
 
     for df in preview.collect_batches(chunk_size=limit):
         rows = df.to_dicts()
@@ -124,9 +74,38 @@ async def preview(
     raise HTTPException(status_code=404, detail="No data to preview")
 
 
-@sources_router.put("/{data_source}/tables/{table}/import")
-async def import_for_table(data_source: str, table: str) -> list[dict[str, Any]]:
-    raise HTTPException(status_code=404, detail="comming soon...")
+class ImportBody(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    locator: str
+    source_location: Annotated[str, Field(alias="sourceLocation")]
+
+
+@sources_router.put("/{data_source}/import")
+async def import_(data_source: str, body: ImportBody) -> EntityWrapper[ModelEntity]:
+    model_ = factory.get_model()
+    new_wrapper = source.import_from_source(
+        data_source, body.source_location, body.locator, model=model_
+    )
+    model_.save(body.locator)
+    return new_wrapper
+
+
+class CompareResponse(BaseModel):
+    wrapper: EntityWrapper[ModelEntity]
+    diff: dict[str, Any]
+    has_changes: bool
+
+
+@sources_router.get("/compare")
+async def compare_with_source(locator: str) -> CompareResponse:
+    model_ = factory.get_model()
+    wrapper, diff = source.compare_entity_with_source(locator, model=model_)
+    return CompareResponse(
+        # convert custom objects from DeepDiff into plain dicts/objects
+        wrapper=wrapper,
+        diff=json.loads(diff.to_json()),
+        has_changes=wrapper._changed,
+    )
 
 
 #

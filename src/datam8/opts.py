@@ -76,7 +76,7 @@ SolutionPath = Annotated[
             " the current dir if not provided."
         ),
         envvar="DATAM8_SOLUTION_PATH",
-        default_factory=Path().cwd,
+        default_factory=Path.cwd,
     ),
 ]
 
@@ -187,6 +187,13 @@ OpenApi = Annotated[
     ),
 ]
 
+ExportOpenApi = Annotated[
+    bool,
+    typer.Option(
+        "--export-openapi",
+        help="Export the open api definition to the current directory as datam8-openapi.json",
+    ),
+]
 Selector = Annotated[
     str,
     typer.Argument(help="Entity selector"),
@@ -223,6 +230,13 @@ Version = Annotated[
 DataSource = Annotated[
     str,
     typer.Argument(help="Name of a data source"),
+]
+
+SourceLocation = Annotated[
+    str,
+    typer.Argument(
+        help="A source object identifier, e.g. '[schema].[table]' for SQL Server or only a schema"
+    ),
 ]
 
 Locator = Annotated[

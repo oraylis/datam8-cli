@@ -35,7 +35,7 @@ async def get_plugins() -> MultiItemResponse[pl.PluginManifest]:
 
 
 @plugins_router.post("/reload")
-async def reload_olugins() -> MultiItemResponse[pl.PluginManifest]:
+async def reload_plugins() -> MultiItemResponse[pl.PluginManifest]:
     manifests = factory.get_plugin_manager().reload(factory.get_model().solution)
     return MultiItemResponse.from_list(manifests)
 

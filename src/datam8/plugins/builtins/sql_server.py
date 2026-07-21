@@ -17,13 +17,13 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 import functools
 import urllib.parse
-from typing import Any
+from typing import Any, Final
 
 import polars as pl
 import typer
 
 from datam8 import config, logging, utils
-from datam8.plugins.base import Plugin
+from datam8.plugins.base import Plugin, TableMetadata
 from datam8_model.data_source import (
     AuthMode,
     ConnectionProperty,
@@ -31,6 +31,7 @@ from datam8_model.data_source import (
     DataSource,
     DataSourceType,
     SourceDataTypeMapping,
+    SourceObject,
 )
 from datam8_model.plugin import Capability, PluginManifest
 
@@ -54,6 +55,43 @@ manifest = PluginManifest(
         Capability.VALIDATION_CONNECTION,
     ],
 )
+
+DATA_TYPE_MAPPINGS: Final[dict[str, str]] = {
+    "bit": "bit",
+    # texts
+    "uniqueidentifier": "string",
+    "varbinary": "string",
+    "varchar": "string",
+    "xml": "string",
+    "sql_variant": "string",
+    "text": "text",
+    "timestamp": "string",
+    "nvarchar": "string",
+    "nchar": "string",
+    "ntext": "string",
+    "image": "string",
+    "char": "string",
+    "binary": "string",
+    # numbers
+    "bigint": "long",
+    "tinyint": "int",
+    "real": "double",
+    "smallint": "int",
+    "smallmoney": "decimal",
+    "numeric": "decimal",
+    "int": "int",
+    "money": "decimal",
+    "decimal": "decimal",
+    "float": "double",
+    # dates / times
+    "date": "date",
+    "smalldatetime": "datetime",
+    "datetime": "datetime",
+    "datetime2": "datetime",
+    "datetimeoffset": "datetime",
+    "time": "datetime",
+}
+"Mapping from source type to DataM8 internal type"
 
 
 class SqlServer(Plugin):
@@ -80,32 +118,32 @@ class SqlServer(Plugin):
             match [cp.required, cp.default, cp.name]:
                 case [True, _, _]:
                     mandatory[cp.name] = self.extended_properties[cp.name]
-                case [False, None, name] if name in self.extended_properties:
+                case [False, None, str() as name] if name in self.extended_properties:
                     optional[name] = self.extended_properties[name]
-                case [False, _ as default, _ as name] if name in self.extended_properties:
+                case [False, _ as default, str() as name] if name in self.extended_properties:
                     optional[name] = self.extended_properties.get(name, default)
 
         match mandatory:
-            case {"authMode": "sql_user", **rest}:  # noqa: F841
+            case {"authMode": "sql_user"}:
                 assert "password" in optional
                 assert "username" in optional
 
-                mandatory["username"] = optional.pop("username")
+                mandatory["username"] = urllib.parse.quote_plus(optional.pop("username"))
                 mandatory["password"] = urllib.parse.quote_plus(optional.pop("password"))
 
                 uri = "mssql://{username}:{password}@{host}:{port}/{database}"
 
-            case {"authMode": "windows", **rest}:  # noqa: F841
+            case {"authMode": "windows"}:
                 assert "trusted_connection" in optional
 
                 uri = "mssql://@{host}:{port}/{database}"
 
-            case {"authMode": _ as auth_mode, **rest}:  # noqa: F841
+            case {"authMode": _ as auth_mode}:
                 raise utils.create_error(
-                    ValueError(f"Unkown authMode {auth_mode} in {self._data_source.name}")
+                    ValueError(f"Unknown authMode {auth_mode} in {self._data_source.name}")
                 )
 
-        uri = uri.format(**mandatory)
+        uri: str = uri.format(**mandatory)
 
         if len(optional) > 0:
             uri += "?" + "&".join([f"{k}={v}" for k, v in optional.items()])
@@ -116,8 +154,8 @@ class SqlServer(Plugin):
                 cp.name in {**mandatory, **optional}
                 and cp.type == ConnectionPropertyValueType.SECRET
             ):
-                to_replace = mandatory.get(cp.name, optional.get(cp.name))
-                masked_uri = masked_uri.replace(to_replace, "*****")
+                to_replace: Any = mandatory.get(cp.name, optional.get(cp.name))
+                masked_uri = masked_uri.replace(str(to_replace), "*****")
 
         self.logger.debug(f"Created connection string: {masked_uri}")
 
@@ -138,6 +176,13 @@ class SqlServer(Plugin):
         if isinstance(result, Exception):
             return result
         return None
+
+    def list_source(self, source_location: str | None = None, /) -> pl.DataFrame:
+        if source_location == "" or source_location is None:
+            return self.list_schemas()
+
+        schema, _ = self.parse_source_location(source_location)
+        return self.list_tables(schema)
 
     def list_schemas(self) -> pl.DataFrame:
         database = (self._data_source.extendedProperties or {})["database"]
@@ -170,26 +215,45 @@ class SqlServer(Plugin):
 
         return self._execute_query(query)
 
-    def preview_data(
-        self, table: str, /, schema: str | None = None, *, limit: int = 10
-    ) -> pl.LazyFrame:
-        if schema is None:
-            raise utils.create_error("A schema needs to be provided for SQL Server sources")
+    def preview_data(self, source_location: str, *, limit: int = 10) -> pl.LazyFrame:
+        schema, table = self.parse_source_location(source_location)
 
         query = f"select top {limit} * from [{schema}].[{table}]"
         return self._execute_query(query).lazy()
 
-    def get_table_metadata(self, table: str, schema: str | None = None) -> pl.DataFrame:
-        if schema is None:
-            raise utils.create_error("A schema needs to be provided for SQL Server sources")
+    def get_table_metadata(self, source_location: str) -> TableMetadata:
+        schema, table = self.parse_source_location(source_location)
 
         query = f"""
-            select c.*
+            select
+                c.ordinal_position as [ordinal]
+            ,   c.column_name as [name]
+            ,   c.data_type as [dataType]
+            ,   c.numeric_precision as [numericPrecision]
+            ,   c.numeric_scale as [numericScale]
+            ,   coalesce(c.character_maximum_length, c.datetime_precision) as [maxLength]
+            ,   c.is_nullable as [isNullable]
+            ,   case when pk.column_name is not null then 1 else 0 end as [isPrimaryKey]
             from [information_schema].[tables] as t
                 join [information_schema].[columns] as c
                     on c.table_name = t.table_name
                     and c.table_schema = t.table_schema
                     and c.table_catalog = t.table_catalog
+                left join (
+                    select
+                        kcu.table_schema
+                    ,   kcu.table_name
+                    ,   kcu.column_name
+                    from [information_schema].[table_constraints] as tc
+                        join [information_schema].[key_column_usage] as kcu
+                            on kcu.constraint_name = tc.constraint_name
+                            and kcu.table_schema = tc.table_schema
+                            and kcu.table_catalog = tc.table_catalog
+                    where tc.constraint_type = 'PRIMARY KEY'
+                ) as pk
+                    on pk.table_schema = c.table_schema
+                    and pk.table_name = c.table_name
+                    and pk.column_name = c.column_name
             where 1=1
                 and t.table_name = '{table}'
                 and t.table_schema = '{schema}'
@@ -197,13 +261,27 @@ class SqlServer(Plugin):
                 ordinal_position
         """
 
-        result = self._execute_query(query).drop("TABLE_CATALOG", "TABLE_SCHEMA", "TABLE_NAME")
+        result = self._execute_query(query)
+        result = result.with_columns(
+            isNullable=(
+                # convert YES/NO into True/False for isNullable
+                pl.when(pl.col("isNullable") == "YES").then(pl.lit(True)).otherwise(pl.lit(False))
+            ),
+            isPrimaryKey=(
+                # convert 1/0 into True/False for isPrimaryKey
+                pl.when(pl.col("isPrimaryKey") == 1).then(pl.lit(True)).otherwise(pl.lit(False))
+            ),
+            properties=(
+                # TODO: just for testing remove before merging
+                pl.lit([{"property": "test", "value": "testtest"}])
+            ),
+        )
         if result.is_empty():
             raise utils.create_error(
                 f"Table [{schema}].[{table}] does not exist in '{self._data_source.name}'"
             )
 
-        return result
+        return TableMetadata(result, SourceObject(schema=schema, name=table, type="TABLE/VIEW"))
 
     @classmethod
     def validate_connection(
@@ -215,6 +293,13 @@ class SqlServer(Plugin):
     @classmethod
     def manifest(cls) -> PluginManifest:
         return cls.__manifest
+
+    @staticmethod
+    def parse_source_location(source_location: str) -> tuple[str, str]:
+        if "." in source_location:
+            schema, table = source_location.split(".", maxsplit=1)
+            return schema.strip("[").strip("]"), table.strip("]").strip("[")
+        return source_location.strip("[").strip("]"), ""
 
     @staticmethod
     @functools.lru_cache(maxsize=1)
@@ -289,39 +374,19 @@ class SqlServer(Plugin):
     @staticmethod
     @functools.lru_cache(maxsize=1)
     def get_data_type_mappings() -> list[SourceDataTypeMapping]:
+        global DATA_TYPE_MAPPINGS
+
         data_types = [
-            SourceDataTypeMapping(sourceType="bit", targetType="boolean"),
-            # texts
-            SourceDataTypeMapping(sourceType="uniqueidentifier", targetType="string"),
-            SourceDataTypeMapping(sourceType="varbinary", targetType="string"),
-            SourceDataTypeMapping(sourceType="varchar", targetType="string"),
-            SourceDataTypeMapping(sourceType="xml", targetType="string"),
-            SourceDataTypeMapping(sourceType="sql_variant", targetType="string"),
-            SourceDataTypeMapping(sourceType="text", targetType="text"),
-            SourceDataTypeMapping(sourceType="timestamp", targetType="string"),
-            SourceDataTypeMapping(sourceType="nvarchar", targetType="string"),
-            SourceDataTypeMapping(sourceType="nchar", targetType="string"),
-            SourceDataTypeMapping(sourceType="ntext", targetType="string"),
-            SourceDataTypeMapping(sourceType="image", targetType="string"),
-            SourceDataTypeMapping(sourceType="char", targetType="string"),
-            SourceDataTypeMapping(sourceType="binary", targetType="string"),
-            # numbers
-            SourceDataTypeMapping(sourceType="bigint", targetType="long"),
-            SourceDataTypeMapping(sourceType="tinyint", targetType="int"),
-            SourceDataTypeMapping(sourceType="real", targetType="double"),
-            SourceDataTypeMapping(sourceType="smallint", targetType="int"),
-            SourceDataTypeMapping(sourceType="smallmoney", targetType="decimal"),
-            SourceDataTypeMapping(sourceType="numeric", targetType="decimal"),
-            SourceDataTypeMapping(sourceType="int", targetType="int"),
-            SourceDataTypeMapping(sourceType="money", targetType="decimal"),
-            SourceDataTypeMapping(sourceType="decimal", targetType="decimal"),
-            SourceDataTypeMapping(sourceType="float", targetType="double"),
-            # dates / times
-            SourceDataTypeMapping(sourceType="date", targetType="datetime"),
-            SourceDataTypeMapping(sourceType="smalldatetime", targetType="datetime"),
-            SourceDataTypeMapping(sourceType="datetime", targetType="datetime"),
-            SourceDataTypeMapping(sourceType="datetime2", targetType="datetime"),
-            SourceDataTypeMapping(sourceType="datetimeoffset", targetType="datetime"),
-            SourceDataTypeMapping(sourceType="time", targetType="datetime"),
+            SourceDataTypeMapping(sourceType=src, targetType=trg)
+            for src, trg in DATA_TYPE_MAPPINGS.items()
         ]
         return data_types
+
+    @classmethod
+    def resolve_source_type(cls, source_type: str, /) -> str:
+        global DATA_TYPE_MAPPINGS
+
+        if source_type not in DATA_TYPE_MAPPINGS:
+            raise ValueError(f"'{source_type}' is not a configured type for '{cls.manifest().id}'")
+
+        return DATA_TYPE_MAPPINGS[source_type]
