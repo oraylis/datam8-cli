@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import socket
 import uuid
@@ -35,7 +36,7 @@ except ModuleNotFoundError as err:
     raise typer.Exit(1) from err
 
 
-from datam8 import config, factory, logging
+from datam8 import config, logging
 from datam8.errors import Datam8Error, Datam8ValidationError
 
 from .routes import router
@@ -190,7 +191,14 @@ def create_server(*, host: str, port: int, app: FastAPI) -> uvicorn.Server:
     @app.on_event("startup")
     async def _emit_ready() -> None:
         print(
-            f"API ready at `{base_url}`, schemaVersion: {factory.get_model().solution.schemaVersion}"
+            json.dumps(
+                {
+                    "type": "ready",
+                    "baseUrl": base_url,
+                    "version": config.get_version(),
+                },
+                separators=(",", ":"),
+            )
         )
 
     server = uvicorn.Server(
