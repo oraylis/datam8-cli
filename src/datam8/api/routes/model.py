@@ -60,9 +60,11 @@ async def generator_run(body: GenerateBody | None = None) -> GenerateResponse:
         generate_all=False,
     )
 
-    response = GenerateResponse(
-        target=target or opts.default_target,
-        output_path=output_path.as_posix(),
+    response = GenerateResponse.model_validate(
+        {
+            "target": target or opts.default_target,
+            "outputPath": output_path.as_posix(),
+        }
     )
 
     return response

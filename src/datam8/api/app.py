@@ -22,6 +22,8 @@ import json
 import os
 import socket
 import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 import typer
 
@@ -80,8 +82,19 @@ def _bind(host: str, port: int) -> tuple[socket.socket, int]:
 def create_app(*, token: str | None = None, enable_openapi: bool = False) -> FastAPI:
     """Create and configure the HTTP API application."""
 
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        readiness_payload = getattr(app.state, "readiness_payload", None)
+        if readiness_payload is not None:
+            print(json.dumps(readiness_payload, separators=(",", ":")))
+        yield
+
     if enable_openapi:
-        app = FastAPI(title="DataM8 API", version=config.get_version())
+        app = FastAPI(
+            title="DataM8 API",
+            version=config.get_version(),
+            lifespan=lifespan,
+        )
     else:
         app = FastAPI(
             title="DataM8 API",
@@ -89,6 +102,7 @@ def create_app(*, token: str | None = None, enable_openapi: bool = False) -> Fas
             docs_url=None,
             redoc_url=None,
             openapi_url=None,
+            lifespan=lifespan,
         )
 
     origins_env = os.environ.get("DATAM8_CORS_ORIGINS")
@@ -187,19 +201,11 @@ def create_app(*, token: str | None = None, enable_openapi: bool = False) -> Fas
 
 def create_server(*, host: str, port: int, app: FastAPI) -> uvicorn.Server:
     base_url = f"http://{host}:{port}"
-
-    @app.on_event("startup")
-    async def _emit_ready() -> None:
-        print(
-            json.dumps(
-                {
-                    "type": "ready",
-                    "baseUrl": base_url,
-                    "version": config.get_version(),
-                },
-                separators=(",", ":"),
-            )
-        )
+    app.state.readiness_payload = {
+        "type": "ready",
+        "baseUrl": base_url,
+        "version": config.get_version(),
+    }
 
     server = uvicorn.Server(
         uvicorn.Config(

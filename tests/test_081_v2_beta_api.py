@@ -8,11 +8,9 @@
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 
-import asyncio
 import json
 from pathlib import Path
 
-from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from datam8 import factory
@@ -81,10 +79,11 @@ def test_function_source_http_lifecycle(
 
 def test_server_readiness_uses_json_contract(capsys, monkeypatch) -> None:
     monkeypatch.setattr("datam8.api.app.config.get_version", lambda: "2.0.0-test")
-    app = FastAPI()
+    app = create_app()
     create_server(host="127.0.0.1", port=8123, app=app)
 
-    asyncio.run(app.router.on_startup[-1]())
+    with TestClient(app):
+        pass
 
     readiness = json.loads(capsys.readouterr().out)
     assert readiness == {

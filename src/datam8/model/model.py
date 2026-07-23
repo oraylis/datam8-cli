@@ -547,10 +547,7 @@ class Model:
         elif to_locator.folders:
             raise utils.create_error(errors.InvalidLocatorError(str(to_locator)))
 
-        repository = cast(
-            EntityRepository[b.BaseEntityType],
-            self[from_locator.entityType],
-        )
+        repository = self[from_locator.entityType]
         wrapper = cast(
             EntityWrapper[b.BaseEntityType],
             self.get_entity_by_locator(from_locator),
