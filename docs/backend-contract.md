@@ -1,174 +1,134 @@
-# Backend Contract
+# Backend Contract (Canonical)
 
-This is the canonical HTTP contract between `datam8-generator` and DataM8 clients.
+This document is the canonical HTTP contract between `datam8-generator` and `datam8-neon`.
 
-## Startup
+## Startup and readiness
 
-The backend is started with:
+Neon starts the backend as a long-lived process:
 
-```sh
-datam8 serve --host 127.0.0.1 --port 0 --token <token>
+```bash
+datam8 serve --host 127.0.0.1 --port 0 --token <random>
 ```
 
-After binding, stdout receives one compact JSON line:
+When ready, the server writes exactly one JSON line to stdout:
 
 ```json
-{"type":"ready","baseUrl":"http://127.0.0.1:<port>","version":"<version>"}
+{"type":"ready","baseUrl":"http://127.0.0.1:<PORT>","version":"<cliVersion>"}
 ```
 
-All endpoints except `GET /health` and `GET /version` require
-`Authorization: Bearer <token>` when the server was created with a token.
+All non-readiness logs are written to stderr.
 
-## Response Envelopes
+## Auth
 
-List endpoints return:
+- No auth required: `GET /health`, `GET /version`
+- All other endpoints require: `Authorization: Bearer <token>`
 
-```json
-{"count":1,"items":[]}
-```
+## Endpoint surface used by Neon (plus parity extensions)
 
-Single entity endpoints return:
-
-```json
-{"item":{}}
-```
-
-Unhandled failures use the `Datam8Error` envelope and do not expose exception
-types or internal messages.
-
-## System and Solution
+### System
 
 - `GET /health`
 - `GET /version`
 - `GET /config`
-- `GET /solution`
-- `GET /solution/full`
 
-## Entities
+### Workspace and editor operations
 
-- `GET /entities/{locator}`
-- `PUT /entities/{locator}`
-- `PATCH /entities/{locator}`
-- `DELETE /entities/{locator}`
-- `PUT /entities/clone`
-- `POST /entities/rename`
-- `POST /entities/move`
+- Filesystem: `GET /fs/list`
+- Solution: `GET /solution`, `GET /solution/full`, `GET /solution/inspect`, `POST /solution/new-project`
+  - Full model validate parity: `POST /validate`
+- Migration: `POST /migration/v1-to-v2`
+- Model entities: `GET|POST|DELETE /model/entities`, `POST /model/entities/move`, `POST /model/folder/rename`
+  - Parity aliases: `GET /model/entity`, `POST /model/entity/create`, `POST /model/entity/validate`, `POST /model/entity/set`, `POST /model/entity/patch`, `POST /model/entity/duplicate`
+  - Folder metadata explicit endpoints: `GET|POST|DELETE /model/folder-metadata`
+- Model functions: `GET|POST|DELETE /model/function/source`, `POST /model/function/rename`
+- Base entities: `GET|POST|DELETE /base/entities`
+  - Parity aliases: `GET /base/entity`, `POST /base/entity/set`, `POST /base/entity/patch`
+- Solution parity aliases: `GET /solution/info`, `POST /solution/validate`
+- Index/refactor: `POST /index/regenerate`, `GET /index/show`, `GET /index/validate`, `POST /refactor/properties`, `POST /refactor/keys`, `POST /refactor/values`, `POST /refactor/entity-id`
+- Search: `GET /search/entities`, `GET /search/text`
+- Connectors/plugins/secrets under `/connectors/*`, `/plugins/*`, `/datasources/*`, `/http/datasources/*`, `/secrets/*`
+  - Datasource parity endpoint: `POST /datasources/{dataSourceId}/test`
+  - Plugin parity endpoints: `GET /plugins/{pluginId}/info`, `POST /plugins/{pluginId}/verify`, `POST /plugins/verify`
+  - Secrets parity endpoints: `GET /secrets/runtime/list`, `GET /secrets/runtime/key`
 
-Rename request:
+### v2 beta compatibility extensions
 
-```json
-{"from":"dataTypes/Text","to":"dataTypes/String","content":{}}
-```
+- Entity rename: `POST /entities/rename`
+  - Body: `{ "from": "dataTypes/Text", "to": "dataTypes/String", "content": {} }`
+  - Model entities and folders continue to use `POST /entities/move`.
+- Function source paths are relative to their model entity.
+  - Absolute paths, drive-qualified paths, traversal segments, empty segments, and symlink escapes are rejected.
+- Canonical source navigation remains under `/sources/{dataSource}/locations`.
+- Schema/table compatibility adapters:
+  - `GET /sources/{dataSource}/schemas`
+  - `GET /sources/{dataSource}/schemas/{schema}/tables`
+  - `GET /sources/{dataSource}/schemas/{schema}/tables/{table}`
+  - `GET /sources/{dataSource}/schemas/{schema}/tables/{table}/preview`
+  - `PUT /sources/{dataSource}/schemas/{schema}/tables/{table}/import`
+  - Equivalent schema-less routes are available under `/sources/{dataSource}/tables`.
+- Source metadata may include `description`, `properties`, and `sourceOverride`.
+- Preview endpoints require the plugin capability `previewData`.
 
-Move request:
+### Generation
 
-```json
-{"from":"modelEntities/raw/Customer","to":"modelEntities/core/Customer"}
-```
+- `POST /generate` (synchronous)
+  - Body: `{ "solutionPath": "...", "target": "...", "logLevel": "info", "cleanOutput": true, "payloads": [], "lazy": false }`
+  - Response: `{ "status": "succeeded", "target": "...", "outputPath": "..." }`
 
-Model entities and folders use `move`, not `rename`. Moving a model entity also
-moves its function directory. A target function directory conflict returns
-HTTP 409 before the in-memory model is changed.
+## `GET /solution/full` payload
 
-## Model
+- `solution`: parsed solution metadata.
+- `baseEntities`: base JSON entities (`content` is a typed base wrapper object).
+- `modelEntities`: model JSON entities (excludes folder metadata files; `locator` is a locator object).
+- `folderEntities`: folder metadata files discovered under `Model/**/.properties.json`.
 
-- `POST /model/generate`
-- `POST /model/save`
-- `POST /model/reload`
-- `GET /model/unsaved`
+## Folder Metadata Contract
 
-Generation request:
+- Folder metadata file path: `Model/**/.properties.json`.
+- File content is a direct folder object (no `folders[]` wrapper).
+- Folder fields used by Neon/backend:
+  - `id` (number), `name` (string)
+  - optional `displayName`, `description`, `path`
+  - optional `properties` (array of `{ property, value }`)
+  - optional `dataProduct` (string) and `dataModule` (string)
+- Save/update uses `POST /model/entities` or `POST /model/folder-metadata` with `relPath` pointing to `.properties.json`.
 
-```json
-{"target":"databricks","cleanOutput":true,"payloads":[]}
-```
+### Folder Validation Rules
 
-## Function Sources
+- `dataModule` requires `dataProduct`.
+- `dataProduct` must exist in `Base/DataProducts.json`.
+- `dataModule` must exist under the selected `dataProduct` in `Base/DataProducts.json`.
 
-- `GET /model/function/source?locator=...&source=...`
-- `POST /model/function/source`
-- `DELETE /model/function/source?locator=...&source=...`
-- `POST /model/function/rename`
+### Folder Inheritance Semantics (UI Consumption)
 
-Write request:
+- Folder `properties` inherit down the folder chain (child overrides parent by `property` key).
+- `dataProduct` and `dataModule` inherit from nearest available ancestors.
 
-```json
-{
-  "locator":"modelEntities/core/Customer",
-  "source":"helpers/normalize.sql",
-  "content":"select 1"
-}
-```
+## Response contract
 
-Rename request:
+- All JSON responses are object payloads with stable top-level fields per endpoint.
+- No endpoint returns a bare JSON array or untyped ad-hoc dictionary contract.
+- `204 No Content` is used for mutation endpoints that intentionally return no body (e.g. secrets upsert/delete).
 
-```json
-{
-  "locator":"modelEntities/core/Customer",
-  "fromSource":"helpers/normalize.sql",
-  "toSource":"normalize.sql"
-}
-```
+### Typing policy
 
-Function source paths are relative to the selected model entity. Absolute
-paths, drive-qualified paths, traversal segments, empty segments and resolved
-symlink escapes are rejected with HTTP 400. Missing files return HTTP 404 and
-target conflicts return HTTP 409.
+- Stable and workflow-critical fields are exposed via explicit typed response models.
+- Plugin-/connector-driven payloads with intentionally dynamic shape remain open objects to avoid over-constraining connector implementations.
+- Dynamic sections are still wrapped in typed top-level response envelopes to keep endpoint contracts stable.
+- Locator fields in model/folder payloads are typed objects:
+  - `entityType: string`
+  - `folders: string[]`
+  - `entityName: string | null`
 
-## Sources
+## Implementation notes (non-contract)
 
-Canonical source endpoints:
+- Route implementation is split by domain (`api_solution.py`, `api_workspace.py`, `api_connectors.py`) and composed in `api.py`.
+- This split does not change endpoint URLs; it is a maintainability refactor only.
 
-- `GET /sources/{dataSource}/test`
-- `GET /sources/{dataSource}/locations`
-- `GET /sources/{dataSource}/locations/metadata`
-- `GET /sources/{dataSource}/locations/preview`
-- `PUT /sources/{dataSource}/import`
-- `GET /sources/compare`
-- `GET /sources/{dataSource}/usages`
+## Change policy
 
-Metadata and preview use the `source_location` query parameter. Canonical import:
+Contract changes must include:
 
-```json
-{"locator":"modelEntities/raw/Customer","sourceLocation":"dbo.Customer"}
-```
-
-Preview requires the plugin capability `previewData`.
-
-Compatibility endpoints for clients using schema/table navigation:
-
-- `GET /sources/{dataSource}/schemas`
-- `GET /sources/{dataSource}/schemas/{schema}/tables`
-- `GET /sources/{dataSource}/schemas/{schema}/tables/{table}`
-- `GET /sources/{dataSource}/schemas/{schema}/tables/{table}/preview`
-- `PUT /sources/{dataSource}/schemas/{schema}/tables/{table}/import`
-- `GET /sources/{dataSource}/tables`
-- `GET /sources/{dataSource}/tables/{table}`
-- `GET /sources/{dataSource}/tables/{table}/preview`
-- `PUT /sources/{dataSource}/tables/{table}/import`
-
-Compatibility imports take:
-
-```json
-{"locator":"modelEntities/raw/Customer"}
-```
-
-The compatibility routes are adapters over the canonical plugin methods. They
-do not restore the removed SQL-specific plugin interface.
-
-## Plugins and Secrets
-
-- `GET /plugins/`
-- `POST /plugins/reload`
-- `GET /plugins/{pluginId}`
-- `GET /plugins/{pluginId}/ui-schema`
-- `GET /plugins/{pluginId}/data-type-mappings`
-- `GET /plugins/{pluginId}/connection-properties`
-- `POST /secrets/check`
-- `PUT /secrets/set`
-
-## Change Policy
-
-Contract changes require a contract update, backend tests and a client
-integration check. The generic `/locations` source API remains canonical;
-compatibility paths may be removed only after all consumers have migrated.
+- updates to this document,
+- coordinated generator + Neon changes,
+- integration tests for affected flows.
