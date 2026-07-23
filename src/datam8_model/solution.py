@@ -111,7 +111,7 @@ class Solution(BaseModel):
     """
     tbd
     """
-    pluginsPath: Path | None = "Plugins"
+    pluginsPath: Path | None = "Plugins"  # pyright: ignore[reportAssignmentType]
     """
     Path where connector plugins are stored.
     """

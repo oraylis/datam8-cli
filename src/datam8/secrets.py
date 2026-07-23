@@ -25,6 +25,7 @@ from threading import Lock
 
 import keyring
 from keyring.backends import fail as keyring_fail
+from keyring.errors import NoKeyringError
 
 from datam8 import config, logging, utils
 
@@ -79,7 +80,7 @@ class SecretResolver:
         backend = keyring.get_keyring()
         if isinstance(backend, keyring_fail.Keyring):
             raise utils.create_error(
-                keyring_fail.NoKeyringError(
+                NoKeyringError(
                     "No available secret backend available. "
                     "https://pypi.org/project/keyring for details."
                 )

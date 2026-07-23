@@ -124,6 +124,7 @@ class SqlServer(Plugin):
                 case [False, _ as default, str() as name] if name in self.extended_properties:
                     optional[name] = self.extended_properties.get(name, default)
 
+        uri_template: str
         match mandatory:
             case {"authMode": "sql_user"}:
                 assert "password" in optional
@@ -132,19 +133,23 @@ class SqlServer(Plugin):
                 mandatory["username"] = urllib.parse.quote_plus(optional.pop("username"))
                 mandatory["password"] = urllib.parse.quote_plus(optional.pop("password"))
 
-                uri = "mssql://{username}:{password}@{host}:{port}/{database}"
+                uri_template = "mssql://{username}:{password}@{host}:{port}/{database}"
 
             case {"authMode": "windows"}:
                 assert "trusted_connection" in optional
 
-                uri = "mssql://@{host}:{port}/{database}"
+                uri_template = "mssql://@{host}:{port}/{database}"
 
             case {"authMode": _ as auth_mode}:
                 raise utils.create_error(
                     ValueError(f"Unknown authMode {auth_mode} in {self._data_source.name}")
                 )
+            case _:
+                raise utils.create_error(
+                    ValueError(f"Missing authMode in {self._data_source.name}")
+                )
 
-        uri: str = uri.format(**mandatory)
+        uri = uri_template.format(**mandatory)
 
         if len(optional) > 0:
             uri += "?" + "&".join([f"{k}={v}" for k, v in optional.items()])
@@ -282,7 +287,12 @@ class SqlServer(Plugin):
                 f"Table [{schema}].[{table}] does not exist in '{self._data_source.name}'"
             )
 
-        return TableMetadata(result, SourceObject(schema=schema, name=table, type="TABLE/VIEW"))
+        return TableMetadata(
+            result,
+            SourceObject.from_dict(
+                {"schema": schema, "name": table, "type": "TABLE/VIEW"}
+            ),
+        )
 
     @classmethod
     def validate_connection(

@@ -210,7 +210,9 @@ class Model:
             wrapper.resolved = True
             return wrapper
 
-        property_references: list[p.PropertyReference] = list(wrapper.entity.properties or [])
+        property_references: list[p.PropertyReference] = list(
+            getattr(wrapper.entity, "properties", None) or []
+        )
         property_references += [
             pr
             for pr in self.get_inherited_property_references(wrapper)
@@ -241,7 +243,7 @@ class Model:
         "Resolve all entities by iterating over them."
         for wrapper in self.get_entity_iterator():
             if not wrapper.resolved:
-                self.resolve_wrapper(wrapper)
+                self.resolve_wrapper(wrapper)  # pyright: ignore[reportArgumentType]
 
     def get_inherited_property_references[T: b.BaseEntityType](
         self, wrapper: EntityWrapper[T], /
@@ -271,7 +273,9 @@ class Model:
 
         # in case the entity is a model also get the zones properties
         if wrapper.locator.entityType == b.EntityType.MODEL_ENTITIES.value:
-            zone = self.get_zone_for_entity(wrapper)  # ty: ignore[invalid-argument-type]
+            zone = self.get_zone_for_entity(
+                cast(EntityWrapper[m.ModelEntity], wrapper)
+            )
             if not zone.resolved:
                 self.resolve_wrapper(zone)
 
@@ -469,12 +473,13 @@ class Model:
         except ValidationError as err:
             raise utils.create_error(err)
 
-        self[_type.value].add(_locator, new_wrapper)
+        typed_wrapper = cast(EntityWrapper[T], new_wrapper)
+        cast(EntityRepository[T], self[_type.value]).add(_locator, typed_wrapper)
         self.update_file_reference(
             _type=_type, file_path=source_file_path, locators=[new_wrapper.locator]
         )
 
-        return new_wrapper
+        return typed_wrapper
 
     def clone_entity(
         self,
@@ -648,7 +653,7 @@ class Model:
         ).with_suffix(".json")
         to_wrapper = from_wrapper.model_copy()
         to_wrapper.reset(new_locator, source_file=new_source_file)
-        self.resolve_wrapper(to_wrapper)
+        self.resolve_wrapper(to_wrapper)  # pyright: ignore[reportArgumentType]
         to_wrapper._changed = True
 
         # type checks are incorrect due to invariance in generic types

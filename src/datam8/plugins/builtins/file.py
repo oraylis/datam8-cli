@@ -140,7 +140,10 @@ class CsvFile(Plugin):
                 "maxLength": pl.Int64,
             },
         )
-        return TableMetadata(metadata, SourceObject(schema=None, name=table, type="FILE"))
+        return TableMetadata(
+            metadata,
+            SourceObject.from_dict({"schema": None, "name": table, "type": "FILE"}),
+        )
 
     @classmethod
     def manifest(cls) -> PluginManifest:

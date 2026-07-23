@@ -311,7 +311,12 @@ class AzureDataLake(Plugin):
                 },
             )
 
-            return TableMetadata(metadata, SourceObject(schema=container, name=path_, type="FILE"))
+            return TableMetadata(
+                metadata,
+                SourceObject.from_dict(
+                    {"schema": container, "name": path_, "type": "FILE"}
+                ),
+            )
 
         except Exception as err:
             raise utils.create_error(err)
