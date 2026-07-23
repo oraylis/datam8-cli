@@ -79,7 +79,7 @@ def get_plugin_for_data_source(
     type_ = _model.dataSourceTypes.get(data_source_.type).entity
 
     # register builtin plugin if applicable
-    plugins.init_builtin_plugins(data_source_type=type_)
+    plugins.init_builtin_plugins(data_source_type=type_, plugin_id=type_.pluginId)
 
     plugin = get_plugin_manager(_model.solution).get_plugin_instantiator(type_)(data_source_, type_)
     logger.debug(f"Lookup {plugin} for {type_}")

@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response, status
 from pydantic import BaseModel
 
 from datam8.secrets import SecretResolver
@@ -40,6 +40,7 @@ class SetSecretBody(CheckSecretBody):
 
 
 @secrets_router.put("/set")
-async def set_secret(body: SetSecretBody) -> None:
+async def set_secret(body: SetSecretBody) -> Response:
     "Set a secret with the given value"
-    SecretResolver().set_secret(body.path, body.value)
+    SecretResolver().set_secret(body.path, body.value, force=True)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
