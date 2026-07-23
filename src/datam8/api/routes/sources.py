@@ -23,7 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from datam8 import factory, source
 from datam8.model import EntityWrapper, Locator
-from datam8_model.data_source import SourceField
+from datam8_model.data_source import SourceField, SourceObject
 from datam8_model.model import ExternalModelSource, ModelEntity
 from datam8_model.plugin import Capability
 
@@ -42,7 +42,7 @@ async def test_connection(data_source: str) -> None:
 
 
 @sources_router.get("/{data_source}/locations")
-async def list_tables(
+async def list_locations(
     data_source: str, source_location: str | None = None
 ) -> MultiItemResponse[dict[str, Any]]:
     "List available source tables if a source does not support schemas"
@@ -91,6 +91,140 @@ async def import_(data_source: str, body: ImportBody) -> EntityWrapper[ModelEnti
     )
     model_.save(body.locator)
     return new_wrapper
+
+
+def _source_object_from_row(
+    row: dict[str, Any],
+    *,
+    fallback_schema: str | None = None,
+) -> SourceObject:
+    name = row.get("object", row.get("name"))
+    if name is None:
+        raise HTTPException(status_code=502, detail="Plugin returned a source row without a name")
+
+    return SourceObject(
+        schema=str(row.get("schema") or fallback_schema)
+        if row.get("schema") or fallback_schema
+        else None,
+        name=str(name),
+        type=str(row.get("type", "OBJECT")),
+        description=row.get("description"),
+        properties=row.get("properties"),
+        sourceOverride=row.get("sourceOverride"),
+    )
+
+
+def _compatibility_source_location(schema: str | None, table: str) -> str:
+    return f"{schema}.{table}" if schema else table
+
+
+@sources_router.get("/{data_source}/schemas")
+async def list_schemas(data_source: str) -> MultiItemResponse[str]:
+    plugin = factory.get_plugin_for_data_source(data_source)
+    schemas = []
+    for row in plugin.list_source(None).to_dicts():
+        if row.get("schema") is not None:
+            schema = str(row["schema"])
+            if schema not in schemas:
+                schemas.append(schema)
+    return MultiItemResponse.from_list(schemas)
+
+
+@sources_router.get("/{data_source}/schemas/{schema}/tables")
+async def list_tables_for_schema(
+    data_source: str,
+    schema: str,
+) -> MultiItemResponse[SourceObject]:
+    plugin = factory.get_plugin_for_data_source(data_source)
+    tables = [
+        _source_object_from_row(row, fallback_schema=schema)
+        for row in plugin.list_source(schema).to_dicts()
+    ]
+    return MultiItemResponse.from_list(tables)
+
+
+@sources_router.get("/{data_source}/schemas/{schema}/tables/{table}")
+async def get_table_metadata_for_schema(
+    data_source: str,
+    schema: str,
+    table: str,
+) -> MultiItemResponse[SourceField]:
+    return await get_table_metadata(
+        data_source,
+        _compatibility_source_location(schema, table),
+    )
+
+
+@sources_router.get("/{data_source}/schemas/{schema}/tables/{table}/preview")
+async def preview_for_schema(
+    data_source: str,
+    schema: str,
+    table: str,
+    limit: int = 10,
+) -> MultiItemResponse[dict[str, Any]]:
+    return await preview(
+        data_source,
+        _compatibility_source_location(schema, table),
+        limit,
+    )
+
+
+class CompatibilityImportBody(BaseModel):
+    locator: str
+
+
+@sources_router.put("/{data_source}/schemas/{schema}/tables/{table}/import")
+async def import_for_schema(
+    data_source: str,
+    schema: str,
+    table: str,
+    body: CompatibilityImportBody,
+) -> EntityWrapper[ModelEntity]:
+    return await import_(
+        data_source,
+        ImportBody(
+            locator=body.locator,
+            sourceLocation=_compatibility_source_location(schema, table),
+        ),
+    )
+
+
+@sources_router.get("/{data_source}/tables")
+async def list_tables_without_schema(
+    data_source: str,
+) -> MultiItemResponse[SourceObject]:
+    plugin = factory.get_plugin_for_data_source(data_source)
+    tables = [_source_object_from_row(row) for row in plugin.list_source(None).to_dicts()]
+    return MultiItemResponse.from_list(tables)
+
+
+@sources_router.get("/{data_source}/tables/{table}")
+async def get_table_metadata_without_schema(
+    data_source: str,
+    table: str,
+) -> MultiItemResponse[SourceField]:
+    return await get_table_metadata(data_source, table)
+
+
+@sources_router.get("/{data_source}/tables/{table}/preview")
+async def preview_without_schema(
+    data_source: str,
+    table: str,
+    limit: int = 10,
+) -> MultiItemResponse[dict[str, Any]]:
+    return await preview(data_source, table, limit)
+
+
+@sources_router.put("/{data_source}/tables/{table}/import")
+async def import_without_schema(
+    data_source: str,
+    table: str,
+    body: CompatibilityImportBody,
+) -> EntityWrapper[ModelEntity]:
+    return await import_(
+        data_source,
+        ImportBody(locator=body.locator, sourceLocation=table),
+    )
 
 
 class CompareResponse(BaseModel):
