@@ -17,10 +17,10 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 from typing import Annotated, Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from datam8 import factory, model
+from datam8 import factory, function_sources, model
 from datam8_model import base as b
 
 from .responses import MultiItemResponse, SingleItemResponse
@@ -97,5 +97,22 @@ async def rename_entity(
 
 @entities_router.post("/move")
 async def move_entities(body: MoveBody) -> MultiItemResponse[model.EntityWrapperVariant]:
-    entities = factory.get_model().move_entities(body.from_, body.to)
+    datam8_model = factory.get_model()
+    try:
+        directory_move = function_sources.move_entity_directory(
+            datam8_model,
+            body.from_,
+            body.to,
+        )
+    except (FileExistsError, ValueError) as error:
+        status_code = 409 if isinstance(error, FileExistsError) else 400
+        raise HTTPException(status_code=status_code, detail=str(error)) from error
+
+    try:
+        entities = datam8_model.move_entities(body.from_, body.to)
+    except Exception:
+        if directory_move is not None:
+            directory_move.rollback()
+        raise
+
     return MultiItemResponse.from_list(entities)
