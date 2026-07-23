@@ -21,7 +21,7 @@ from __future__ import annotations
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 from threading import Lock
-from typing import Annotated, Any, overload
+from typing import Annotated, Any, cast, overload
 
 from pydantic import ConfigDict, Field, ValidationError
 
@@ -499,6 +499,84 @@ class Model:
 
         return new_wrapper
 
+    def rename_entity(
+        self,
+        _from: Locator | str,
+        /,
+        _to: Locator | str,
+        content: dict[str, Any] | None = None,
+    ) -> EntityWrapperVariant:
+        from_locator = _ensure_locator(_from)
+        to_locator = _ensure_locator(_to)
+
+        if from_locator == to_locator:
+            wrapper = self.get_entity_by_locator(from_locator)
+            if content:
+                wrapper.update(**content)
+            return wrapper
+
+        if from_locator.entityType != to_locator.entityType:
+            raise utils.create_error(
+                ValueError("Source and target must use the same entity type")
+            )
+
+        entity_type = b.EntityType(from_locator.entityType)
+        if entity_type in {b.EntityType.MODEL_ENTITIES, b.EntityType.FOLDERS}:
+            raise utils.create_error(
+                ValueError("Use /entities/move for model entity and folder renames")
+            )
+
+        if from_locator.entityName is None or to_locator.entityName is None:
+            raise utils.create_error(
+                errors.InvalidLocatorError(f"{from_locator} -> {to_locator}")
+            )
+
+        if self.has_locator(to_locator):
+            raise utils.create_error(
+                ValueError(f"Target of entity rename already exists: {to_locator}")
+            )
+
+        if entity_type == b.EntityType.PROPERTY_VALUES:
+            if len(to_locator.folders) != 1:
+                raise utils.create_error(errors.InvalidLocatorError(str(to_locator)))
+        elif to_locator.folders:
+            raise utils.create_error(errors.InvalidLocatorError(str(to_locator)))
+
+        repository = cast(
+            EntityRepository[b.BaseEntityType],
+            self[from_locator.entityType],
+        )
+        wrapper = cast(
+            EntityWrapper[b.BaseEntityType],
+            self.get_entity_by_locator(from_locator),
+        )
+        source_file = wrapper.source_file
+
+        del repository[from_locator]
+        wrapper.reset(to_locator, source_file=source_file)
+
+        patch = dict(content or {})
+        patch["name"] = to_locator.entityName
+        if entity_type == b.EntityType.PROPERTY_VALUES:
+            patch["property"] = to_locator.folders[0]
+        wrapper.update(**patch)
+        self.resolve_wrapper(wrapper)
+        wrapper._changed = True
+        repository[to_locator] = wrapper
+
+        file_ref = self._model_files.get(source_file)
+        if file_ref is not None:
+            file_ref.renamed_locators[from_locator] = to_locator
+            file_ref.locators = [
+                to_locator if locator == from_locator else locator
+                for locator in file_ref.locators
+            ]
+            if to_locator not in file_ref.locators:
+                file_ref.locators.append(to_locator)
+
+        logger.debug("Renamed %s to %s", from_locator, to_locator)
+        return cast(EntityWrapperVariant, wrapper)
+
     def delete_entities(self, locator: Locator | str, /) -> list[Locator]:
         search_locator = _ensure_locator(locator)
         deleted_locators: list[Locator] = []
@@ -783,6 +861,7 @@ class EntityFileRef:
         self._type: b.EntityType = _type
         self.file_path: Path = file_path
         self.locators: list[Locator] = locators or []
+        self.renamed_locators: dict[Locator, Locator] = {}
 
     def __repr__(self) -> str:
         return f"EntityFileRef({self._type} file={self.file_path})"
@@ -905,10 +984,47 @@ class EntityFileRef:
                 current_content = b.BaseEntities.from_json_file(self.file_path)
                 entities: list[b.BaseEntityType] = getattr(current_content.root, self._type.value)
 
-                for idx in range(len(wrappers)):
-                    for existing_entity in entities:
-                        if existing_entity.name == wrappers[idx].entity.name:
-                            entities[idx] = wrappers[idx].entity
+                for wrapper in wrappers:
+                    previous_locator = next(
+                        (
+                            old_locator
+                            for old_locator, new_locator in self.renamed_locators.items()
+                            if new_locator == wrapper.locator
+                        ),
+                        None,
+                    )
+                    replaced = False
+                    for index, existing_entity in enumerate(entities):
+                        if previous_locator is not None:
+                            same_name = existing_entity.name == previous_locator.entityName
+                            same_property = (
+                                self._type != b.EntityType.PROPERTY_VALUES
+                                or getattr(existing_entity, "property", None)
+                                == (
+                                    previous_locator.folders[0]
+                                    if previous_locator.folders
+                                    else None
+                                )
+                            )
+                            matches = same_name and same_property
+                        elif self._type == b.EntityType.PROPERTY_VALUES:
+                            matches = (
+                                existing_entity.name == wrapper.entity.name
+                                and getattr(existing_entity, "property", None)
+                                == getattr(wrapper.entity, "property", None)
+                            )
+                        else:
+                            matches = existing_entity.name == wrapper.entity.name
+
+                        if matches:
+                            entities[index] = wrapper.entity
+                            replaced = True
+                            break
+
+                    if not replaced:
+                        entities.append(wrapper.entity)
+                    if previous_locator is not None:
+                        self.renamed_locators.pop(previous_locator, None)
 
                 setattr(current_content.root, self._type.value, entities)
 

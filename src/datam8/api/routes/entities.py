@@ -76,11 +76,26 @@ async def clone_entity(
 
 class MoveBody(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
-    _from: Annotated[str, Field(alias="from")]
-    _to: Annotated[str, Field(alias="to")]
+    from_: Annotated[str, Field(alias="from")]
+    to: Annotated[str, Field(alias="to")]
+
+
+class RenameBody(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    from_: Annotated[str, Field(alias="from")]
+    to: str
+    content: dict[str, Any] | None = None
+
+
+@entities_router.post("/rename")
+async def rename_entity(
+    body: RenameBody,
+) -> SingleItemResponse[model.EntityWrapperVariant]:
+    entity = factory.get_model().rename_entity(body.from_, body.to, body.content)
+    return SingleItemResponse(item=entity)
 
 
 @entities_router.post("/move")
 async def move_entities(body: MoveBody) -> MultiItemResponse[model.EntityWrapperVariant]:
-    entities = factory.get_model().move_entities(body._from, body._to)
+    entities = factory.get_model().move_entities(body.from_, body.to)
     return MultiItemResponse.from_list(entities)
