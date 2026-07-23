@@ -59,7 +59,7 @@ All non-readiness logs are written to stderr.
 - Entity folder operations include the complete subtree.
   - Moving a folder rebases nested folders, model entities, metadata paths, and function directories.
   - Function-directory moves are preflighted and rolled back if the model move fails.
-  - Deleting a folder marks nested folders and model entities for deletion.
+  - Deleting a folder marks nested folders and model entities for deletion; save also removes their function directories.
 - Function source paths are relative to their model entity.
   - Absolute paths, drive-qualified paths, traversal segments, empty segments, and symlink escapes are rejected.
 - Built-in plugin IDs use the canonical `builtin:*` form, for example `builtin:SQLServer`.

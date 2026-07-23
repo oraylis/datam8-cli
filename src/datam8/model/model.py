@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+import shutil
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 from threading import Lock
@@ -1024,6 +1025,7 @@ class Model:
         # remove file refs if there are no more locators associated with them
 
         self.cleanup_entity_file_references()
+        self.cleanup_deleted_model_entity_directories(deleted_wrappers)
 
         for wrapper in deleted_wrappers:
             if (
@@ -1038,6 +1040,28 @@ class Model:
                     / self.solution.modelPath
                     / Path(*wrapper.locator.folders, wrapper.locator.entityName),
                 )
+
+    def cleanup_deleted_model_entity_directories(
+        self,
+        deleted_wrappers: list[EntityWrapperVariant],
+    ) -> None:
+        model_root = self.get_base_path_for_entity_type(b.EntityType.MODEL_ENTITIES)
+        for wrapper in deleted_wrappers:
+            locator = wrapper.locator
+            if (
+                locator.entityType != b.EntityType.MODEL_ENTITIES.value
+                or locator.entityName is None
+            ):
+                continue
+            function_directory = model_root.joinpath(
+                *locator.folders,
+                locator.entityName,
+            )
+            if function_directory.is_dir():
+                if function_directory.is_symlink() or function_directory.is_junction():
+                    function_directory.unlink()
+                else:
+                    shutil.rmtree(function_directory)
 
     def cleanup_entity_file_references(self) -> None:
         deleted_files: list[Path] = []

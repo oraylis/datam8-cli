@@ -107,3 +107,29 @@ def test_property_value_delete_uses_property_and_name(tmp_path: Path) -> None:
     content = file_path.read_text(encoding="utf-8")
     assert '"property": "Color"' not in content
     assert '"property": "Status"' in content
+
+
+def test_saved_delete_removes_model_entity_function_directories(
+    model: Model,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    wrapper = next(iter(model.modelEntities.values()))
+    model_root = tmp_path / "Model"
+    function_directory = model_root.joinpath(
+        *wrapper.locator.folders,
+        wrapper.locator.entityName or "",
+    )
+    function_directory.mkdir(parents=True)
+    (function_directory / "function.sql").write_text("select 1", encoding="utf-8")
+    original_get_base_path = model.get_base_path_for_entity_type
+
+    def get_base_path(entity_type: EntityType) -> Path:
+        if entity_type == EntityType.MODEL_ENTITIES:
+            return model_root
+        return original_get_base_path(entity_type)
+
+    monkeypatch.setattr(model, "get_base_path_for_entity_type", get_base_path)
+    model.cleanup_deleted_model_entity_directories([wrapper])
+
+    assert not function_directory.exists()
