@@ -95,6 +95,7 @@ manifest_azure = PluginManifest(
     entryPoint="datam8.plugins.builtins.lake_source:AzureDataLake",
     capabilities=[
         Capability.METADATA,
+        Capability.PREVIEW_DATA,
         Capability.UI_SCHEMA,
         Capability.VALIDATION_CONNECTION,
     ],

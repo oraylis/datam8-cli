@@ -51,6 +51,7 @@ manifest = PluginManifest(
     entryPoint="datam8.plugins.builtins.sql_server:SqlServer",
     capabilities=[
         Capability.METADATA,
+        Capability.PREVIEW_DATA,
         Capability.UI_SCHEMA,
         Capability.VALIDATION_CONNECTION,
     ],

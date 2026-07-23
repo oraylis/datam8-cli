@@ -41,6 +41,7 @@ from datam8_model.plugin import Capability, PluginManifest, UiAuthMode, UiField,
 
 VALIDATION_CONNECTION = Capability.VALIDATION_CONNECTION
 METADATA = Capability.METADATA
+PREVIEW_DATA = Capability.PREVIEW_DATA
 UI_SCHEMA = Capability.UI_SCHEMA
 
 logger = logging.getLogger(__name__)
@@ -123,6 +124,9 @@ class TableMetadata:
         if "properties" not in df_columns:
             optional_columns["properties"] = pl.lit(None)
 
+        if "description" not in df_columns:
+            optional_columns["description"] = pl.lit(None)
+
         if "isPrimaryKey" not in df_columns:
             optional_columns["isPrimaryKey"] = pl.lit(False)
         else:
@@ -150,6 +154,7 @@ class TableMetadata:
                 numbericScale=row.get("numericScale"),
                 isNullable=row["isNullable"],
                 isPrimaryKey=row["isPrimaryKey"],
+                description=row["description"],
                 properties=row["properties"],
             )
 
@@ -367,6 +372,8 @@ class Plugin(abc.ABC):
         NotImplementedError
             If the plugin does not implement data preview.
         """
+        if not self.is_capable_of(PREVIEW_DATA):
+            raise utils.create_error(MissingCapabilityError(PREVIEW_DATA))
         raise utils.create_error(
             NotImplementedError(f"preview_data not implemented by {self.manifest().id}")
         )
