@@ -52,14 +52,6 @@ async def delete_entity(locator: str) -> MultiItemResponse[model.Locator]:
     return MultiItemResponse.from_list(deleted_locators)
 
 
-@entities_router.put("/{locator:path}")
-async def create_entity(
-    locator: str, body: dict[str, Any]
-) -> SingleItemResponse[model.EntityWrapper[b.BaseEntityType]]:
-    entity = factory.get_model().add_entity(locator, body)
-    return SingleItemResponse(item=entity)
-
-
 class CloneEntityBody(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
     locator: str
@@ -72,6 +64,14 @@ async def clone_entity(
 ) -> MultiItemResponse[model.EntityWrapper[b.BaseEntityType]]:
     entity = factory.get_model().clone_entity(body.locator, body.new_locator)
     return MultiItemResponse.from_list([entity])
+
+
+@entities_router.put("/{locator:path}")
+async def create_entity(
+    locator: str, body: dict[str, Any]
+) -> SingleItemResponse[model.EntityWrapper[b.BaseEntityType]]:
+    entity = factory.get_model().add_entity(locator, body)
+    return SingleItemResponse(item=entity)
 
 
 class MoveBody(BaseModel):

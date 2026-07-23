@@ -1192,22 +1192,23 @@ class EntityFileRef:
                         entity for entity in entities if entity.name not in deleted_names
                     ]
 
-                setattr(current_content.root, self._type.value, entities)
-
-                with open(self.file_path, "w") as _file:
-                    _file.write(current_content.model_dump_json(**MODEL_DUMP_OPTIONS))
-
-                self.locators = [
+                remaining_locators = [
                     loc for loc in self.locators if loc not in [w.locator for w in wrappers]
                 ]
 
                 # NOTE: this should actually never not be case, if not the something went majorly wrong
-                assert len(self.locators) == len(entities)
+                assert len(remaining_locators) == len(entities)
 
-                if len(self.locators) == 0:
+                if len(remaining_locators) == 0:
                     utils.delete_path(self.file_path)
+                    self.locators = []
                     return True
 
+                setattr(current_content.root, self._type.value, entities)
+                with open(self.file_path, "w", encoding="utf-8") as _file:
+                    _file.write(current_content.model_dump_json(**MODEL_DUMP_OPTIONS))
+
+                self.locators = remaining_locators
                 return False
 
     def update(self, *, wrappers: list[EntityWrapperVariant]) -> None:
