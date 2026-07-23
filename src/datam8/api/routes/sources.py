@@ -102,15 +102,17 @@ def _source_object_from_row(
     if name is None:
         raise HTTPException(status_code=502, detail="Plugin returned a source row without a name")
 
-    return SourceObject(
-        schema=str(row.get("schema") or fallback_schema)
-        if row.get("schema") or fallback_schema
-        else None,
-        name=str(name),
-        type=str(row.get("type", "OBJECT")),
-        description=row.get("description"),
-        properties=row.get("properties"),
-        sourceOverride=row.get("sourceOverride"),
+    return SourceObject.from_dict(
+        {
+            "schema": str(row.get("schema") or fallback_schema)
+            if row.get("schema") or fallback_schema
+            else None,
+            "name": str(name),
+            "type": str(row.get("type", "OBJECT")),
+            "description": row.get("description"),
+            "properties": row.get("properties"),
+            "sourceOverride": row.get("sourceOverride"),
+        }
     )
 
 
@@ -184,7 +186,7 @@ async def import_for_schema(
         data_source,
         ImportBody(
             locator=body.locator,
-            sourceLocation=_compatibility_source_location(schema, table),
+            source_location=_compatibility_source_location(schema, table),
         ),
     )
 
@@ -223,7 +225,7 @@ async def import_without_schema(
 ) -> EntityWrapper[ModelEntity]:
     return await import_(
         data_source,
-        ImportBody(locator=body.locator, sourceLocation=table),
+        ImportBody(locator=body.locator, source_location=table),
     )
 
 
