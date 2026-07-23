@@ -56,8 +56,14 @@ All non-readiness logs are written to stderr.
 - Entity rename: `POST /entities/rename`
   - Body: `{ "from": "dataTypes/Text", "to": "dataTypes/String", "content": {} }`
   - Model entities and folders continue to use `POST /entities/move`.
+- Entity folder operations include the complete subtree.
+  - Moving a folder rebases nested folders, model entities, metadata paths, and function directories.
+  - Function-directory moves are preflighted and rolled back if the model move fails.
+  - Deleting a folder marks nested folders and model entities for deletion.
 - Function source paths are relative to their model entity.
   - Absolute paths, drive-qualified paths, traversal segments, empty segments, and symlink escapes are rejected.
+- Built-in plugin IDs use the canonical `builtin:*` form, for example `builtin:SQLServer`.
+- `PUT /secrets/set` is an upsert and returns `204 No Content`.
 - Canonical source navigation remains under `/sources/{dataSource}/locations`.
 - Schema/table compatibility adapters:
   - `GET /sources/{dataSource}/schemas`
