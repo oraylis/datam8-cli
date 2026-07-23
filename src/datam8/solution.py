@@ -31,9 +31,556 @@ SAMPLE_SOLUTION_VERSION = "2.0.0-beta.1"
 SAMPLE_SOLUTION_REPO_URL = "https://github.com/oraylis/datam8-sample-solution"
 
 
+DEFAULT_ATTRIBUTE_TYPES_JSON = """{
+    "type": "attributeTypes",
+    "attributeTypes": [
+        {
+            "name": "Amt",
+            "displayName": "Amount",
+            "description": "Amount value having a currency",
+            "defaultType": "double",
+            "hasUnit": "Currency"
+        },
+        {
+            "name": "BirthDate",
+            "displayName": "Birth Date of a Person",
+            "defaultType": "datetime"
+        },
+        {
+            "name": "CreationDate",
+            "displayName": "Creation Date",
+            "defaultType": "datetime",
+            "hasUnit": "NoUnit"
+        },
+        {
+            "name": "Currency",
+            "displayName": "Currency Attribute",
+            "defaultType": "string",
+            "defaultLength": 3,
+            "hasUnit": "NoUnit"
+        },
+        {
+            "name": "Dsc",
+            "displayName": "Description",
+            "defaultType": "string",
+            "defaultLength": 256,
+            "hasUnit": "NoUnit"
+        },
+        {
+            "name": "EMail",
+            "displayName": "E-Mail Address",
+            "defaultType": "string"
+        },
+        {
+            "name": "Flag",
+            "displayName": "Flag",
+            "defaultType": "string",
+            "defaultLength": 1
+        },
+        {
+            "name": "ID",
+            "displayName": "ID",
+            "defaultType": "int",
+            "canBeInRelation": true,
+            "isDefaultProperty": false
+        },
+        {
+            "name": "Key",
+            "displayName": "Key",
+            "defaultType": "string",
+            "defaultLength": 16
+        },
+        {
+            "name": "Name",
+            "displayName": "Name",
+            "defaultType": "string"
+        },
+        {
+            "name": "PersonalInfo",
+            "displayName": "Personal Information",
+            "defaultType": "string",
+            "defaultLength": 256
+        },
+        {
+            "name": "SID",
+            "displayName": "SID",
+            "description": "Identity Type for SCD2 Entities",
+            "defaultType": "int",
+            "canBeInRelation": true,
+            "isDefaultProperty": false
+        },
+        {
+            "name": "Text",
+            "displayName": "Text",
+            "defaultType": "string"
+        },
+        {
+            "name": "Unit",
+            "displayName": "Unit",
+            "description": "Unit for amount quanities",
+            "defaultType": "string",
+            "defaultLength": 16,
+            "hasUnit": "NoUnit"
+        },
+        {
+            "name": "Val",
+            "displayName": "Value",
+            "description": "Unit free value",
+            "defaultType": "double",
+            "hasUnit": "NoUnit"
+        },
+        {
+            "name": "Generic String",
+            "displayName": "Generic for String",
+            "defaultType": "string",
+            "isDefaultProperty": true
+        },
+        {
+            "name": "Generic Datetime",
+            "displayName": "Generic for Datetime",
+            "defaultType": "datetime",
+            "isDefaultProperty": true
+        },
+        {
+            "name": "Generic Date",
+            "displayName": "Generic for Date",
+            "defaultType": "date",
+            "isDefaultProperty": true
+        },
+        {
+            "name": "Generic Int",
+            "displayName": "Generic for Int",
+            "defaultType": "int",
+            "canBeInRelation": true,
+            "isDefaultProperty": true
+        },
+        {
+            "name": "Generic Double",
+            "displayName": "Generic for Double",
+            "defaultType": "double",
+            "isDefaultProperty": true
+        }
+    ]
+}
+"""
+
+DEFAULT_DATA_TYPES_JSON = """{
+  "type": "dataTypes",
+  "dataTypes": [
+    {
+      "name": "string",
+      "displayName": "Unicode String (UTF-8) with char length",
+      "description": "#",
+      "hasCharLen": true,
+      "targets": {
+        "databricks": "string",
+        "powerbi": "string"
+      }
+    },
+    {
+      "name": "short",
+      "displayName": "Integer (16 bit)",
+      "targets": {
+        "databricks": "smallint",
+        "powerbi": "int64"
+      }
+    },
+    {
+      "name": "int",
+      "displayName": "Integer (32 bit)",
+      "targets": {
+        "databricks": "int",
+        "powerbi": "int64"
+      }
+    },
+    {
+      "name": "long",
+      "displayName": "Integer (64 bit)",
+      "targets": {
+        "databricks": "bigint",
+        "powerbi": "int64"
+      }
+    },
+    {
+      "name": "byte",
+      "displayName": "Integer (8 bit)",
+      "targets": {
+        "databricks": "tinyint",
+        "powerbi": "int64"
+      }
+    },
+    {
+      "name": "double",
+      "displayName": "Floating point with double precision",
+      "description": "Test 2",
+      "targets": {
+        "databricks": "double",
+        "powerbi": "double"
+      }
+    },
+    {
+      "name": "bit",
+      "displayName": "Bit (1 bit)",
+      "targets": {
+        "databricks": "boolean",
+        "powerbi": "boolean"
+      }
+    },
+    {
+      "name": "date",
+      "displayName": "Date storage yyyy-mm-dd",
+      "targets": {
+        "databricks": "date",
+        "powerbi": "date"
+      }
+    },
+    {
+      "name": "datetime",
+      "displayName": "Date time storage yyyy-mm-dd HH:mm:ss",
+      "targets": {
+        "databricks": "timestamp",
+        "powerbi": "timestamp"
+      }
+    },
+    {
+      "name": "binary",
+      "displayName": "Binary storage",
+      "hasCharLen": true,
+      "targets": {
+        "databricks": "binary",
+        "powerbi": "binary"
+      }
+    },
+    {
+      "name": "uniqueidentifier",
+      "displayName": "Unique Identifier",
+      "targets": {
+        "databricks": "string",
+        "powerbi": "string"
+      }
+    },
+    {
+      "name": "decimal",
+      "displayName": "Decimal",
+      "hasPrecision": true,
+      "hasScale": true,
+      "targets": {
+        "databricks": "decimal",
+        "powerbi": "decimal"
+      }
+    },
+    {
+      "name": "money",
+      "displayName": "Money",
+      "targets": {
+        "databricks": "decimal(19,4)",
+        "powerbi": "decimal"
+      }
+    },
+    {
+      "name": "dynstring",
+      "displayName": "string without character lenght",
+      "targets": {
+        "databricks": "string",
+        "powerbi": "string"
+      }
+    },
+    {
+      "name": "dyndecimal",
+      "displayName": "decimal with precision and scale",
+      "targets": {
+        "databricks": "decimal(19,3)",
+        "powerbi": "decimal"
+      }
+    }
+  ]
+}
+"""
+
+DEFAULT_PROPERTIES_JSON = """{
+  "type": "properties",
+  "properties": [
+    {
+      "name": "jobs",
+      "displayName": "jobs",
+      "scopes": [
+        {
+          "type": "entity",
+          "singleUsage": false
+        }
+      ]
+    },
+    {
+      "name": "schedules",
+      "displayName": "schedules",
+      "scopes": [
+        {
+          "type": "none"
+        }
+      ]
+    },
+    {
+      "name": "cluster",
+      "displayName": "cluster",
+      "scopes": [
+        {
+          "type": "none"
+        }
+      ]
+    },
+    {
+      "name": "tags",
+      "displayName": "tags",
+      "scopes": []
+    },
+    {
+      "name": "write_mode",
+      "displayName": "write mode",
+      "scopes": [
+        {
+          "type": "entity",
+          "mandatory": true
+        }
+      ]
+    },
+    {
+      "name": "data_retention",
+      "displayName": "data retention",
+      "scopes": [
+        {
+          "type": "entity"
+        }
+      ]
+    },
+    {
+      "name": "business_area",
+      "displayName": "Business Area",
+      "scopes": [
+        {
+          "type": "folder"
+        }
+      ]
+    },
+    {
+      "name": "target",
+      "displayName": "Target",
+      "scopes": [
+        {
+          "type": "zone"
+        }
+      ]
+    }
+  ]
+}
+"""
+
+DEFAULT_PROPERTY_VALUES_JSON = """{
+  "type": "propertyValues",
+  "propertyValues": [
+    {
+      "name": "merge",
+      "displayName": "merge",
+      "default": true,
+      "property": "write_mode"
+    },
+    {
+      "name": "overwrite",
+      "displayName": "overwrite",
+      "property": "write_mode"
+    },
+    {
+      "name": "delta",
+      "displayName": "Delta",
+      "property": "extract_column"
+    },
+    {
+      "name": "delta",
+      "displayName": "Delta",
+      "property": "extract_mode"
+    },
+    {
+      "name": "query",
+      "displayName": "Query",
+      "property": "extract_mode"
+    },
+    {
+      "name": "daily",
+      "displayName": "Daily",
+      "default": true,
+      "property": "schedules",
+      "cron": "1 0"
+    },
+    {
+      "name": "weekly",
+      "displayName": "Weekly",
+      "property": "schedules",
+      "cron": "1 0"
+    },
+    {
+      "name": "small",
+      "displayName": "S",
+      "property": "cluster",
+      "node_type": "Standard_D4ds_v5",
+      "num_workers": 4,
+      "workload_type": "job"
+    },
+    {
+      "name": "extra_small",
+      "displayName": "XY",
+      "default": true,
+      "property": "cluster",
+      "node_type": "Standard_D4ds_v5",
+      "num_workers": 2,
+      "workload_type": "job"
+    },
+    {
+      "name": "sales_daily",
+      "displayName": "Sales (Daily)",
+      "property": "jobs",
+      "properties": [
+        {
+          "property": "schedules",
+          "value": "daily"
+        },
+        {
+          "property": "cluster",
+          "value": "small"
+        }
+      ]
+    },
+    {
+      "name": "sales_weekly",
+      "displayName": "Sales (Weekly)",
+      "property": "jobs",
+      "properties": [
+        {
+          "property": "schedules",
+          "value": "weekly"
+        },
+        {
+          "property": "cluster",
+          "value": "extra_small"
+        }
+      ]
+    },
+    {
+      "name": "sales",
+      "displayName": "Sales",
+      "property": "business_area"
+    },
+    {
+      "name": "true",
+      "displayName": "Has TypeWidening",
+      "property": "enable_type_widening"
+    },
+    {
+      "name": "name",
+      "displayName": "Name Column Mapping",
+      "property": "column_mapping_mode"
+    },
+    {
+      "name": "7_days",
+      "displayName": "7 Days Data Retention",
+      "property": "data_retention"
+    }
+  ]
+}
+"""
+
+DEFAULT_ZONES_JSON = """{
+  "type": "zones",
+  "zones": [
+    {
+      "name": "Zone1",
+      "targetName": "zone1",
+      "displayName": "Zone1"
+    }
+  ]
+}
+"""
+
+DEFAULT_DATA_SOURCES_JSON = """{
+  "type": "dataSources",
+  "dataSources": [
+    {
+      "name": "DataSource1",
+      "type": "DataSourceType1",
+      "extendedProperties": {}
+    }
+  ]
+}
+"""
+
+DEFAULT_DATA_SOURCE_TYPES_JSON = """{
+  "type": "dataSourceTypes",
+  "dataSourceTypes": [
+    {
+      "name": "DataSourceType1",
+      "dataTypeMapping": [
+        {
+          "sourceType": "string",
+          "targetType": "string"
+        }
+      ],
+      "connectionProperties": [
+        {
+          "name": "host",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "authModes": [
+        {
+          "name": "default",
+          "required": [
+            "host"
+          ],
+          "optional": []
+        }
+      ]
+    }
+  ]
+}
+"""
+
+DEFAULT_DATA_PRODUCTS_JSON = """{
+  "type": "dataProducts",
+  "dataProducts": [
+    {
+      "name": "DataProduct1",
+      "dataModules": [
+        {
+          "name": "Module1",
+          "displayName": "Module1",
+          "properties": []
+        }
+      ]
+    }
+  ]
+}
+"""
+
+
+def _write_default_base_entities(base_path: Path) -> None:
+    files = {
+        "AttributeTypes.json": DEFAULT_ATTRIBUTE_TYPES_JSON,
+        "DataTypes.json": DEFAULT_DATA_TYPES_JSON,
+        "Properties.json": DEFAULT_PROPERTIES_JSON,
+        "PropertyValues.json": DEFAULT_PROPERTY_VALUES_JSON,
+        "Zones.json": DEFAULT_ZONES_JSON,
+        "DataSources.json": DEFAULT_DATA_SOURCES_JSON,
+        "DataSourceTypes.json": DEFAULT_DATA_SOURCE_TYPES_JSON,
+        "DataProducts.json": DEFAULT_DATA_PRODUCTS_JSON,
+    }
+
+    for filename, content in files.items():
+        with open(base_path / filename, "x", encoding="utf-8", newline="\n") as _f:
+            _f.write(content)
+
+
 def init_solution(solution_path: Path) -> None:
     solution = s.Solution(
-        schemaVersion=config.latest_schema_version(),  # take newest/left version
+        schemaVersion=config.latest_schema_version(),
         modelPath=Path("model"),
         basePath=Path("base"),
         pluginsPath=Path("plugins"),
@@ -49,14 +596,16 @@ def init_solution(solution_path: Path) -> None:
 
     utils.mkdir(solution_path.parent, recursive=True)
 
-    with open(solution_path, "x") as _f:
+    with open(solution_path, "x", encoding="utf-8", newline="\n") as _f:
         _f.write(solution.model_dump_json(**model.MODEL_DUMP_OPTIONS))
 
     base_dirs = ["model", "base", "generate", "output", "plugins"]
-    for dir in base_dirs:
-        utils.mkdir(solution_path.parent / dir)
-        with open(solution_path.parent / dir / ".gitkeep", "x") as _f:
+    for dir_name in base_dirs:
+        utils.mkdir(solution_path.parent / dir_name)
+        with open(solution_path.parent / dir_name / ".gitkeep", "x", encoding="utf-8") as _f:
             _f.write("")
+
+    _write_default_base_entities(solution_path.parent / "base")
 
 
 def init_solution_from_sample(solution_path: Path) -> str:
