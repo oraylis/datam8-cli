@@ -95,6 +95,7 @@ dependencies = [
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 addopts = "--capture=sys"
+norecursedirs = ["datam8-model"]
 
 [tool.pyright]
 venvPath = ".venv"
