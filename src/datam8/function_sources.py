@@ -156,11 +156,14 @@ def rename_source(
 class FunctionDirectoryMove:
     source: Path
     target: Path
+    additional_moves: tuple[tuple[Path, Path], ...] = ()
 
     def rollback(self) -> None:
-        if self.target.exists() and not self.source.exists():
-            self.source.parent.mkdir(parents=True, exist_ok=True)
-            self.target.rename(self.source)
+        moves = [(self.source, self.target), *self.additional_moves]
+        for source, target in reversed(moves):
+            if target.exists() and not source.exists():
+                source.parent.mkdir(parents=True, exist_ok=True)
+                target.rename(source)
 
 
 def move_entity_directory(
@@ -170,23 +173,80 @@ def move_entity_directory(
 ) -> FunctionDirectoryMove | None:
     from_parsed = model.Locator.from_path(from_locator)
     to_parsed = model.Locator.from_path(to_locator)
-    if (
-        from_parsed.entityType != b.EntityType.MODEL_ENTITIES.value
-        or to_parsed.entityType != b.EntityType.MODEL_ENTITIES.value
-        or not from_parsed.entityName
+    if from_parsed.entityType != to_parsed.entityType:
+        return None
+
+    locator_pairs: list[tuple[model.Locator, model.Locator]] = []
+    if from_parsed.entityType == b.EntityType.MODEL_ENTITIES.value:
+        if not from_parsed.entityName:
+            return None
+        if to_parsed.entityName is None:
+            to_parsed.entityName = from_parsed.entityName
+        locator_pairs.append((from_parsed, to_parsed))
+    elif (
+        from_parsed.entityType == b.EntityType.FOLDERS.value
+        and from_parsed.entityName
+        and to_parsed.entityName
     ):
+        source_folder = [*from_parsed.folders, from_parsed.entityName]
+        target_folder = [*to_parsed.folders, to_parsed.entityName]
+        for wrapper in datam8_model.get_entities_for_locator(from_parsed):
+            locator = wrapper.locator
+            if locator.entityType != b.EntityType.MODEL_ENTITIES.value:
+                continue
+            locator_pairs.append(
+                (
+                    locator,
+                    model.Locator(
+                        entityType=b.EntityType.MODEL_ENTITIES.value,
+                        folders=[
+                            *target_folder,
+                            *locator.folders[len(source_folder) :],
+                        ],
+                        entityName=locator.entityName,
+                    ),
+                )
+            )
+    else:
         return None
 
-    if to_parsed.entityName is None:
-        to_parsed.entityName = from_parsed.entityName
-
-    source = entity_function_root(datam8_model, from_parsed)
-    target = entity_function_root(datam8_model, to_parsed, require_entity=False)
-    if source == target or not source.exists():
+    path_pairs = [
+        (
+            entity_function_root(datam8_model, source_locator),
+            entity_function_root(datam8_model, target_locator, require_entity=False),
+        )
+        for source_locator, target_locator in locator_pairs
+    ]
+    path_pairs = [
+        (source, target)
+        for source, target in path_pairs
+        if source != target and source.exists()
+    ]
+    if not path_pairs:
         return None
-    if target.exists():
-        raise FileExistsError(f"Target function directory already exists: {target}")
 
-    target.parent.mkdir(parents=True, exist_ok=True)
-    source.rename(target)
-    return FunctionDirectoryMove(source=source, target=target)
+    targets = [target for _, target in path_pairs]
+    if len(set(targets)) != len(targets):
+        raise ValueError("Function directory move produces duplicate targets")
+    for _, target in path_pairs:
+        if target.exists():
+            raise FileExistsError(f"Target function directory already exists: {target}")
+
+    completed: list[tuple[Path, Path]] = []
+    try:
+        for source, target in path_pairs:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            source.rename(target)
+            completed.append((source, target))
+    except Exception:
+        for source, target in reversed(completed):
+            source.parent.mkdir(parents=True, exist_ok=True)
+            target.rename(source)
+        raise
+
+    source, target = completed[0]
+    return FunctionDirectoryMove(
+        source=source,
+        target=target,
+        additional_moves=tuple(completed[1:]),
+    )

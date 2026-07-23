@@ -9,10 +9,12 @@
 # (at your option) any later version.
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from datam8 import function_sources
+from datam8.model import Locator
 
 
 class FunctionModelStub:
@@ -130,3 +132,46 @@ def test_function_directory_move_can_be_rolled_back(tmp_path: Path) -> None:
     move.rollback()
     assert (source_root / "function.sql").exists()
     assert not (model_root / "core" / "Customer").exists()
+
+
+def test_folder_function_directory_move_moves_subtree_and_rolls_back(
+    tmp_path: Path,
+) -> None:
+    model_root = tmp_path / "Model"
+    customer_root = model_root / "curated" / "sales" / "Customer"
+    order_root = model_root / "curated" / "sales" / "nested" / "Order"
+    for root in (customer_root, order_root):
+        root.mkdir(parents=True)
+        (root / "function.sql").write_text("select 1", encoding="utf-8")
+
+    class FolderMoveModelStub(FunctionModelStub):
+        def get_entities_for_locator(self, _locator):
+            return [
+                SimpleNamespace(
+                    locator=Locator.from_path(
+                        "modelEntities/curated/sales/Customer"
+                    )
+                ),
+                SimpleNamespace(
+                    locator=Locator.from_path(
+                        "modelEntities/curated/sales/nested/Order"
+                    )
+                ),
+            ]
+
+    datam8_model = FolderMoveModelStub(model_root)
+    move = function_sources.move_entity_directory(
+        datam8_model,  # type: ignore[arg-type]
+        "folders/curated/sales",
+        "folders/core/sales",
+    )
+
+    assert move is not None
+    assert (model_root / "core" / "sales" / "Customer" / "function.sql").exists()
+    assert (
+        model_root / "core" / "sales" / "nested" / "Order" / "function.sql"
+    ).exists()
+
+    move.rollback()
+    assert (customer_root / "function.sql").exists()
+    assert (order_root / "function.sql").exists()
