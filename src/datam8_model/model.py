@@ -355,7 +355,7 @@ class ModelTransformation(BaseModel):
 
 class ModelRelationship(BaseModel):
     """
-    Maps attributes to a target location.
+    Maps attributes to an internal or external target location.
     """
 
     model_config = ConfigDict(
@@ -364,7 +364,8 @@ class ModelRelationship(BaseModel):
         validate_assignment=True,
         revalidate_instances="always",
     )
-    targetLocation: int
+    dataSource: Annotated[str | None, Field(min_length=1)] = None
+    targetLocation: int | str
     alias: str | None = None
     attributes: Annotated[Sequence[ModelAttributeMapping], Field(min_length=1)]
 
