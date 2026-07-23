@@ -24,7 +24,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from . import attribute, data_type, property
 
@@ -368,6 +368,16 @@ class ModelRelationship(BaseModel):
     targetLocation: int | str
     alias: str | None = None
     attributes: Annotated[Sequence[ModelAttributeMapping], Field(min_length=1)]
+
+    @model_validator(mode="after")
+    def validate_target_location(self) -> ModelRelationship:
+        if self.dataSource is None and not isinstance(self.targetLocation, int):
+            raise ValueError("Internal relationships require an integer targetLocation")
+        if self.dataSource is not None and not isinstance(self.targetLocation, str):
+            raise ValueError("External relationships require a string targetLocation")
+        if isinstance(self.targetLocation, str) and not self.targetLocation:
+            raise ValueError("External relationship targetLocation must not be empty")
+        return self
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
