@@ -1,9 +1,31 @@
 from pathlib import Path
 
+from fastapi.testclient import TestClient
+
+from datam8 import factory
+from datam8.api.app import create_app
 from datam8.model import EntityWrapper, Locator, Model
 from datam8.model.model import EntityFileRef
 from datam8_model.base import EntityType
+from datam8_model.data_type import DataTypeDefinition
 from datam8_model.property import PropertyValue
+
+
+def test_clone_api_is_not_captured_by_create_route(
+    model: Model,
+    monkeypatch,
+) -> None:
+    source = next(iter(model.dataTypes.values()))
+    target = "dataTypes/CloneRouteRegression"
+    monkeypatch.setattr(factory, "get_model", lambda: model)
+
+    response = TestClient(create_app()).put(
+        "/entities/clone",
+        json={"locator": str(source.locator), "newLocator": target},
+    )
+
+    assert response.status_code == 200
+    assert model.has_locator(target)
 
 
 def test_delete_folder_marks_folder_descendants_and_model_entities(model: Model) -> None:
@@ -107,6 +129,39 @@ def test_property_value_delete_uses_property_and_name(tmp_path: Path) -> None:
     content = file_path.read_text(encoding="utf-8")
     assert '"property": "Color"' not in content
     assert '"property": "Status"' in content
+
+
+def test_delete_last_collection_entry_removes_file(tmp_path: Path) -> None:
+    file_path = tmp_path / "DataTypes.json"
+    file_path.write_text(
+        """{
+  "type": "dataTypes",
+  "dataTypes": [
+    {"name": "Text", "displayName": "Text", "targets": {"databricks": "string"}}
+  ]
+}
+""",
+        encoding="utf-8",
+    )
+    locator = Locator.from_path("dataTypes/Text")
+    file_ref = EntityFileRef(
+        _type=EntityType.DATA_TYPES,
+        file_path=file_path,
+        locators=[locator],
+    )
+    wrapper = EntityWrapper(
+        locator=locator,
+        source_file=file_path,
+        entity=DataTypeDefinition(
+            name="Text",
+            displayName="Text",
+            targets={"databricks": "string"},
+        ),
+    )
+
+    assert file_ref.delete(wrappers=[wrapper]) is True
+    assert file_ref.locators == []
+    assert not file_path.exists()
 
 
 def test_saved_delete_removes_model_entity_function_directories(
