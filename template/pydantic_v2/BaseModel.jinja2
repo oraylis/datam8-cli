@@ -33,7 +33,7 @@ class {{ class_name }}({{ base_class }}):{% if comment is defined %}  # {{ comme
     {{ field.name }}: {{ field.type_hint }}
     {%- endif %}
     {%- if not (field.required or (field.represented_default == 'None' and field.strip_default_none)) or field.data_type.is_optional
-            %} = {{ field.represented_default }}
+            %} = {% if class_name == "Solution" and field.name == "pluginsPath" %}Path("Plugins"){% else %}{{ field.represented_default }}{% endif %}
     {%- endif -%}
     {%- endif %}
     {%- if field.docstring %}
@@ -47,6 +47,18 @@ class {{ class_name }}({{ base_class }}):{% if comment is defined %}  # {{ comme
 {%- endfor -%}
 
  {{ "" | indent(4) }}
+{%- if class_name == "ModelRelationship" %}
+    @model_validator(mode="after")
+    def validate_target_location(self) -> "{{ class_name }}":
+        if self.dataSource is None and not isinstance(self.targetLocation, int):
+            raise ValueError("Internal relationships require an integer targetLocation")
+        if self.dataSource is not None and not isinstance(self.targetLocation, str):
+            raise ValueError("External relationships require a string targetLocation")
+        if isinstance(self.targetLocation, str) and not self.targetLocation:
+            raise ValueError("External relationship targetLocation must not be empty")
+        return self
+
+{%- endif %}
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
 

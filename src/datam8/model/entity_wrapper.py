@@ -148,10 +148,11 @@ class EntityRepository[T: b.BaseEntityType]:
         try:
 
             def filter_on_id(wrapper: EntityWrapper[T]):
-                assert hasattr(wrapper.entity, "id"), (
+                entity_id = getattr(wrapper.entity, "id", None)
+                assert entity_id is not None, (
                     f"EntityType '{wrapper.locator.entityType}' does not provide an id"
                 )
-                return wrapper.entity.id == id
+                return entity_id == id
 
             return self.get_where(filter_on_id)
         except Exception as err:

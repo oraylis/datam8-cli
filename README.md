@@ -40,10 +40,13 @@ git submodule update --init --recursive
 
 ```sh
 uv run datam8 --help
+uv run datam8 init --help
 uv run datam8 serve --help
 uv run datam8 validate --help
 uv run datam8 generate --help
 ```
+
+`datam8 init` creates a blank solution with the default base entities in an empty directory.
 
 ### Build wheel
 

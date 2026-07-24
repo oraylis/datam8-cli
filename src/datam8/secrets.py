@@ -25,6 +25,7 @@ from threading import Lock
 
 import keyring
 from keyring.backends import fail as keyring_fail
+from keyring.errors import NoKeyringError
 
 from datam8 import config, logging, utils
 
@@ -36,7 +37,7 @@ SECRET_PREFIX: str = "datam8:"
 
 def _ensure_path(path: PurePosixPath | str) -> PurePosixPath:
     if isinstance(path, str):
-        return PurePosixPath(path.removeprefix("ref://"))
+        return PurePosixPath(path.strip().removeprefix("ref://"))
     return path
 
 
@@ -79,7 +80,7 @@ class SecretResolver:
         backend = keyring.get_keyring()
         if isinstance(backend, keyring_fail.Keyring):
             raise utils.create_error(
-                keyring_fail.NoKeyringError(
+                NoKeyringError(
                     "No available secret backend available. "
                     "https://pypi.org/project/keyring for details."
                 )
@@ -107,10 +108,14 @@ class SecretResolver:
 
         logger.debug(f"Before register: {secrets}")
 
+        posix_path = path.as_posix()
         if secrets is None or secrets == "":
-            secrets = path.as_posix()
+            secrets = posix_path
         else:
-            secrets = f"{secrets},{path.as_posix()}"
+            entries = [entry for entry in secrets.split(",") if entry]
+            if posix_path in entries:
+                return
+            secrets = ",".join([*entries, posix_path])
 
         self.__set_password(service_name, secrets)
         logger.debug(f"After register: {secrets}")

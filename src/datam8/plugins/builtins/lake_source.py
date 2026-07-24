@@ -95,6 +95,7 @@ manifest_azure = PluginManifest(
     entryPoint="datam8.plugins.builtins.lake_source:AzureDataLake",
     capabilities=[
         Capability.METADATA,
+        Capability.PREVIEW_DATA,
         Capability.UI_SCHEMA,
         Capability.VALIDATION_CONNECTION,
     ],
@@ -310,7 +311,12 @@ class AzureDataLake(Plugin):
                 },
             )
 
-            return TableMetadata(metadata, SourceObject(schema=container, name=path_, type="FILE"))
+            return TableMetadata(
+                metadata,
+                SourceObject.from_dict(
+                    {"schema": container, "name": path_, "type": "FILE"}
+                ),
+            )
 
         except Exception as err:
             raise utils.create_error(err)

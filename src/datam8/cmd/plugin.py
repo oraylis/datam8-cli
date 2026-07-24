@@ -56,7 +56,7 @@ def list(
 
 @app.command()
 def show(
-    plugin_id: Annotated[str, typer.Argument(help="Plugin name")],
+    plugin_id: Annotated[str, typer.Argument(help="Plugin ID (e.g. builtin:SQLServer)")],
     solution_path: opts.SolutionPath,
     log_level: opts.LogLevel = opts.LogLevels.WARNING,
     version: opts.Version = False,
@@ -81,7 +81,7 @@ def show(
 
 @app.command("ui-schema")
 def ui_schema(
-    plugin_id: Annotated[str, typer.Argument(help="Plugin name")],
+    plugin_id: Annotated[str, typer.Argument(help="Plugin ID (e.g. builtin:SQLServer)")],
     solution_path: opts.SolutionPath,
     log_level: opts.LogLevel = opts.LogLevels.WARNING,
     version: opts.Version = False,

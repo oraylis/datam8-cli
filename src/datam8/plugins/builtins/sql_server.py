@@ -51,6 +51,7 @@ manifest = PluginManifest(
     entryPoint="datam8.plugins.builtins.sql_server:SqlServer",
     capabilities=[
         Capability.METADATA,
+        Capability.PREVIEW_DATA,
         Capability.UI_SCHEMA,
         Capability.VALIDATION_CONNECTION,
     ],
@@ -123,6 +124,7 @@ class SqlServer(Plugin):
                 case [False, _ as default, str() as name] if name in self.extended_properties:
                     optional[name] = self.extended_properties.get(name, default)
 
+        uri_template: str
         match mandatory:
             case {"authMode": "sql_user"}:
                 assert "password" in optional
@@ -131,19 +133,23 @@ class SqlServer(Plugin):
                 mandatory["username"] = urllib.parse.quote_plus(optional.pop("username"))
                 mandatory["password"] = urllib.parse.quote_plus(optional.pop("password"))
 
-                uri = "mssql://{username}:{password}@{host}:{port}/{database}"
+                uri_template = "mssql://{username}:{password}@{host}:{port}/{database}"
 
             case {"authMode": "windows"}:
                 assert "trusted_connection" in optional
 
-                uri = "mssql://@{host}:{port}/{database}"
+                uri_template = "mssql://@{host}:{port}/{database}"
 
             case {"authMode": _ as auth_mode}:
                 raise utils.create_error(
                     ValueError(f"Unknown authMode {auth_mode} in {self._data_source.name}")
                 )
+            case _:
+                raise utils.create_error(
+                    ValueError(f"Missing authMode in {self._data_source.name}")
+                )
 
-        uri: str = uri.format(**mandatory)
+        uri = uri_template.format(**mandatory)
 
         if len(optional) > 0:
             uri += "?" + "&".join([f"{k}={v}" for k, v in optional.items()])
@@ -261,27 +267,99 @@ class SqlServer(Plugin):
                 ordinal_position
         """
 
-        result = self._execute_query(query)
-        result = result.with_columns(
-            isNullable=(
-                # convert YES/NO into True/False for isNullable
-                pl.when(pl.col("isNullable") == "YES").then(pl.lit(True)).otherwise(pl.lit(False))
-            ),
-            isPrimaryKey=(
-                # convert 1/0 into True/False for isPrimaryKey
-                pl.when(pl.col("isPrimaryKey") == 1).then(pl.lit(True)).otherwise(pl.lit(False))
-            ),
-            properties=(
-                # TODO: just for testing remove before merging
-                pl.lit([{"property": "test", "value": "testtest"}])
-            ),
-        )
-        if result.is_empty():
+        raw_rows = self._execute_query(query).to_dicts()
+        if not raw_rows:
             raise utils.create_error(
                 f"Table [{schema}].[{table}] does not exist in '{self._data_source.name}'"
             )
 
-        return TableMetadata(result, SourceObject(schema=schema, name=table, type="TABLE/VIEW"))
+        def first_non_null(row: dict[str, Any], *keys: str) -> Any:
+            return next((row[key] for key in keys if row.get(key) is not None), None)
+
+        def nullable_int(value: Any, *, allow_zero: bool = False) -> int | None:
+            if value is None or str(value).strip() == "":
+                return None
+            number = int(value)
+            minimum = 0 if allow_zero else 1
+            return number if number >= minimum else None
+
+        def boolean(value: Any) -> bool:
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, (int, float)):
+                return bool(value)
+            return str(value).strip().lower() in {"1", "true", "yes", "y"}
+
+        rows: list[dict[str, Any]] = []
+        for row in raw_rows:
+            name = first_non_null(row, "name", "COLUMN_NAME", "column_name")
+            ordinal = first_non_null(row, "ordinal", "ORDINAL_POSITION", "ordinal_position")
+            data_type = first_non_null(row, "dataType", "DATA_TYPE", "data_type")
+            is_nullable = first_non_null(row, "isNullable", "IS_NULLABLE", "is_nullable")
+            ordinal_number = nullable_int(ordinal)
+
+            if (
+                name is None
+                or data_type is None
+                or is_nullable is None
+                or ordinal_number is None
+            ):
+                raise utils.create_error(
+                    ValueError(
+                        f"Invalid source metadata row for [{schema}].[{table}] "
+                        f"in '{self._data_source.name}': {row}"
+                    )
+                )
+
+            rows.append(
+                {
+                    "name": str(name),
+                    "ordinal": ordinal_number,
+                    "dataType": str(data_type),
+                    "maxLength": nullable_int(
+                        first_non_null(
+                            row,
+                            "maxLength",
+                            "CHARACTER_MAXIMUM_LENGTH",
+                            "character_maximum_length",
+                        )
+                    ),
+                    "numericPrecision": nullable_int(
+                        first_non_null(
+                            row,
+                            "numericPrecision",
+                            "NUMERIC_PRECISION",
+                            "numeric_precision",
+                        )
+                    ),
+                    "numericScale": nullable_int(
+                        first_non_null(
+                            row,
+                            "numericScale",
+                            "NUMERIC_SCALE",
+                            "numeric_scale",
+                        ),
+                        allow_zero=True,
+                    ),
+                    "isNullable": boolean(is_nullable),
+                    "isPrimaryKey": boolean(
+                        first_non_null(
+                            row,
+                            "isPrimaryKey",
+                            "IS_PRIMARY_KEY",
+                            "is_primary_key",
+                        )
+                        or False
+                    ),
+                }
+            )
+
+        return TableMetadata(
+            pl.DataFrame(rows),
+            SourceObject.from_dict(
+                {"schema": schema, "name": table, "type": "TABLE/VIEW"}
+            ),
+        )
 
     @classmethod
     def validate_connection(

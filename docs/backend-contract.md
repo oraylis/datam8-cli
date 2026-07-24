@@ -40,7 +40,7 @@ All non-readiness logs are written to stderr.
 - Model entities: `GET|POST|DELETE /model/entities`, `POST /model/entities/move`, `POST /model/folder/rename`
   - Parity aliases: `GET /model/entity`, `POST /model/entity/create`, `POST /model/entity/validate`, `POST /model/entity/set`, `POST /model/entity/patch`, `POST /model/entity/duplicate`
   - Folder metadata explicit endpoints: `GET|POST|DELETE /model/folder-metadata`
-- Model functions: `GET|POST /model/function/source`, `POST /model/function/rename`
+- Model functions: `GET|POST|DELETE /model/function/source`, `POST /model/function/rename`
 - Base entities: `GET|POST|DELETE /base/entities`
   - Parity aliases: `GET /base/entity`, `POST /base/entity/set`, `POST /base/entity/patch`
 - Solution parity aliases: `GET /solution/info`, `POST /solution/validate`
@@ -50,6 +50,30 @@ All non-readiness logs are written to stderr.
   - Datasource parity endpoint: `POST /datasources/{dataSourceId}/test`
   - Plugin parity endpoints: `GET /plugins/{pluginId}/info`, `POST /plugins/{pluginId}/verify`, `POST /plugins/verify`
   - Secrets parity endpoints: `GET /secrets/runtime/list`, `GET /secrets/runtime/key`
+
+### v2 beta compatibility extensions
+
+- Entity rename: `POST /entities/rename`
+  - Body: `{ "from": "dataTypes/Text", "to": "dataTypes/String", "content": {} }`
+  - Model entities and folders continue to use `POST /entities/move`.
+- Entity folder operations include the complete subtree.
+  - Moving a folder rebases nested folders, model entities, metadata paths, and function directories.
+  - Function-directory moves are preflighted and rolled back if the model move fails.
+  - Deleting a folder marks nested folders and model entities for deletion; save also removes their function directories.
+- Function source paths are relative to their model entity.
+  - Absolute paths, drive-qualified paths, traversal segments, empty segments, and symlink escapes are rejected.
+- Built-in plugin IDs use the canonical `builtin:*` form, for example `builtin:SQLServer`.
+- `PUT /secrets/set` is an upsert and returns `204 No Content`.
+- Canonical source navigation remains under `/sources/{dataSource}/locations`.
+- Schema/table compatibility adapters:
+  - `GET /sources/{dataSource}/schemas`
+  - `GET /sources/{dataSource}/schemas/{schema}/tables`
+  - `GET /sources/{dataSource}/schemas/{schema}/tables/{table}`
+  - `GET /sources/{dataSource}/schemas/{schema}/tables/{table}/preview`
+  - `PUT /sources/{dataSource}/schemas/{schema}/tables/{table}/import`
+  - Equivalent schema-less routes are available under `/sources/{dataSource}/tables`.
+- Source metadata may include `description`, `properties`, and `sourceOverride`.
+- Preview endpoints require the plugin capability `previewData`.
 
 ### Generation
 

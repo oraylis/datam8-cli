@@ -52,9 +52,9 @@ class PluginManager:
             self.load_plugins_from_solution(solution)
 
     @classmethod
-    def register_builtin_plugin(cls, name: str, /, plugin: PluginManifest) -> None:
-        if name not in cls.__builtin_plugins:
-            cls.__builtin_plugins[name] = plugin
+    def register_builtin_plugin(cls, plugin_id: str, /, plugin: PluginManifest) -> None:
+        if plugin_id not in cls.__builtin_plugins:
+            cls.__builtin_plugins[plugin_id] = plugin
 
     def register_plugin(self, name: str, /, plugin: PluginManifest) -> None:
         """
@@ -99,14 +99,13 @@ class PluginManager:
         This is a lazy operation, as a plugin is only loaded once then stored in an internal dictionary.
         To reset all plugins or remove specific ones use `remove_plugin()` and `reset_plugins()` respectivly.
         """
-        manifest = self.get_plugin_manifest(data_source_type.name)
-        PluginClass = self.get_plugin(data_source_type.name)
+        plugin_id = data_source_type.pluginId or data_source_type.name
+        manifest = self.get_plugin_manifest(plugin_id)
+        PluginClass = self.get_plugin(plugin_id)
 
         return _create_plugin_instantiator(PluginClass, manifest)
 
-    def get_plugin(self, plugin_id_: str, /) -> type[Plugin]:
-        plugin_id = plugin_id_.removeprefix("builtin:")
-
+    def get_plugin(self, plugin_id: str, /) -> type[Plugin]:
         if plugin_id in self.__loaded_plugins:
             return self.__loaded_plugins[plugin_id]
 
@@ -141,7 +140,9 @@ class PluginManager:
         """
         Load plugins from a solution's plugin directory into this PluginManager.
         """
-        plugins_path = config.solution_folder_path / solution.pluginsPath
+        plugins_path = config.solution_folder_path / (
+            solution.pluginsPath or Path("Plugins")
+        )
         self.__plugins_dir_path = plugins_path
 
         logger.debug("Plugins directory: %s", plugins_path.as_posix())
