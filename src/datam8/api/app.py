@@ -41,7 +41,7 @@ except ModuleNotFoundError as err:
 from datam8 import config, logging
 from datam8.errors import Datam8Error, Datam8ValidationError
 
-from .routes import responses, router
+from .routes import router
 
 logger = logging.getLogger(__name__)
 
@@ -184,20 +184,22 @@ def create_app(*, token: str | None = None, enable_openapi: bool = False) -> Fas
 
     @app.exception_handler(FileNotFoundError)
     async def file_not_found_error(request: Request, exc: FileNotFoundError):
-        return responses.Response404NotFound(
-            {
+        return JSONResponse(
+            status_code=404,
+            content={
                 "trace_id": getattr(request.state, "trace_id", None),
                 "error": str(exc),
-            }
+            },
         )
 
     @app.exception_handler(FileExistsError)
-    async def file_exists_error(request: Request, exc: FileNotFoundError):
-        return responses.Response409Conflict(
-            {
+    async def file_exists_error(request: Request, exc: FileExistsError):
+        return JSONResponse(
+            status_code=409,
+            content={
                 "trace_id": getattr(request.state, "trace_id", None),
                 "error": str(exc),
-            }
+            },
         )
 
     @app.exception_handler(Exception)
