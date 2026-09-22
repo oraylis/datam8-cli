@@ -9,6 +9,7 @@
 # (at your option) any later version.
 
 import json
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
@@ -24,11 +25,17 @@ def test_function_http_lifecycle(
     monkeypatch.setattr(factory, "get_model", lambda: model)
     client = TestClient(create_app())
 
-    # Find a model entity with at least one function transformation
+    # Find a model entity with a function whose source exists in the solution.
+    # The sample solution contains shared/nested function layouts, so do not
+    # depend on repository iteration order here.
     wrapper = next(
         w
         for w in model.modelEntities.values()
-        if any(t.function is not None for t in w.entity.transformations)
+        if any(
+            t.function is not None
+            and (w.source_file.parent / Path(t.function.source)).is_file()
+            for t in w.entity.transformations
+        )
     )
     entity_id = wrapper.entity.id
     step_no = next(t.stepNo for t in wrapper.entity.transformations if t.function is not None)
