@@ -127,6 +127,25 @@ def pascal_to_snake_case(text: str) -> str:
     return "".join(result)
 
 
+def cleanup_directory(path: Path, up_to: Path) -> None:
+    """
+    Walks through all sub- and parent-directories until a specific parent is reached and deletes
+    empty one
+    """
+
+    # remove children
+    for dir_path, dir_names, file_names in path.walk(top_down=False):
+        if len(dir_names) == 0 and len(file_names) == 0:
+            delete_path(dir_path)
+
+    # remove empty parents
+    parent = path  # init
+    while (parent := parent.parent).is_relative_to(up_to):
+        if any(parent.iterdir()):
+            break
+        delete_path(parent)
+
+
 def delete_path(path: Path, recursive: bool = False) -> None:
     """Delete path.
 

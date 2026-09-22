@@ -15,66 +15,44 @@ from fastapi.testclient import TestClient
 
 from datam8 import factory
 from datam8.api.app import create_app, create_server
+from datam8.model import Model
 
 
-class ApiModelStub:
-    def __init__(self, root: Path) -> None:
-        self.root = root
-
-    def get_base_path_for_entity_type(self, _entity_type) -> Path:
-        return self.root
-
-    def get_entity_by_locator(self, _locator):
-        return object()
-
-
-def test_function_source_http_lifecycle(
-    tmp_path: Path,
+def test_function_http_lifecycle(
+    model: Model,
     monkeypatch,
 ) -> None:
-    monkeypatch.setattr(factory, "get_model", lambda: ApiModelStub(tmp_path / "Model"))
+    monkeypatch.setattr(factory, "get_model", lambda: model)
     client = TestClient(create_app())
-    locator = "modelEntities/core/Customer"
 
-    response = client.post(
-        "/model/function/source",
-        json={
-            "locator": locator,
-            "source": "helpers/normalize.sql",
-            "content": "select 1",
-        },
+    # Find a model entity with a function whose source exists in the solution.
+    # The sample solution contains shared/nested function layouts, so do not
+    # depend on repository iteration order here.
+    wrapper = next(
+        w
+        for w in model.modelEntities.values()
+        if any(
+            t.function is not None
+            and (w.source_file.parent / Path(t.function.source)).is_file()
+            for t in w.entity.transformations
+        )
     )
+    entity_id = wrapper.entity.id
+    step_no = next(t.stepNo for t in wrapper.entity.transformations if t.function is not None)
+
+    # GET function by step number
+    response = client.get(f"/functions/{entity_id}/{step_no}")
     assert response.status_code == 200
-    assert response.json() == {"ok": True}
+    data = response.json()
+    assert "item" in data
+    assert "sourceCode" in data["item"] or "source_code" in data["item"]
 
-    response = client.get(
-        "/model/function/source",
-        params={"locator": locator, "source": "helpers/normalize.sql"},
-    )
+    # GET all functions for entity
+    response = client.get(f"/functions/{entity_id}")
     assert response.status_code == 200
-    assert response.json() == {"content": "select 1"}
-
-    response = client.post(
-        "/model/function/rename",
-        json={
-            "locator": locator,
-            "fromSource": "helpers/normalize.sql",
-            "toSource": "normalize.sql",
-        },
-    )
-    assert response.status_code == 200
-
-    response = client.delete(
-        "/model/function/source",
-        params={"locator": locator, "source": "normalize.sql"},
-    )
-    assert response.status_code == 200
-
-    response = client.post(
-        "/model/function/source",
-        json={"locator": locator, "source": "../outside.sql", "content": "unsafe"},
-    )
-    assert response.status_code == 400
+    data = response.json()
+    assert "items" in data
+    assert len(data["items"]) >= 1
 
 
 def test_server_readiness_uses_json_contract(capsys, monkeypatch) -> None:

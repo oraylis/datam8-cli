@@ -90,4 +90,5 @@ class Zone(BaseModel):
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
         with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")

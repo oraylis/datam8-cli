@@ -24,7 +24,7 @@ from pathlib import PurePosixPath
 from threading import Lock
 
 import keyring
-from keyring.backends import fail as keyring_fail
+from keyring.backends.fail import Keyring as FailedKeyring
 from keyring.errors import NoKeyringError
 
 from datam8 import config, logging, utils
@@ -78,7 +78,7 @@ class SecretResolver:
 
         # test if a viable backend is available
         backend = keyring.get_keyring()
-        if isinstance(backend, keyring_fail.Keyring):
+        if isinstance(backend, FailedKeyring):
             raise utils.create_error(
                 NoKeyringError(
                     "No available secret backend available. "
@@ -105,17 +105,17 @@ class SecretResolver:
     def __register_secret(self, path: PurePosixPath, /) -> None:
         service_name = self.__create_service_name()
         secrets = self.__get_password(service_name)
+        posix_path = path.as_posix()
 
         logger.debug(f"Before register: {secrets}")
 
-        posix_path = path.as_posix()
         if secrets is None or secrets == "":
             secrets = posix_path
+        elif f",{path.as_posix()}," in f",{secrets},":
+            logger.debug("Secret already registered")
+            return
         else:
-            entries = [entry for entry in secrets.split(",") if entry]
-            if posix_path in entries:
-                return
-            secrets = ",".join([*entries, posix_path])
+            secrets = f"{secrets},{path.as_posix()}"
 
         self.__set_password(service_name, secrets)
         logger.debug(f"After register: {secrets}")
@@ -150,6 +150,9 @@ class SecretResolver:
 
     def set_secret(self, path: PurePosixPath | str, value: str, /, *, force: bool = False) -> None:
         "Set a new secret or overwrite an existing one"
+        if value == "":
+            raise ValueError("A secret value must not be an empty string")
+
         path_ = _ensure_path(path)
         service_name = self.__create_service_name(path_)
 

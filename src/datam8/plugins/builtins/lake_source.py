@@ -17,6 +17,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 import enum
 import functools
+from pathlib import Path
 from typing import Final
 
 import polars as pl
@@ -278,15 +279,16 @@ class AzureDataLake(Plugin):
             # does not necessarily be reading a single file
 
             # For structured files, try to get column information using lazy scanning
-            if path_.endswith(".parquet"):
-                lf = pl.scan_parquet(url, storage_options=self._storage_options)
-            elif path_.endswith(".csv"):
-                lf = pl.scan_csv(url, storage_options=self._storage_options)
-            elif path_.endswith((".json", ".jsonl", ".ndjson")):
-                lf = pl.scan_ndjson(url, storage_options=self._storage_options)
-            else:
-                # if something else is provided assume delta table/directory
-                lf = pl.scan_delta(url, storage_options=self._storage_options)
+            match Path(path_).suffix:
+                case ".parquet":
+                    lf = pl.scan_parquet(url, storage_options=self._storage_options)
+                case ".csv":
+                    lf = pl.scan_csv(url, storage_options=self._storage_options)
+                case ".json" | ".jsonl" | ".ndjson":
+                    lf = pl.scan_ndjson(url, storage_options=self._storage_options)
+                case _:
+                    # if something else is provided assume delta table/directory
+                    lf = pl.scan_delta(url, storage_options=self._storage_options)
 
             polars_schema = lf.collect_schema()
             metadata = pl.DataFrame(
@@ -311,12 +313,7 @@ class AzureDataLake(Plugin):
                 },
             )
 
-            return TableMetadata(
-                metadata,
-                SourceObject.from_dict(
-                    {"schema": container, "name": path_, "type": "FILE"}
-                ),
-            )
+            return TableMetadata(metadata, SourceObject(schema=container, name=path_, type="FILE"))
 
         except Exception as err:
             raise utils.create_error(err)

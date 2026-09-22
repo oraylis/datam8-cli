@@ -84,7 +84,7 @@ class TableMetadata:
         If required columns (name, dataType, ordinal) are missing from the DataFrame.
     """
 
-    def __init__(self, df: pl.DataFrame, /, source_object: SourceObject | None = None):
+    def __init__(self, df: pl.DataFrame, /, source_object: SourceObject):
         self._df = df
         self.source_object = source_object
         self.__validate_df()

@@ -16,10 +16,13 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter
 from pydantic import BaseModel
+from starlette.responses import Response
 
 from datam8.secrets import SecretResolver
+
+from .responses import Response204NoContent, Response404NotFound
 
 secrets_router = APIRouter(prefix="/secrets", tags=["secrets"])
 
@@ -32,7 +35,7 @@ class CheckSecretBody(BaseModel):
 async def check_secret(body: CheckSecretBody) -> None:
     "Checks if a secret is available for the given path"
     if SecretResolver().get_secret(body.path) is None:
-        raise HTTPException(status_code=404, detail="Secret is not available")
+        raise Response404NotFound("Secret is not available")
 
 
 class SetSecretBody(CheckSecretBody):
@@ -40,7 +43,7 @@ class SetSecretBody(CheckSecretBody):
 
 
 @secrets_router.put("/set")
-async def set_secret(body: SetSecretBody) -> Response:
+async def set_secret(body: SetSecretBody, force: bool = False) -> Response:
     "Set a secret with the given value"
-    SecretResolver().set_secret(body.path, body.value, force=True)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    SecretResolver().set_secret(body.path, body.value, force=force)
+    return Response204NoContent()

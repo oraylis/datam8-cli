@@ -111,7 +111,7 @@ class CasesEntityLookup:
             ("dataSourceTypes", ["SQLServer"]),
             ("dataProducts", ["Sales"]),
             ("dataModules", ["Sales/Other"]),
-            ("propertyValues", ["business_area/sales"])
+            ("propertyValues", ["business_area/sales"]),
         ],
     )
     def case_get_entity_dict_valid(self, input):

@@ -1,78 +1,144 @@
-## Purpose
-`datam8-generator` is the backend for DataM8 v2: CLI commands and FastAPI server used by Neon.
+# AGENTS.md
 
-## How the Repositories Fit Together (v2)
-- `datam8-model`: source-of-truth v2 schemas.
-- `datam8-sample-solution`: reference solution shape used by CI tests in this repo.
-- `datam8-generator`: canonical backend (`datam8` CLI + FastAPI).
-- `datam8-neon`: Electron + web editor that launches `datam8 serve` and calls the backend over HTTP.
+## Project Overview
 
-Data flow:
-- Neon spawns `datam8 serve --host 127.0.0.1 --port 0 --token ...`.
-- Backend returns readiness JSON line with `baseUrl` and `version`.
-- Neon calls root HTTP endpoints (no `/api/*` namespace).
-- Long-running work is currently synchronous/blocking (no Jobs/SSE endpoint layer).
+Python 3.12+ CLI application (`datam8`) built with Typer, using uv as package manager and hatchling
+as build system. Entry point: `datam8.app:app`.
 
-```mermaid
-flowchart LR
-    M[datam8-model schemas] --> G[datam8-generator
-CLI + FastAPI]
-    S[datam8-sample-solution
-reference only] -. informs .-> N[datam8-neon
-Electron + Web UI]
-    N -->|spawn datam8 serve| G
-    N -->|HTTP root endpoints| G
-```
+## Structure
 
-## Key Entry Points
-- CLI app root: `src/datam8/app.py`
-- Commands:
-  - `serve`: `src/datam8/cmd/serve.py`
-  - `generate`: `src/datam8/cmd/generate.py`
-  - `validate`: `src/datam8/cmd/validate.py`
-  - `index` APIs and workspace ops: `src/datam8/core/workspace_io.py`
-- FastAPI app + middleware: `src/datam8/api/app.py`
-- Routes:
-  - system: `src/datam8/api/routes/system.py`
-  - workspace/connector/generation routes: `src/datam8/api/routes/api.py`
+- `src/datam8/` — main package
+  - `app.py` — Typer app assembly, registers subcommands
+  - `__main__.py` — allows `python -m datam8`
+  - `config.py` — configuration handling
+  - `errors.py` — custom exceptions
+  - `factory.py` — object factory
+  - `functions.py` — function definitions/logic
+  - `generate.py` — code generation orchestration
+  - `logging.py` — logging setup
+  - `opts.py` — shared CLI options
+  - `parser.py` / `parser_v1.py` — input parsing
+  - `migration_v1.py` — v1 migration logic
+  - `secrets.py` — secrets/keyring integration
+  - `source.py` — data source handling
+  - `cmd/` — CLI subcommands
+  - `model/` — internal data models
+    - `model.py` — core model definitions
+    - `entity_wrapper.py` — entity wrapper logic
+    - `locator.py` — resource locator
+  - `plugins/` — plugin system
+    - `base.py` — plugin base class
+    - `manager.py` — plugin discovery/loading
+    - `builtins/` — built-in plugins
+  - `solution/` — solution management
+  - `utils/` — utilities
+    - `cache.py` — caching
+    - `hasher.py` — hashing
+    - `importer.py` — dynamic imports
+  - `api/` — optional FastAPI REST server
+    - `app.py` — FastAPI app setup
+    - `routes/` — API route definitions
+- `src/datam8_model/` — generated models (from JSON schema via datamodel-code-generator)
+- `datam8-model/` — git submodule with canonical JSON schema
+- `template/` — Jinja2 templates for code generation
+- `tests/` — pytest suite
+- `pyinstaller/` — standalone binary config
 
-## Integration with Neon (Stability Contract)
-Must remain stable unless contract changes are explicitly coordinated:
-- Startup readiness JSON from `datam8 serve`
-- Token-auth behavior (`Bearer` token for non-health endpoints)
-- Root endpoint paths currently consumed by Neon
+## Commands
 
-Canonical backend contract doc:
-- `docs/backend-contract.md`
+See `justfile` for all available commands (executed via `just`). Key recipes: `sync`, `run`,
+`build`, `check-format`, `run-tests`.
 
-Neon links to this file and should not duplicate endpoint details.
+## Key Patterns
 
-## Test Solution
-CI tests use the sample solution repository:
-- `oraylis/datam8-sample-solution` (`feature/v2`)
-- solution file: `ORAYLISDatabricksSample.dm8s`
+- Subcommand CLI via Typer sub-apps
+- Plugin architecture with base class and plugin manager
+- Build-time code generation: `hatch_build_datamodel.py` generates Python models from
+  `datam8-model/` JSON schema
+- Pydantic v2 for data validation
+- Jinja2 for template-based output generation
+- Polars + PyArrow for data reading/processing in the plugin system
 
-For local test runs, pass `--solution-path` or set `DATAM8_SOLUTION_PATH`.
+### Error Handling
 
-## Scope Rules
-- UI-only requirement: change Neon only.
-- Core generate/validate/index semantics: change Generator only; Neon gets wiring only.
-- Cross-repo feature: coordinated generator + Neon changes + contract doc update + end-to-end test.
-- Contract change: update `docs/backend-contract.md` first, then code/tests in both repos.
+- `errors.py` defines `Datam8Error` (base) with `code`, `message`, `details`, `hint`, `exit_code`
+  and `to_envelope()` → `ErrorEnvelope` (Pydantic model). Subclasses: `Datam8NotFoundError`,
+  `Datam8ValidationError`.
+- **API**: FastAPI exception handlers in `api/app.py` catch `Datam8Error` → maps exit_code to HTTP
+  status → returns JSON `ErrorEnvelope`. Catch-all wraps unknown exceptions as 500. Trace middleware
+  assigns UUID per request.
+- **CLI**: Errors surface via `typer.Exit(exit_code)` or `sys.exit()`.
 
-## Test Rules (Test What You Ship)
-- Backend-only changes: generator unit/integration tests required.
-- Cross-repo changes: at least one end-to-end flow test:
-  - `UI -> request -> backend completion -> output/state assertions`.
+### Model Hierarchy
 
-## CI Quality Gates
-Always ensure both commands succeed locally before finishing changes, because they are part of the GitHub workflow:
-- `uv tool run pyright src`
-- `uv tool run ruff check src`
+- `Locator` — path-like unique ID (`entityType/folder/entityName`), supports containment, parent
+  traversal, rebasing.
+- `EntityWrapper[T]` — wraps any entity with `locator`, `source_file`, `entity` (Pydantic model),
+  resolved properties, change tracking.
+- `EntityRepository[T]` — dict-like container keyed by `Locator` with `get()`, `get_where()`,
+  `add()`, `remove()`.
+- `Model` — god object holding `EntityRepository` per entity type. Provides `resolve()` (property
+  inheritance), `add_entity()`, `delete_entity()`, `save()`.
+- **Data flow**: Files → Parser → EntityWrappers in Repositories → `Model.resolve()` → Templates/API
+  consume resolved Model.
 
-## Patch Checklist
-- Contract impact assessed; `docs/backend-contract.md` updated if needed.
-- Tests added/updated for changed behavior.
-- `uv tool run pyright src` and `uv tool run ruff check src` pass.
-- Test setup verified with sample-solution checkout and `DATAM8_SOLUTION_PATH`.
-- Docs kept concise and linked to canonical sources.
+### Factory (Service Locator)
+
+- `factory.py` holds module-level singletons (`_model`, `_plugin_manager`).
+- `get_model()` — lazy-creates Model via `parser.parse_full_solution_async()`.
+- `get_plugin_for_data_source()` — resolves DataSource → DataSourceType → Plugin instance.
+- Commands and `source.py` use factory as their primary entry point.
+
+### Plugin System
+
+- `Plugin` ABC requires: `manifest()`, `resolve_source_type()`, `parse_source_location()`,
+  `get_auth_modes()`, `get_connection_properties()`, `get_data_type_mappings()`.
+- Optional capabilities: `test_connection()`, `list_source()`, `get_table_metadata()`,
+  `preview_data()` — guarded by `is_capable_of()`.
+- `PluginManager` discovers solution plugins from `**/*.json` manifests, loads via `importlib` from
+  `entryPoint` field.
+
+### Source Handling
+
+- `source.py` bridges plugins and model: calls `plugin.get_table_metadata()` → transforms
+  `SourceField` rows into `Attribute` + `SourceAttributeMapping` → builds `ModelEntity`.
+- `compare_entity_with_source()` uses `DeepDiff` for change detection (custom iterable comparison by
+  name).
+
+### Code Generation
+
+- `generate.py` uses `@register_payload(template, order=N)` decorator pattern to register payload
+  functions.
+- **Flow**: load target modules (self-register payloads) → run payloads in parallel per order → each
+  returns `IPayload` (data + output_path) → Jinja2 renders → writes output.
+
+### CLI Command Pattern
+
+- Commands accept standard options (`solution_path`, `log_level`, `version`, optionally
+  `json_output`).
+- Call `common.main_callback()` to set config + logging, then `factory.create_model_or_exit()`.
+- Output via `utils.emit_result()` (text/JSON).
+
+### Config
+
+- `config.py` uses module-level globals (not a class). `set_solution(path)` resolves `.dm8s` file.
+- `RunMode` enum (CLI/API/TEST) affects error handling behavior.
+
+## Linting & Formatting
+
+Ruff (configured in pyproject.toml): import sorting, pyflakes, pycodestyle, quotes, pyupgrade. Type
+checking via `ty`. See `justfile` for exact commands.
+
+## Tests
+
+- **Naming**: Numbered domain modules `test_0XX_<domain>.py` with matching
+  `test_0XX_<domain>_cases.py` for parameterized data.
+- **Fixtures**: `conftest.py` uses `pytest_cases.fixture`. Key fixtures: `config`, `model`
+  (resolved), `model_lazy` (unresolved), `migration`. Solution path via `--solution-path` CLI option
+  or `DATAM8_SOLUTION_PATH` env var. Sets `RunMode.TEST`.
+- **pytest-cases pattern**: Cases classes named `Cases<Topic>` with `case_<description>` methods.
+  Tests consume them via `@parametrize_with_cases("param", cases=CasesFoo, glob="*_pattern")`.
+- **Structure**: module-level test functions (not classes), fixtures injected by name.
+- **Test data**: `tests/model/` (unit tests), `tests/db/` (database assets),
+  `tests/test_040_migration/` (JSON fixtures). Main test data is a real solution provided externally
+  via path config.

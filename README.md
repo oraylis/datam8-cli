@@ -20,11 +20,18 @@ Issues are tracked centrally in the DataM8 repository:
 
 ## Local development
 
+Check out `justfile`, which contains common commands during development. They can be execute with
+[just][just-manual] which is a command runner.
+
+[just-manual]: https://just.systems/man/en/introduction.html
+
 ### Requirements
 
 - Python 3.12+
 - `uv` (https://docs.astral.sh/uv/getting-started/installation/)
     - setup local venv with `uv sync --all-extras`
+    - upgrade dependencies with `uv add -U <dpackage>'
+    - use `uv audit` to check for vulnerabilities (experimental at this time)
 
 ### Clone
 
@@ -44,6 +51,10 @@ uv run datam8 init --help
 uv run datam8 serve --help
 uv run datam8 validate --help
 uv run datam8 generate --help
+
+# or with just
+just r --help
+just r validate --help
 ```
 
 `datam8 init` creates a blank solution with the default base entities in an empty directory.
@@ -67,10 +78,17 @@ uv run pytest --solution-path "<path-to-solution.dm8s>"
 
 ### Linting / checks
 
+`ruff` is used for linting and formatting, for static type checking `ty` is preferred, as it (at
+least currently) plays more nicely with a lot of the generic type definitions used. Plus `ty` is a
+lot faster than e.g. `pyright`.
+
 ```sh
-uv tool run ruff check src
-uv tool run pyright src
+# running the tools directly via uv
+uvx ruff check src
+uvx ty check src
 ```
+
+Alternative use the tasks defined in `justfile` to execute them together.
 
 ### License headers
 

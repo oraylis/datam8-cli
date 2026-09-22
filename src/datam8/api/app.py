@@ -182,12 +182,32 @@ def create_app(*, token: str | None = None, enable_openapi: bool = False) -> Fas
         env = err.to_envelope(trace_id=trace_id)
         return JSONResponse(status_code=400, content=env.model_dump())
 
+    @app.exception_handler(FileNotFoundError)
+    async def file_not_found_error(request: Request, exc: FileNotFoundError):
+        return JSONResponse(
+            status_code=404,
+            content={
+                "trace_id": getattr(request.state, "trace_id", None),
+                "error": str(exc),
+            },
+        )
+
+    @app.exception_handler(FileExistsError)
+    async def file_exists_error(request: Request, exc: FileExistsError):
+        return JSONResponse(
+            status_code=409,
+            content={
+                "trace_id": getattr(request.state, "trace_id", None),
+                "error": str(exc),
+            },
+        )
+
     @app.exception_handler(Exception)
     async def unexpected_error_handler(request: Request, exc: Exception):
         trace_id = getattr(request.state, "trace_id", None)
         env = Datam8Error(
             code="unexpected",
-            message="Unexpected error.",
+            message=f"Unexpected error - {str(exc)}",
             details=None,
             hint=None,
             exit_code=10,

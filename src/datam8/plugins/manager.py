@@ -80,8 +80,6 @@ class PluginManager:
             del self.__solution_plugins[plugin_id]
 
     def get_plugin_manifest(self, plugin_id: str, /) -> PluginManifest:
-        manifest: PluginManifest | None = None
-
         match plugin_id:
             case _ if plugin_id in self.__solution_plugins:
                 manifest = self.__solution_plugins[plugin_id]
@@ -106,6 +104,8 @@ class PluginManager:
         return _create_plugin_instantiator(PluginClass, manifest)
 
     def get_plugin(self, plugin_id: str, /) -> type[Plugin]:
+        plugin_id = plugin_id.removeprefix("builtin:")
+
         if plugin_id in self.__loaded_plugins:
             return self.__loaded_plugins[plugin_id]
 

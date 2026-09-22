@@ -58,7 +58,7 @@ def test_model_relationship_rejects_mismatched_targets(payload: dict) -> None:
         m.ModelRelationship.model_validate(payload)
 
 
-def test_rename_base_entity_replaces_original_json_entry(tmp_path: Path) -> None:
+def test_rename_base_entity_replaces_original_json_entry(tmp_path: Path, monkeypatch) -> None:
     source_file = tmp_path / "DataTypes.json"
     source_file.write_text(
         """{
@@ -88,7 +88,7 @@ def test_rename_base_entity_replaces_original_json_entry(tmp_path: Path) -> None
     solution = s.Solution(
         schemaVersion="2.0.0",
         modelPath=Path("Model"),
-        basePath=Path("Base"),
+        basePath=Path("."),
         pluginsPath=Path("Plugins"),
         generatorTargets=[
             s.GeneratorTarget(
@@ -98,10 +98,20 @@ def test_rename_base_entity_replaces_original_json_entry(tmp_path: Path) -> None
             )
         ],
     )
+    monkeypatch.setattr("datam8.config.solution_folder_path", tmp_path)
     model = Model(
         solution,
         dataTypes=data_types,
         modelEntities=model_entities,
+        properties=EntityRepository({}, b.EntityType.PROPERTIES.value),
+        propertyValues=EntityRepository({}, b.EntityType.PROPERTY_VALUES.value),
+        zones=EntityRepository({}, b.EntityType.ZONES.value),
+        dataSourceTypes=EntityRepository({}, b.EntityType.DATA_SOURCE_TYPES.value),
+        dataProducts=EntityRepository({}, b.EntityType.DATA_PRODUCTS.value),
+        dataModules=EntityRepository({}, b.EntityType.DATA_MODULES.value),
+        attributeTypes=EntityRepository({}, b.EntityType.ATTRIBUTE_TYPES.value),
+        dataSources=EntityRepository({}, b.EntityType.DATA_SOURCES.value),
+        folders=EntityRepository({}, b.EntityType.FOLDERS.value),
     )
     model.update_file_reference(
         _type=b.EntityType.DATA_TYPES,
@@ -109,10 +119,10 @@ def test_rename_base_entity_replaces_original_json_entry(tmp_path: Path) -> None
         locators=[old_locator, Locator.from_path("dataTypes/Number")],
     )
 
-    renamed = model.rename_entity(old_locator, new_locator)
+    renamed = model.rename_entity(old_locator, "String")
     model._model_files[source_file].update(wrappers=[renamed])
 
-    assert old_locator not in model.dataTypes
+    assert model.dataTypes[old_locator].is_deleted
     assert new_locator in model.dataTypes
     assert renamed.entity.name == "String"
     content = source_file.read_text(encoding="utf-8")

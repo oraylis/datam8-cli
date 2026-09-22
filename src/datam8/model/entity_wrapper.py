@@ -19,10 +19,10 @@
 from __future__ import annotations
 
 import inspect
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Generator, Iterable
 from pathlib import Path
 from threading import Lock
-from typing import Any, Protocol, TypeAlias
+from typing import Any, Protocol
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
@@ -41,14 +41,106 @@ from .locator import Locator, LocatorOrString, _ensure_locator
 
 logger = logging.getLogger(__name__)
 
+__all__ = [
+    # functions
+    "_ensure_string",
+    # types
+    "BaseEntityDict",
+    "EntityDict",
+    "EntityWrapperVariant",
+    # classes
+    "EntityRepository",
+    "EntityWrapper",
+    "PropertyReference",
+    # protocols
+    "IModel",
+]
+
 type BaseEntityDict[T: b.BaseEntityType] = dict[b.EntityType, list[T]]
 type EntityDict[T: b.BaseEntityType] = dict[Locator, EntityWrapper[T]]
+type EntityWrapperVariant = (
+    EntityWrapper[a.AttributeType]
+    | EntityWrapper[dp.DataProduct]
+    | EntityWrapper[dp.DataModule]
+    | EntityWrapper[ds.DataSource]
+    | EntityWrapper[ds.DataSourceType]
+    | EntityWrapper[dt.DataTypeDefinition]
+    | EntityWrapper[f.Folder]
+    | EntityWrapper[m.ModelEntity]
+    | EntityWrapper[p.Property]
+    | EntityWrapper[p.PropertyValue]
+    | EntityWrapper[z.Zone]
+)
 
 
 def _ensure_string(locator: LocatorOrString) -> str:
     if isinstance(locator, str):
         return locator
     return locator.without_type()
+
+
+def _update_properties(
+    obj: BaseModel,
+    compare_func: Callable[[PropertyReference], bool],
+    set_func: Callable[[PropertyReference], None],
+) -> bool:
+    """
+    Internal function to walk through all attributes of a BaseModel and update properties with the
+    provided functions.
+
+    Returns
+    -------
+    true
+        if a property was changed
+    false
+        if no property was changed
+    """
+    has_changed = False
+    if properties := getattr(obj, "properties", []):
+        for prop in properties:
+            if compare_func(prop):
+                set_func(prop)
+                has_changed = True
+
+    for attr in obj.__dict__.values():
+        if isinstance(attr, BaseModel):
+            if _update_properties(attr, compare_func, set_func):
+                has_changed = True
+        if isinstance(attr, list):
+            item_checks = [
+                _update_properties(item, compare_func, set_func)
+                for item in attr
+                if isinstance(item, BaseModel)
+            ]
+            if any(item_checks):
+                has_changed = True
+    return has_changed
+
+
+def locator_in[T: b.BaseEntityType](
+    iter: Iterable[Locator] | Locator,
+) -> Callable[[EntityWrapper[T]], bool]:
+    def inner(wrapper: EntityWrapper[T]) -> bool:
+        return wrapper.locator in iter
+
+    return inner
+
+
+def id_equals[T: b.BaseEntityType](id: int) -> Callable[[EntityWrapper[T]], bool]:
+    def filter_on_id(wrapper: EntityWrapper[T]):
+        assert hasattr(wrapper.entity, "id"), (
+            f"EntityType '{wrapper.locator.entityType}' does not provide an id"
+        )
+        return wrapper.entity.id == id
+
+    return filter_on_id
+
+
+def name_equals[T: b.BaseEntityType](name: str) -> Callable[[EntityWrapper[T]], bool]:
+    def filter_on_name(wrapper: EntityWrapper[T]) -> bool:
+        return wrapper.entity.name == name
+
+    return filter_on_name
 
 
 class EntityRepository[T: b.BaseEntityType]:
@@ -146,21 +238,13 @@ class EntityRepository[T: b.BaseEntityType]:
 
     def get_by_id(self, id: int, /) -> EntityWrapper[T]:
         try:
-
-            def filter_on_id(wrapper: EntityWrapper[T]):
-                entity_id = getattr(wrapper.entity, "id", None)
-                assert entity_id is not None, (
-                    f"EntityType '{wrapper.locator.entityType}' does not provide an id"
-                )
-                return entity_id == id
-
-            return self.get_where(filter_on_id)
+            return self.get_where(id_equals(id))
         except Exception as err:
             raise utils.create_error(f"No entity found for id: '{id}'") from err
 
     def get_by_name(self, name: str, /) -> EntityWrapper[T]:
         try:
-            return self.get_where(lambda w: w.entity.name == name)
+            return self.get_where(name_equals(name))
         except Exception as err:
             raise utils.create_error(f"No entity found for name: '{name}'") from err
 
@@ -182,7 +266,7 @@ class EntityRepository[T: b.BaseEntityType]:
 
     def get_many(self, locator: LocatorOrString, /) -> list[EntityWrapper[T]]:
         locator_ = self.__ensure_locator(locator)
-        return self.get_many_where(lambda w: w.locator in locator_)
+        return self.get_many_where(locator_in(locator_))
 
     def get_all(self, /) -> list[EntityWrapper[T]]:
         return list(self.values())
@@ -346,6 +430,8 @@ class EntityWrapper[T: b.BaseEntityType](BaseModel):
         self._changed = False
         self._deleted = False
         self.source_file = source_file or self.source_file
+        if locator.entityName is not None:
+            self.entity.name = locator.entityName
 
     def has_property(self, property_name: str, /) -> bool:
         """
@@ -378,23 +464,86 @@ class EntityWrapper[T: b.BaseEntityType](BaseModel):
         self.entity = new_entity
         self._changed = True
 
+    def update_references(self, from_: Locator, to_: Locator) -> None:
+        """
+        Update references of a specific locator to point to another Locator.
+
+        This will do nothing if one of the provided locators point to the wrapper itself. No error
+        will be raised in this case.
+
+        Raises
+        ------
+        :class:`ValueError`
+            if `to_` does not point to an entity or if `from_` and `to_` have different types.
+        """
+        if from_ == self.locator or to_ == self.locator:
+            return
+
+        if to_.entityName is None:
+            raise ValueError(f"Can only update references pointing to entities, not to: {to_}")
+        else:
+            # just to statisty type checking, as that seems to be lost in the closure/match later
+            new_name = to_.entityName
+
+        if from_.entityType != to_.entityType:
+            raise ValueError(
+                f"Can only update references with a loator of the same type: from {from_} vs to {to_}"
+            )
+
+        # check what type of entity was moved/renamed and update this wrapper accordingly
+        match b.EntityType(from_.entityType):
+            case b.EntityType.PROPERTIES | b.EntityType.PROPERTY_VALUES as t:
+
+                def comparison_(prop: PropertyReference) -> bool:
+                    if t == b.EntityType.PROPERTIES:
+                        return prop.property == from_.entityName
+                    else:
+                        # the property name is the last part of the locator path
+                        return prop.property == from_.folders[-1] and prop.value == from_.entityName
+
+                def set_(prop: PropertyReference) -> None:
+                    if t == b.EntityType.PROPERTIES:
+                        prop.property = new_name
+                    else:
+                        prop.value = new_name
+
+                if _update_properties(self.entity, comparison_, set_):
+                    self._changed = True
+                    self.resolved = False
+
+            case b.EntityType.ATTRIBUTE_TYPES if isinstance(self.entity, m.ModelEntity):
+                for attr in self.entity.attributes:
+                    if attr.attributeType == from_.entityName:
+                        attr.attributeType = new_name
+                        self._changed = True
+
+            case b.EntityType.DATA_TYPES if isinstance(self.entity, m.ModelEntity):
+                for attr in self.entity.attributes:
+                    if attr.dataType.type == from_.entityName:
+                        attr.dataType.type = new_name
+                        self._changed = True
+                for src in self.entity.sources:
+                    for map in src.mapping or []:
+                        if map.sourceDataType is None:
+                            continue
+                        if map.sourceDataType.type == from_.entityName:
+                            map.sourceDataType.type = new_name
+                            self._changed = True
+
+            case b.EntityType.DATA_SOURCES if isinstance(self.entity, m.ModelEntity):
+                for src in self.entity.sources:
+                    if isinstance(src, m.ExternalModelSource):
+                        if src.dataSource == from_.entityName:
+                            src.dataSource = new_name
+                            self._changed = True
+
+            case b.EntityType.DATA_SOURCE_TYPES if isinstance(self.entity, ds.DataSource):
+                if self.entity.type == from_.entityName:
+                    self.entity.type = new_name
+                    self._changed = True
+
 
 class IModel(Protocol):
     def resolve_wrapper[T: b.BaseEntityType](
         self, wrapper: EntityWrapper[T], /
     ) -> EntityWrapper[T]: ...
-
-
-EntityWrapperVariant: TypeAlias = (  # noqa: UP040
-    EntityWrapper[a.AttributeType]
-    | EntityWrapper[dp.DataProduct]
-    | EntityWrapper[dp.DataModule]
-    | EntityWrapper[ds.DataSource]
-    | EntityWrapper[ds.DataSourceType]
-    | EntityWrapper[dt.DataTypeDefinition]
-    | EntityWrapper[f.Folder]
-    | EntityWrapper[m.ModelEntity]
-    | EntityWrapper[p.Property]
-    | EntityWrapper[p.PropertyValue]
-    | EntityWrapper[z.Zone]
-)

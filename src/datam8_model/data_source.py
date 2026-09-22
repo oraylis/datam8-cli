@@ -82,7 +82,8 @@ class SourceDataTypeMapping(BaseModel):
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
         with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
 
 
 class ConnectionPropertyValueType(Enum):
@@ -137,7 +138,8 @@ class ConnectionProperty(BaseModel):
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
         with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
 
 
 class AuthMode(BaseModel):
@@ -189,7 +191,8 @@ class AuthMode(BaseModel):
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
         with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
 
 
 class DataSourceType(BaseModel):
@@ -265,7 +268,8 @@ class DataSourceType(BaseModel):
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
         with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
 
 
 class SourceOverride(BaseModel):
@@ -311,7 +315,8 @@ class SourceOverride(BaseModel):
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
         with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
 
 
 class DataSource(BaseModel):
@@ -372,7 +377,8 @@ class DataSource(BaseModel):
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
         with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
 
 
 class SourceObject(BaseModel):
@@ -416,7 +422,8 @@ class SourceObject(BaseModel):
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
         with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
 
 
 class SourceField(BaseModel):
@@ -464,4 +471,5 @@ class SourceField(BaseModel):
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
         with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")

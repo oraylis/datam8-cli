@@ -19,14 +19,16 @@
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from datam8 import config, factory
 
 from .entities import entities_router
+from .functions import functions_router
 from .model import model_router
 from .plugins import plugins_router
+from .responses import Response204NoContent
 from .secrets import secrets_router
 from .solution import solution_router
 from .sources import sources_router
@@ -34,14 +36,10 @@ from .sources import sources_router
 router = APIRouter()
 
 
-class HealthResponse(BaseModel):
-    status: str = "ok"
-
-
 @router.get("/health")
-async def get_health() -> HealthResponse:
+async def get_health() -> Response:
     """Return service health status."""
-    return HealthResponse()
+    return Response204NoContent()
 
 
 class VersionResponse(BaseModel):
@@ -87,3 +85,4 @@ router.include_router(entities_router)
 router.include_router(sources_router)
 router.include_router(plugins_router)
 router.include_router(secrets_router)
+router.include_router(functions_router)

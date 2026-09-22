@@ -19,10 +19,12 @@
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field
 
-from datam8 import config, factory, function_sources, generate, model, opts
+from datam8 import config, factory, generate, model, opts
+
+from .responses import Response204NoContent
 
 model_router = APIRouter(prefix="/model", tags=["model"])
 
@@ -35,6 +37,7 @@ class GenerateBody(BaseModel):
 
 
 class GenerateResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
     target: str | None
     output_path: Annotated[str | None, Field(alias="outputPath")] = None
     message: str | None = None
@@ -60,11 +63,9 @@ async def generator_run(body: GenerateBody | None = None) -> GenerateResponse:
         generate_all=False,
     )
 
-    response = GenerateResponse.model_validate(
-        {
-            "target": target or opts.default_target,
-            "outputPath": output_path.as_posix(),
-        }
+    response = GenerateResponse(
+        target=target or opts.default_target,
+        output_path=output_path.as_posix(),
     )
 
     return response
@@ -75,8 +76,9 @@ class SaveBody(BaseModel):
 
 
 @model_router.post("/save")
-async def model_save(body: SaveBody | None = None) -> None:
+async def model_save(body: SaveBody | None = None) -> Response:
     factory.get_model().save(body.locator if body is not None else None)
+    return Response204NoContent()
 
 
 class RealoadResponse(BaseModel):
@@ -105,27 +107,6 @@ class UnsavedResponse(BaseModel):
     deleted: list[model.Locator]
 
 
-class FunctionSourceBody(BaseModel):
-    locator: str
-    source: str
-    content: str = ""
-
-
-class FunctionRenameBody(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-    locator: str
-    from_source: Annotated[str, Field(alias="fromSource")]
-    to_source: Annotated[str, Field(alias="toSource")]
-
-
-class FunctionSourceResponse(BaseModel):
-    content: str
-
-
-class FunctionMutationResponse(BaseModel):
-    ok: bool = True
-
-
 @model_router.get("/unsaved")
 async def get_unsaved() -> UnsavedResponse:
     changed, deleted = factory.get_model().get_unsaved_entities()
@@ -135,67 +116,3 @@ async def get_unsaved() -> UnsavedResponse:
         deleted=deleted,
     )
     return response
-
-
-def _function_error(error: Exception) -> HTTPException:
-    if isinstance(error, FileNotFoundError):
-        return HTTPException(status_code=404, detail=str(error))
-    if isinstance(error, FileExistsError):
-        return HTTPException(status_code=409, detail=str(error))
-    return HTTPException(status_code=400, detail=str(error))
-
-
-@model_router.get("/function/source")
-async def get_function_source(
-    locator: str = Query(...),
-    source: str = Query(...),
-) -> FunctionSourceResponse:
-    try:
-        content = function_sources.read_source(factory.get_model(), locator, source)
-    except (FileNotFoundError, ValueError) as error:
-        raise _function_error(error) from error
-    return FunctionSourceResponse(content=content)
-
-
-@model_router.post("/function/source")
-async def save_function_source(
-    body: FunctionSourceBody,
-) -> FunctionMutationResponse:
-    try:
-        function_sources.write_source(
-            factory.get_model(),
-            body.locator,
-            body.source,
-            body.content,
-        )
-    except (OSError, ValueError) as error:
-        raise _function_error(error) from error
-    return FunctionMutationResponse()
-
-
-@model_router.delete("/function/source")
-async def delete_function_source(
-    locator: str = Query(...),
-    source: str = Query(...),
-) -> FunctionMutationResponse:
-    try:
-        function_sources.delete_source(factory.get_model(), locator, source)
-    except (FileNotFoundError, ValueError) as error:
-        raise _function_error(error) from error
-    return FunctionMutationResponse()
-
-
-@model_router.post("/function/rename")
-async def rename_function_source(
-    body: FunctionRenameBody,
-) -> FunctionMutationResponse:
-    try:
-        function_sources.rename_source(
-            factory.get_model(),
-            body.locator,
-            body.from_source,
-            body.to_source,
-        )
-    except (FileNotFoundError, FileExistsError, ValueError) as error:
-        raise _function_error(error) from error
-    return FunctionMutationResponse()

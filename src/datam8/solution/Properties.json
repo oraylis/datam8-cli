@@ -1,0 +1,75 @@
+{
+  "type": "properties",
+  "properties": [
+    {
+      "name": "jobs",
+      "displayName": "jobs",
+      "scopes": [
+        {
+          "type": "entity",
+          "singleUsage": false
+        }
+      ]
+    },
+    {
+      "name": "schedules",
+      "displayName": "schedules",
+      "scopes": [
+        {
+          "type": "none"
+        }
+      ]
+    },
+    {
+      "name": "cluster",
+      "displayName": "cluster",
+      "scopes": [
+        {
+          "type": "none"
+        }
+      ]
+    },
+    {
+      "name": "tags",
+      "displayName": "tags",
+      "scopes": []
+    },
+    {
+      "name": "write_mode",
+      "displayName": "write mode",
+      "scopes": [
+        {
+          "type": "entity",
+          "mandatory": true
+        }
+      ]
+    },
+    {
+      "name": "data_retention",
+      "displayName": "data retention",
+      "scopes": [
+        {
+          "type": "entity"
+        }
+      ]
+    },
+    {
+      "name": "business_area",
+      "displayName": "Business Area",
+      "scopes": [
+        {
+          "type": "folder"
+        }
+      ]
+    },
+    {
+      "name": "target",
+      "displayName": "Target",
+      "scopes": [
+        {
+          "type": "zone"
+        }
+      ]
+    }
+  ]
+}

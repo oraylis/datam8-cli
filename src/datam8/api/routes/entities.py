@@ -17,15 +17,21 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict, Field
 
-from datam8 import factory, function_sources, model
+from datam8 import factory, model
 from datam8_model import base as b
 
 from .responses import MultiItemResponse, SingleItemResponse
 
 entities_router = APIRouter(prefix="/entities", tags=["entities"])
+
+
+@entities_router.get("")
+async def get_all_entities() -> MultiItemResponse[model.EntityWrapperVariant]:
+    entities = list(factory.get_model().get_entity_iterator())
+    return MultiItemResponse.from_list(entities)
 
 
 @entities_router.get("/{locator:path}")
@@ -39,7 +45,7 @@ async def get_entities(locator: str = "/") -> MultiItemResponse[model.EntityWrap
 
 @entities_router.patch("/{locator:path}")
 async def patch_entity(
-    locator: str, patch: dict[str, Any]
+    patch: dict[str, Any], locator: str
 ) -> SingleItemResponse[model.EntityWrapperVariant]:
     wrapper = factory.get_model().get_entity_by_locator(locator)
     wrapper.update(**patch)
@@ -68,9 +74,23 @@ async def clone_entity(
 
 @entities_router.put("/{locator:path}")
 async def create_entity(
-    locator: str, body: dict[str, Any]
+    body: dict[str, Any], locator: str
 ) -> SingleItemResponse[model.EntityWrapper[b.BaseEntityType]]:
     entity = factory.get_model().add_entity(locator, body)
+    return SingleItemResponse(item=entity)
+
+
+class RenameBody(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    from_: Annotated[str, Field(alias="from")]
+    to: str
+
+
+@entities_router.post("/rename")
+async def rename_entity(
+    body: RenameBody,
+) -> SingleItemResponse[model.EntityWrapperVariant]:
+    entity = factory.get_model().rename_entity(body.from_, body.to)
     return SingleItemResponse(item=entity)
 
 
@@ -80,39 +100,15 @@ class MoveBody(BaseModel):
     to: Annotated[str, Field(alias="to")]
 
 
-class RenameBody(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-    from_: Annotated[str, Field(alias="from")]
-    to: str
-    content: dict[str, Any] | None = None
-
-
-@entities_router.post("/rename")
-async def rename_entity(
-    body: RenameBody,
-) -> SingleItemResponse[model.EntityWrapperVariant]:
-    entity = factory.get_model().rename_entity(body.from_, body.to, body.content)
-    return SingleItemResponse(item=entity)
-
-
 @entities_router.post("/move")
 async def move_entities(body: MoveBody) -> MultiItemResponse[model.EntityWrapperVariant]:
-    datam8_model = factory.get_model()
-    try:
-        directory_move = function_sources.move_entity_directory(
-            datam8_model,
-            body.from_,
-            body.to,
-        )
-    except (FileExistsError, ValueError) as error:
-        status_code = 409 if isinstance(error, FileExistsError) else 400
-        raise HTTPException(status_code=status_code, detail=str(error)) from error
+    moved_entities = factory.get_model().move_entities(body.from_, body.to)
+    return MultiItemResponse.from_list(moved_entities)
 
-    try:
-        entities = datam8_model.move_entities(body.from_, body.to)
-    except Exception:
-        if directory_move is not None:
-            directory_move.rollback()
-        raise
 
-    return MultiItemResponse.from_list(entities)
+@entities_router.post("/move-single")
+async def move_entity(body: MoveBody) -> SingleItemResponse[model.EntityWrapperVariant]:
+    from_ = model.Locator.from_path(body.from_)
+    to = model.Locator.from_path(body.to)
+    moved_entity = factory.get_model().move_entity(from_, to)
+    return SingleItemResponse(item=moved_entity)

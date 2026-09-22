@@ -13,18 +13,13 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 # GNU General Public License for more details.
 #
+
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-from .cmd import functions, migrate, plugin, root, secret, sources
+from .solution import init_solution, init_solution_from_sample
 
-app = root.app
-app.add_typer(sources.app)
-app.add_typer(plugin.app)
-app.add_typer(secret.app)
-app.add_typer(migrate.app)
-app.add_typer(functions.app)
-
-
-if __name__ == "__main__":
-    app()
+__all__ = [
+    "init_solution",
+    "init_solution_from_sample",
+]

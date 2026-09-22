@@ -20,6 +20,11 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
+from starlette.status import (
+    HTTP_400_BAD_REQUEST,
+    HTTP_404_NOT_FOUND,
+    HTTP_500_INTERNAL_SERVER_ERROR,
+)
 
 from datam8 import factory, source
 from datam8.model import EntityWrapper, Locator
@@ -38,7 +43,7 @@ async def test_connection(data_source: str) -> None:
     error = plugin.test_connection()
 
     if isinstance(error, Exception):
-        raise HTTPException(status_code=500, detail=str(error))
+        raise HTTPException(status_code=HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error))
 
 
 @sources_router.get("/{data_source}/locations")
@@ -66,15 +71,24 @@ async def preview(
     data_source: str, source_location: str, limit: int = 10
 ) -> MultiItemResponse[dict[str, Any]]:
     plugin = factory.get_plugin_for_data_source(data_source)
+
     if not plugin.is_capable_of(Capability.PREVIEW_DATA):
-        raise HTTPException(status_code=400, detail="Plugin does not support data preview")
+        raise HTTPException(
+            status_code=HTTP_400_BAD_REQUEST,
+            detail=f"Plugin '{plugin.manifest().id}' does not support data preview",
+        )
+
     preview = plugin.preview_data(source_location, limit=limit)
 
-    for df in preview.collect_batches(chunk_size=limit):
-        rows = df.to_dicts()
-        return MultiItemResponse.from_list(rows)
+    # since this only returns a preview it is fine to just get the first batch of data
+    df = next(preview.collect_batches(chunk_size=limit), None)
 
-    raise HTTPException(status_code=404, detail="No data to preview")
+    # TODO: maybe better to just return an empty dictionary?
+    if df is None:
+        raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="No data to preview")
+
+    rows = df.to_dicts()
+    return MultiItemResponse.from_list(rows)
 
 
 class ImportBody(BaseModel):
@@ -114,12 +128,6 @@ async def compare_with_source(locator: str) -> CompareResponse:
 #
 # additional routes
 #
-
-
-# TODO: not sure what this is supposed to be?
-# @sources_router.post("/{data_source}/virtual-table-metadata")
-# async def get_virtual_table_metadata(data_source: str, body: TableMetadataBody) -> dict[str, Any]:
-#     raise HTTPException(status_code=404, detail="NotImplemented")
 
 
 @sources_router.get("/{data_source}/usages")

@@ -195,16 +195,6 @@ def read_from_data_source(
     plugin = factory.get_plugin_for_data_source(data_source, model=model)
     metadata = plugin.get_table_metadata(source_location)
     source_object = metadata.source_object
-    effective_data_source = data_source
-    effective_source_location = source_location
-
-    if source_object is not None and source_object.sourceOverride is not None:
-        effective_data_source = (
-            source_object.sourceOverride.dataSource or effective_data_source
-        )
-        effective_source_location = (
-            source_object.sourceOverride.sourceLocation or effective_source_location
-        )
 
     attributes: list[at.Attribute] = []
     source_attribute_mapping: list[m.SourceAttributeMapping] = []
@@ -258,13 +248,13 @@ def read_from_data_source(
         # name and id are placeholders htat will be replace by model.add_entity()
         name="temp",
         id=1,
-        description=source_object.description if source_object is not None else None,
+        description=source_object.description,
         attributes=attributes,
-        properties=source_object.properties if source_object is not None else None,
+        properties=source_object.properties,
         sources=[
             m.ExternalModelSource(
-                sourceLocation=effective_source_location,
-                dataSource=effective_data_source,
+                sourceLocation=source_location,
+                dataSource=data_source,
                 mapping=source_attribute_mapping,
             )
         ],

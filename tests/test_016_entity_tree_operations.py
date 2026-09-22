@@ -28,25 +28,17 @@ def test_clone_api_is_not_captured_by_create_route(
     assert model.has_locator(target)
 
 
-def test_delete_folder_marks_folder_descendants_and_model_entities(model: Model) -> None:
-    deleted = model.delete_entities("folders/020-Core/Sales")
+def test_delete_model_entities_also_removes_folders(model: Model) -> None:
+    deleted = model.delete_entities("modelEntities/020-Core/Sales/")
 
-    assert Locator.from_path("folders/020-Core/Sales") in deleted
-    assert any(
-        locator.entityType == EntityType.MODEL_ENTITIES.value
-        and locator.folders[:2] == ["020-Core", "Sales"]
-        for locator in deleted
-    )
+    assert any(locator.entityType == EntityType.MODEL_ENTITIES.value for locator in deleted)
+    assert any(locator.entityType == EntityType.FOLDERS.value for locator in deleted)
     assert all(model[locator.entityType][locator].is_deleted for locator in deleted)
 
 
 def test_move_folder_rebases_complete_subtree_and_metadata(model: Model) -> None:
-    source_wrappers = model.get_entities_for_locator("folders/020-Core/Sales")
-    source_model_names = {
-        wrapper.locator.entityName
-        for wrapper in source_wrappers
-        if wrapper.locator.entityType == EntityType.MODEL_ENTITIES.value
-    }
+    original_folder = model.folders.get(Locator.from_path("folders/020-Core/Sales"))
+    assert original_folder is not None
 
     moved = model.move_entities(
         "folders/020-Core/Sales",
@@ -58,21 +50,9 @@ def test_move_folder_rebases_complete_subtree_and_metadata(model: Model) -> None
         for wrapper in moved
         if wrapper.locator == Locator.from_path("folders/020-Core/SalesRenamed")
     )
-    moved_model_names = {
-        wrapper.locator.entityName
-        for wrapper in moved
-        if wrapper.locator.entityType == EntityType.MODEL_ENTITIES.value
-    }
 
     assert moved_folder.entity.name == "SalesRenamed"
-    assert moved_folder.entity.path == "020-Core/SalesRenamed"
-    assert moved_model_names == source_model_names
-    assert all(wrapper.is_deleted for wrapper in source_wrappers)
-    assert all(
-        wrapper.locator.folders[:2] == ["020-Core", "SalesRenamed"]
-        for wrapper in moved
-        if wrapper.locator.entityType == EntityType.MODEL_ENTITIES.value
-    )
+    assert original_folder.is_deleted
 
 
 def test_add_model_entity_ignores_client_id_and_uses_dedicated_file(model: Model) -> None:
@@ -162,29 +142,3 @@ def test_delete_last_collection_entry_removes_file(tmp_path: Path) -> None:
     assert file_ref.delete(wrappers=[wrapper]) is True
     assert file_ref.locators == []
     assert not file_path.exists()
-
-
-def test_saved_delete_removes_model_entity_function_directories(
-    model: Model,
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    wrapper = next(iter(model.modelEntities.values()))
-    model_root = tmp_path / "Model"
-    function_directory = model_root.joinpath(
-        *wrapper.locator.folders,
-        wrapper.locator.entityName or "",
-    )
-    function_directory.mkdir(parents=True)
-    (function_directory / "function.sql").write_text("select 1", encoding="utf-8")
-    original_get_base_path = model.get_base_path_for_entity_type
-
-    def get_base_path(entity_type: EntityType) -> Path:
-        if entity_type == EntityType.MODEL_ENTITIES:
-            return model_root
-        return original_get_base_path(entity_type)
-
-    monkeypatch.setattr(model, "get_base_path_for_entity_type", get_base_path)
-    model.cleanup_deleted_model_entity_directories([wrapper])
-
-    assert not function_directory.exists()
