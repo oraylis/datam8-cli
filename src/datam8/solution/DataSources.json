@@ -1,0 +1,10 @@
+{
+  "type": "dataSources",
+  "dataSources": [
+    {
+      "name": "DataSource1",
+      "type": "DataSourceType1",
+      "extendedProperties": {}
+    }
+  ]
+}

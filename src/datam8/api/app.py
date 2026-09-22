@@ -18,9 +18,12 @@
 
 from __future__ import annotations
 
+import json
 import os
 import socket
 import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 import typer
 
@@ -35,7 +38,7 @@ except ModuleNotFoundError as err:
     raise typer.Exit(1) from err
 
 
-from datam8 import config, factory, logging
+from datam8 import config, logging
 from datam8.errors import Datam8Error, Datam8ValidationError
 
 from .routes import router
@@ -79,8 +82,19 @@ def _bind(host: str, port: int) -> tuple[socket.socket, int]:
 def create_app(*, token: str | None = None, enable_openapi: bool = False) -> FastAPI:
     """Create and configure the HTTP API application."""
 
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        readiness_payload = getattr(app.state, "readiness_payload", None)
+        if readiness_payload is not None:
+            print(json.dumps(readiness_payload, separators=(",", ":")))
+        yield
+
     if enable_openapi:
-        app = FastAPI(title="DataM8 API", version=config.get_version())
+        app = FastAPI(
+            title="DataM8 API",
+            version=config.get_version(),
+            lifespan=lifespan,
+        )
     else:
         app = FastAPI(
             title="DataM8 API",
@@ -88,6 +102,7 @@ def create_app(*, token: str | None = None, enable_openapi: bool = False) -> Fas
             docs_url=None,
             redoc_url=None,
             openapi_url=None,
+            lifespan=lifespan,
         )
 
     origins_env = os.environ.get("DATAM8_CORS_ORIGINS")
@@ -167,12 +182,32 @@ def create_app(*, token: str | None = None, enable_openapi: bool = False) -> Fas
         env = err.to_envelope(trace_id=trace_id)
         return JSONResponse(status_code=400, content=env.model_dump())
 
+    @app.exception_handler(FileNotFoundError)
+    async def file_not_found_error(request: Request, exc: FileNotFoundError):
+        return JSONResponse(
+            status_code=404,
+            content={
+                "trace_id": getattr(request.state, "trace_id", None),
+                "error": str(exc),
+            },
+        )
+
+    @app.exception_handler(FileExistsError)
+    async def file_exists_error(request: Request, exc: FileExistsError):
+        return JSONResponse(
+            status_code=409,
+            content={
+                "trace_id": getattr(request.state, "trace_id", None),
+                "error": str(exc),
+            },
+        )
+
     @app.exception_handler(Exception)
     async def unexpected_error_handler(request: Request, exc: Exception):
         trace_id = getattr(request.state, "trace_id", None)
         env = Datam8Error(
             code="unexpected",
-            message="Unexpected error.",
+            message=f"Unexpected error - {str(exc)}",
             details=None,
             hint=None,
             exit_code=10,
@@ -186,12 +221,11 @@ def create_app(*, token: str | None = None, enable_openapi: bool = False) -> Fas
 
 def create_server(*, host: str, port: int, app: FastAPI) -> uvicorn.Server:
     base_url = f"http://{host}:{port}"
-
-    @app.on_event("startup")
-    async def _emit_ready() -> None:
-        print(
-            f"API ready at `{base_url}`, schemaVersion: {factory.get_model().solution.schemaVersion}"
-        )
+    app.state.readiness_payload = {
+        "type": "ready",
+        "baseUrl": base_url,
+        "version": config.get_version(),
+    }
 
     server = uvicorn.Server(
         uvicorn.Config(

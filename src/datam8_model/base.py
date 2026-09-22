@@ -86,7 +86,8 @@ class AttributeTypes(BaseModel):
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
         with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
 
 
 class EntityType(Enum):
@@ -160,7 +161,8 @@ class PropertyValues(BaseModel):
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
         with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
 
 
 class Zones(BaseModel):
@@ -220,7 +222,8 @@ class Zones(BaseModel):
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
         with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
 
 
 class DataTypes(BaseModel):
@@ -280,7 +283,8 @@ class DataTypes(BaseModel):
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
         with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
 
 
 class DataSourceTypes(BaseModel):
@@ -340,7 +344,8 @@ class DataSourceTypes(BaseModel):
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
         with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
 
 
 class Folders(BaseModel):
@@ -400,7 +405,8 @@ class Folders(BaseModel):
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
         with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
 
 
 class Properties(BaseModel):
@@ -460,7 +466,8 @@ class Properties(BaseModel):
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
         with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
 
 
 class DataModules(BaseModel):
@@ -520,7 +527,8 @@ class DataModules(BaseModel):
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
         with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
 
 
 class DataSources(BaseModel):
@@ -580,7 +588,8 @@ class DataSources(BaseModel):
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
         with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
 
 
 class DataProducts(BaseModel):
@@ -640,7 +649,8 @@ class DataProducts(BaseModel):
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
         with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
 
 
 class ModelEntities(BaseModel):
@@ -700,7 +710,8 @@ class ModelEntities(BaseModel):
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
         with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
 
 
 # ruff: disable[UP040]

@@ -16,8 +16,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-# ruff: noqa: F401
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -33,6 +31,18 @@ from .entity_wrapper import (
 )
 from .locator import ROOT_LOCATOR, Locator
 from .model import MODEL_DUMP_OPTIONS, Model
+
+__all__ = [
+    "EntityDict",
+    "EntityRepository",
+    "EntityWrapper",
+    "EntityWrapperVariant",
+    "PropertyReference",
+    "Locator",
+    "Model",
+    "MODEL_DUMP_OPTIONS",
+    "ROOT_LOCATOR",
+]
 
 
 def wrap_base_entity[T: b.BaseEntityType](

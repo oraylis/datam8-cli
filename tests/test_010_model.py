@@ -110,7 +110,14 @@ def test_get_entities(model: Model):
     assert len(entities) > 0
 
 
-def test_move_entities(model: Model):
+def test_move_entities(model: Model, monkeypatch: pytest.MonkeyPatch):
+    # Keep the shared solution fixture untouched. This test verifies the model
+    # move itself; moving function source files is covered by the function API.
+    monkeypatch.setattr(
+        "datam8.model.model.functions.move_functions",
+        lambda *args, **kwargs: None,
+    )
+
     wrapper = next(model.modelEntities.values())
     new_locator = Locator(
         entityType=wrapper.locator.entityType,

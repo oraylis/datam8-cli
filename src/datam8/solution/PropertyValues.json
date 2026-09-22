@@ -1,0 +1,111 @@
+{
+  "type": "propertyValues",
+  "propertyValues": [
+    {
+      "name": "merge",
+      "displayName": "merge",
+      "default": true,
+      "property": "write_mode"
+    },
+    {
+      "name": "overwrite",
+      "displayName": "overwrite",
+      "property": "write_mode"
+    },
+    {
+      "name": "delta",
+      "displayName": "Delta",
+      "property": "extract_column"
+    },
+    {
+      "name": "delta",
+      "displayName": "Delta",
+      "property": "extract_mode"
+    },
+    {
+      "name": "query",
+      "displayName": "Query",
+      "property": "extract_mode"
+    },
+    {
+      "name": "daily",
+      "displayName": "Daily",
+      "default": true,
+      "property": "schedules",
+      "cron": "1 0"
+    },
+    {
+      "name": "weekly",
+      "displayName": "Weekly",
+      "property": "schedules",
+      "cron": "1 0"
+    },
+    {
+      "name": "small",
+      "displayName": "S",
+      "property": "cluster",
+      "node_type": "Standard_D4ds_v5",
+      "num_workers": 4,
+      "workload_type": "job"
+    },
+    {
+      "name": "extra_small",
+      "displayName": "XY",
+      "default": true,
+      "property": "cluster",
+      "node_type": "Standard_D4ds_v5",
+      "num_workers": 2,
+      "workload_type": "job"
+    },
+    {
+      "name": "sales_daily",
+      "displayName": "Sales (Daily)",
+      "property": "jobs",
+      "properties": [
+        {
+          "property": "schedules",
+          "value": "daily"
+        },
+        {
+          "property": "cluster",
+          "value": "small"
+        }
+      ]
+    },
+    {
+      "name": "sales_weekly",
+      "displayName": "Sales (Weekly)",
+      "property": "jobs",
+      "properties": [
+        {
+          "property": "schedules",
+          "value": "weekly"
+        },
+        {
+          "property": "cluster",
+          "value": "extra_small"
+        }
+      ]
+    },
+    {
+      "name": "sales",
+      "displayName": "Sales",
+      "property": "business_area"
+    },
+    {
+      "name": "true",
+      "displayName": "Has TypeWidening",
+      "property": "enable_type_widening"
+    },
+    {
+      "name": "name",
+      "displayName": "Name Column Mapping",
+      "property": "column_mapping_mode"
+    },
+    {
+      "name": "7_days",
+      "displayName": "7 Days Data Retention",
+      "property": "data_retention"
+    }
+  ]
+}

@@ -24,7 +24,8 @@ from pathlib import PurePosixPath
 from threading import Lock
 
 import keyring
-from keyring.backends import fail as keyring_fail
+from keyring.backends.fail import Keyring as FailedKeyring
+from keyring.errors import NoKeyringError
 
 from datam8 import config, logging, utils
 
@@ -36,7 +37,7 @@ SECRET_PREFIX: str = "datam8:"
 
 def _ensure_path(path: PurePosixPath | str) -> PurePosixPath:
     if isinstance(path, str):
-        return PurePosixPath(path.removeprefix("ref://"))
+        return PurePosixPath(path.strip().removeprefix("ref://"))
     return path
 
 
@@ -77,9 +78,9 @@ class SecretResolver:
 
         # test if a viable backend is available
         backend = keyring.get_keyring()
-        if isinstance(backend, keyring_fail.Keyring):
+        if isinstance(backend, FailedKeyring):
             raise utils.create_error(
-                keyring_fail.NoKeyringError(
+                NoKeyringError(
                     "No available secret backend available. "
                     "https://pypi.org/project/keyring for details."
                 )
@@ -104,11 +105,15 @@ class SecretResolver:
     def __register_secret(self, path: PurePosixPath, /) -> None:
         service_name = self.__create_service_name()
         secrets = self.__get_password(service_name)
+        posix_path = path.as_posix()
 
         logger.debug(f"Before register: {secrets}")
 
         if secrets is None or secrets == "":
-            secrets = path.as_posix()
+            secrets = posix_path
+        elif f",{path.as_posix()}," in f",{secrets},":
+            logger.debug("Secret already registered")
+            return
         else:
             secrets = f"{secrets},{path.as_posix()}"
 
@@ -145,6 +150,9 @@ class SecretResolver:
 
     def set_secret(self, path: PurePosixPath | str, value: str, /, *, force: bool = False) -> None:
         "Set a new secret or overwrite an existing one"
+        if value == "":
+            raise ValueError("A secret value must not be an empty string")
+
         path_ = _ensure_path(path)
         service_name = self.__create_service_name(path_)
 

@@ -19,10 +19,12 @@
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from datam8 import config, factory, generate, model, opts
+
+from .responses import Response204NoContent
 
 model_router = APIRouter(prefix="/model", tags=["model"])
 
@@ -35,6 +37,7 @@ class GenerateBody(BaseModel):
 
 
 class GenerateResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
     target: str | None
     output_path: Annotated[str | None, Field(alias="outputPath")] = None
     message: str | None = None
@@ -62,7 +65,7 @@ async def generator_run(body: GenerateBody | None = None) -> GenerateResponse:
 
     response = GenerateResponse(
         target=target or opts.default_target,
-        outputPath=output_path.as_posix(),
+        output_path=output_path.as_posix(),
     )
 
     return response
@@ -73,8 +76,9 @@ class SaveBody(BaseModel):
 
 
 @model_router.post("/save")
-async def model_save(body: SaveBody | None = None) -> None:
+async def model_save(body: SaveBody | None = None) -> Response:
     factory.get_model().save(body.locator if body is not None else None)
+    return Response204NoContent()
 
 
 class RealoadResponse(BaseModel):

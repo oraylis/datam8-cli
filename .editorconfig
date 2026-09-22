@@ -22,5 +22,5 @@ indent_size = 1
 indent_style = tab
 
 [pyproject.toml]
-indent_size = 4
+indent_size = 2
 indent_style = space

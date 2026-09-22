@@ -36,7 +36,7 @@ from datam8_model.data_source import (
 from datam8_model.plugin import Capability, PluginManifest
 
 try:
-    import connectorx as _  # noqa: F401
+    import connectorx as connectorx
 except ModuleNotFoundError as err:
     typer.echo("Required modules for SQL Server Plugin not installed - Install the 'sql' extra")
     raise typer.Exit(1) from err
@@ -51,6 +51,7 @@ manifest = PluginManifest(
     entryPoint="datam8.plugins.builtins.sql_server:SqlServer",
     capabilities=[
         Capability.METADATA,
+        Capability.PREVIEW_DATA,
         Capability.UI_SCHEMA,
         Capability.VALIDATION_CONNECTION,
     ],
@@ -131,19 +132,21 @@ class SqlServer(Plugin):
                 mandatory["username"] = urllib.parse.quote_plus(optional.pop("username"))
                 mandatory["password"] = urllib.parse.quote_plus(optional.pop("password"))
 
-                uri = "mssql://{username}:{password}@{host}:{port}/{database}"
+                uri_template = "mssql://{username}:{password}@{host}:{port}/{database}"
 
             case {"authMode": "windows"}:
                 assert "trusted_connection" in optional
 
-                uri = "mssql://@{host}:{port}/{database}"
+                uri_template = "mssql://@{host}:{port}/{database}"
 
             case {"authMode": _ as auth_mode}:
                 raise utils.create_error(
                     ValueError(f"Unknown authMode {auth_mode} in {self._data_source.name}")
                 )
+            case _:
+                assert False, "Unreachable"
 
-        uri: str = uri.format(**mandatory)
+        uri = uri_template.format(**mandatory)
 
         if len(optional) > 0:
             uri += "?" + "&".join([f"{k}={v}" for k, v in optional.items()])
@@ -272,8 +275,8 @@ class SqlServer(Plugin):
                 pl.when(pl.col("isPrimaryKey") == 1).then(pl.lit(True)).otherwise(pl.lit(False))
             ),
             properties=(
-                # TODO: just for testing remove before merging
-                pl.lit([{"property": "test", "value": "testtest"}])
+                # pl.lit([{"property": "test", "value": "testtest"}])
+                pl.lit(None)
             ),
         )
         if result.is_empty():
@@ -281,7 +284,10 @@ class SqlServer(Plugin):
                 f"Table [{schema}].[{table}] does not exist in '{self._data_source.name}'"
             )
 
-        return TableMetadata(result, SourceObject(schema=schema, name=table, type="TABLE/VIEW"))
+        return TableMetadata(
+            pl.DataFrame(result),
+            SourceObject(schema=schema, name=table, type="TABLE/VIEW"),
+        )
 
     @classmethod
     def validate_connection(

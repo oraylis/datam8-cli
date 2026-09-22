@@ -16,15 +16,23 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-# ruff: noqa: F401
-
 from datam8_model.data_source import DataSourceType
 
 from .base import Plugin, TableMetadata
 from .builtins.file import CsvFile
 from .manager import PluginManager
 
+__all__ = [
+    "Plugin",
+    "TableMetadata",
+    "init_builtin_plugins",
+]
+
 PluginManager.register_builtin_plugin("CsvFile", CsvFile.manifest())
+
+
+# the AzureDataLake and SQLServer plugins require additional extra dependencies to be installed, so
+# they are lazyly loaded
 
 
 def register_lake_source() -> None:

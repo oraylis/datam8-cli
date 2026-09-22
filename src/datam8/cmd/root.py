@@ -28,20 +28,17 @@ Not every part of datam8 is pre-imported, some parts, e.g. die api is only impor
 to those imports are executed. This reduces startup time.
 """
 
-# ruff: noqa: I001
-import os
-
-import sys
-import pathlib
 import json
+import pathlib
+import sys
 
 import typer
 
 from datam8 import (
     config,
+    errors,
     logging,
     model,
-    errors,
     opts,
     utils,
 )
@@ -232,13 +229,13 @@ def generate_cmd(
 @app.command()
 def init(
     name: opts.SolutionName,
+    type_: opts.SolutionType,
     solution_path: opts.SolutionPath,
     log_level: opts.LogLevel = opts.LogLevels.INFO,
     version: opts.Version = False,
 ):
     """
-    Initialise a new DataM8 solution. This is experimentell and will current always initialize the
-    sample solution as a starting point.
+    Initialise a new empty DataM8 solution with default base entities.
     """
     config.log_level = log_level
     common.version_callback(version)
@@ -251,17 +248,19 @@ def init(
         typer.echo(f"Solution file already exists at {new_solution_path}")
         raise typer.Exit(1)
 
-    if len(os.listdir(new_solution_path.parent)) > 0:
+    if new_solution_path.parent.exists() and any(new_solution_path.parent.iterdir()):
         typer.echo("Init needs to be run in an empty directory")
         raise typer.Exit(1)
 
     from datam8 import solution
 
-    created_version = solution.init_solution_from_sample(new_solution_path)
-    typer.echo(f"Sample Solution in version {created_version} created")
+    if type_ == opts.SolutionTypes.EMPTY:
+        solution.init_solution(new_solution_path)
+        typer.echo(f"Blank solution created at {new_solution_path}")
 
-    # TODO: ask user if a blank or sample solution is required
-    # solution.init_solution(new_solution_path)
+    if type_ == opts.SolutionTypes.SAMPLE:
+        created_version = solution.init_solution_from_sample(new_solution_path)
+        typer.echo(f"Sample Solution in version {created_version} created")
 
 
 @app.command()
@@ -276,8 +275,8 @@ def serve(
     version: opts.Version = False,
 ):
     "Starts the DataM8 fastapi backend"
-    from datam8.api import app as api_app  # for performance only import when needed
     from datam8 import factory
+    from datam8.api import app as api_app  # for performance only import when needed
 
     config.mode = config.RunMode.API
     common.main_callback(solution_path, log_level, version)
@@ -301,3 +300,52 @@ def serve(
         app=datam8_app,
     )
     server.run(sockets=[sock])
+
+
+@app.command()
+def move(
+    solution_path: opts.SolutionPath,
+    src: opts.Locator,
+    dst: opts.Locator,
+    log_level: opts.LogLevel = opts.LogLevels.WARNING,
+    version: opts.Version = False,
+    force: bool = False,
+    json_output: opts.JsonOutput = False,
+):
+    """
+    Move entities into a target location. This a single or multiple entities at once.
+    """
+    model = __setup_model_for_cli(solution_path, log_level, version)
+
+    try:
+        moved_entities = model.move_entities(src, dst)
+    except Exception as err:
+        typer.echo(str(err))
+        raise typer.Exit(1) from err
+
+    if len(moved_entities) == 0:
+        typer.echo("No entities were moved")
+    else:
+        model.save()
+
+        typer.echo("The following entities were moved:")
+        for w in moved_entities:
+            typer.echo(f" - {w.locator}")
+
+
+@app.command()
+def rename(
+    solution_path: opts.SolutionPath,
+    locator: opts.Locator,
+    new_name: str,
+    log_level: opts.LogLevel = opts.LogLevels.WARNING,
+    version: opts.Version = False,
+    json_output: opts.JsonOutput = False,
+):
+    """Rename an entity"""
+    model = __setup_model_for_cli(solution_path, log_level, version)
+    _ = model.rename_entity(locator, new_name)
+
+    model.save()
+
+    typer.echo(f"Renamed '{locator}' to '{new_name}'")

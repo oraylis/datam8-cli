@@ -24,7 +24,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from . import attribute, data_type, property
 
@@ -83,7 +83,8 @@ class Locator(BaseModel):
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
         with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
 
 
 class ModelParameter(BaseModel):
@@ -133,7 +134,8 @@ class ModelParameter(BaseModel):
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
         with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
 
 
 class TransformationKind(Enum):
@@ -191,7 +193,8 @@ class TransformationFunction(BaseModel):
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
         with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
 
 
 class ModelAttributeMapping(BaseModel):
@@ -241,7 +244,8 @@ class ModelAttributeMapping(BaseModel):
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
         with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
 
 
 class SourceAttributeMapping(ModelAttributeMapping):
@@ -291,7 +295,8 @@ class SourceAttributeMapping(ModelAttributeMapping):
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
         with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
 
 
 class ModelTransformation(BaseModel):
@@ -350,12 +355,13 @@ class ModelTransformation(BaseModel):
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
         with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
 
 
 class ModelRelationship(BaseModel):
     """
-    Maps attributes to a target location.
+    Maps attributes to an internal or external target location.
     """
 
     model_config = ConfigDict(
@@ -364,9 +370,28 @@ class ModelRelationship(BaseModel):
         validate_assignment=True,
         revalidate_instances="always",
     )
-    targetLocation: int
+    dataSource: Annotated[str | None, Field(min_length=1)] = None
+    targetLocation: int | str
     alias: str | None = None
     attributes: Annotated[Sequence[ModelAttributeMapping], Field(min_length=1)]
+
+    @model_validator(mode="after")
+    def validate_target_location(self) -> ModelRelationship:
+        match [self.dataSource, self.targetLocation]:
+            case [None, int() as id] if id > 0:  # valid internal source
+                return self
+            case [None, other]:
+                raise ValueError(
+                    f"Internal relationships require an integer targetLocation: '{other}'"
+                )
+            case [_, str() as trg] if trg != "":  # valid external source
+                return self
+            case [_, other]:
+                raise ValueError(
+                    f"External relationships require a string targetLocation: '{other}'"
+                )
+
+        assert False, "Unreachable"
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
@@ -401,7 +426,8 @@ class ModelRelationship(BaseModel):
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
         with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
 
 
 class InternalModelSource(BaseModel):
@@ -452,7 +478,8 @@ class InternalModelSource(BaseModel):
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
         with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
 
 
 class ExternalModelSource(BaseModel):
@@ -505,7 +532,8 @@ class ExternalModelSource(BaseModel):
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
         with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
 
 
 class ModelEntity(BaseModel):
@@ -572,4 +600,5 @@ class ModelEntity(BaseModel):
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
         with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")

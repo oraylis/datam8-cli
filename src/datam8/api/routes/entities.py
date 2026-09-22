@@ -28,6 +28,12 @@ from .responses import MultiItemResponse, SingleItemResponse
 entities_router = APIRouter(prefix="/entities", tags=["entities"])
 
 
+@entities_router.get("")
+async def get_all_entities() -> MultiItemResponse[model.EntityWrapperVariant]:
+    entities = list(factory.get_model().get_entity_iterator())
+    return MultiItemResponse.from_list(entities)
+
+
 @entities_router.get("/{locator:path}")
 async def get_entities(locator: str = "/") -> MultiItemResponse[model.EntityWrapperVariant]:
     """
@@ -39,7 +45,7 @@ async def get_entities(locator: str = "/") -> MultiItemResponse[model.EntityWrap
 
 @entities_router.patch("/{locator:path}")
 async def patch_entity(
-    locator: str, patch: dict[str, Any]
+    patch: dict[str, Any], locator: str
 ) -> SingleItemResponse[model.EntityWrapperVariant]:
     wrapper = factory.get_model().get_entity_by_locator(locator)
     wrapper.update(**patch)
@@ -50,14 +56,6 @@ async def patch_entity(
 async def delete_entity(locator: str) -> MultiItemResponse[model.Locator]:
     deleted_locators = factory.get_model().delete_entities(locator)
     return MultiItemResponse.from_list(deleted_locators)
-
-
-@entities_router.put("/{locator:path}")
-async def create_entity(
-    locator: str, body: dict[str, Any]
-) -> SingleItemResponse[model.EntityWrapper[b.BaseEntityType]]:
-    entity = factory.get_model().add_entity(locator, body)
-    return SingleItemResponse(item=entity)
 
 
 class CloneEntityBody(BaseModel):
@@ -74,13 +72,43 @@ async def clone_entity(
     return MultiItemResponse.from_list([entity])
 
 
+@entities_router.put("/{locator:path}")
+async def create_entity(
+    body: dict[str, Any], locator: str
+) -> SingleItemResponse[model.EntityWrapper[b.BaseEntityType]]:
+    entity = factory.get_model().add_entity(locator, body)
+    return SingleItemResponse(item=entity)
+
+
+class RenameBody(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    from_: Annotated[str, Field(alias="from")]
+    to: str
+
+
+@entities_router.post("/rename")
+async def rename_entity(
+    body: RenameBody,
+) -> SingleItemResponse[model.EntityWrapperVariant]:
+    entity = factory.get_model().rename_entity(body.from_, body.to)
+    return SingleItemResponse(item=entity)
+
+
 class MoveBody(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
-    _from: Annotated[str, Field(alias="from")]
-    _to: Annotated[str, Field(alias="to")]
+    from_: Annotated[str, Field(alias="from")]
+    to: Annotated[str, Field(alias="to")]
 
 
 @entities_router.post("/move")
 async def move_entities(body: MoveBody) -> MultiItemResponse[model.EntityWrapperVariant]:
-    entities = factory.get_model().move_entities(body._from, body._to)
-    return MultiItemResponse.from_list(entities)
+    moved_entities = factory.get_model().move_entities(body.from_, body.to)
+    return MultiItemResponse.from_list(moved_entities)
+
+
+@entities_router.post("/move-single")
+async def move_entity(body: MoveBody) -> SingleItemResponse[model.EntityWrapperVariant]:
+    from_ = model.Locator.from_path(body.from_)
+    to = model.Locator.from_path(body.to)
+    moved_entity = factory.get_model().move_entity(from_, to)
+    return SingleItemResponse(item=moved_entity)

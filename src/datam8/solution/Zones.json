@@ -1,0 +1,10 @@
+{
+  "type": "zones",
+  "zones": [
+    {
+      "name": "Zone1",
+      "targetName": "zone1",
+      "displayName": "Zone1"
+    }
+  ]
+}

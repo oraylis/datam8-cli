@@ -26,18 +26,18 @@ import logging
 import os
 import pathlib
 from datetime import datetime
-
-# directly imported to expose them via this module
-from logging import (  # noqa: F401
+from logging import (
     CRITICAL,
     DEBUG,
     ERROR,
     INFO,
     WARNING,
     Formatter,
-    Logger,
-    getLogger,
 )
+
+# directly imported to expose them via this module
+from logging import Logger as Logger
+from logging import getLogger as getLogger
 
 from datam8 import config
 

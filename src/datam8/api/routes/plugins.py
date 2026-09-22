@@ -28,7 +28,7 @@ plugins_router = APIRouter(prefix="/plugins", tags=["plugins"])
 plugins.init_builtin_plugins()
 
 
-@plugins_router.get("/")
+@plugins_router.get("")
 async def get_plugins() -> MultiItemResponse[pl.PluginManifest]:
     plugin_manifests = factory.get_plugin_manager().get_plugins()
     return MultiItemResponse.from_list(plugin_manifests)

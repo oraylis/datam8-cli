@@ -42,6 +42,11 @@ class Selectors(Enum):
     PROPERTY = "property"
 
 
+class SolutionTypes(Enum):
+    EMPTY = "empty"
+    SAMPLE = "sample"
+
+
 Lazy = Annotated[
     bool,
     typer.Option(
@@ -85,6 +90,13 @@ SolutionName = Annotated[
 ]
 
 SolutionPathOptional = Annotated[Path | None, typer.Option()]
+
+SolutionType = Annotated[
+    SolutionTypes,
+    typer.Option(
+        "--type", "-t", prompt="Solution Type to initialize?", help="Solution Type to initialize."
+    ),
+]
 
 JsonOutput = Annotated[
     bool,
@@ -241,7 +253,7 @@ SourceLocation = Annotated[
 
 Locator = Annotated[
     str,
-    typer.Argument(help="A search locator"),
+    typer.Argument(help="A datam8 locator pointing to one or more entities"),
 ]
 
 LocatorOpt = Annotated[

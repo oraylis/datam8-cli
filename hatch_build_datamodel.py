@@ -46,7 +46,12 @@ class GenerateDatamodelHook(interface.BuildHookInterface):
             target_python_version=dcg.PythonVersion.PY_312,
             custom_template_dir=self.__template_dir,
             formatters=[dcg.Formatter.RUFF_CHECK, dcg.Formatter.RUFF_FORMAT],
-            additional_imports=["pathlib.Path", "typing.TypeAlias", "typing.Any"],
+            additional_imports=[
+                "pathlib.Path",
+                "pydantic.model_validator",
+                "typing.TypeAlias",
+                "typing.Any",
+            ],
             disable_timestamp=True,
             set_default_enum_member=True,
             capitalise_enum_members=True,

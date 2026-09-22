@@ -1,0 +1,30 @@
+{
+  "type": "dataSourceTypes",
+  "dataSourceTypes": [
+    {
+      "name": "DataSourceType1",
+      "dataTypeMapping": [
+        {
+          "sourceType": "string",
+          "targetType": "string"
+        }
+      ],
+      "connectionProperties": [
+        {
+          "name": "host",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "authModes": [
+        {
+          "name": "default",
+          "required": [
+            "host"
+          ],
+          "optional": []
+        }
+      ]
+    }
+  ]
+}

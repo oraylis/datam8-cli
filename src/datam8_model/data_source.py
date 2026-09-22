@@ -82,7 +82,8 @@ class SourceDataTypeMapping(BaseModel):
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
         with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
 
 
 class ConnectionPropertyValueType(Enum):
@@ -137,7 +138,8 @@ class ConnectionProperty(BaseModel):
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
         with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
 
 
 class AuthMode(BaseModel):
@@ -189,7 +191,8 @@ class AuthMode(BaseModel):
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
         with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
 
 
 class DataSourceType(BaseModel):
@@ -265,7 +268,55 @@ class DataSourceType(BaseModel):
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
         with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
+
+
+class SourceOverride(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
+    dataSource: str | None = None
+    sourceLocation: str | None = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj: Any) -> SourceOverride:
+        return SourceOverride.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> SourceOverride:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        SourceOverride
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
+        with open(path) as file:
+            model = SourceOverride.model_validate_json(file.read())
+
+        return model
+
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode) as file:
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
 
 
 class DataSource(BaseModel):
@@ -326,7 +377,8 @@ class DataSource(BaseModel):
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
         with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
 
 
 class SourceObject(BaseModel):
@@ -335,6 +387,7 @@ class SourceObject(BaseModel):
     type: str
     description: str | None = None
     properties: Sequence[property.PropertyReference] | None = None
+    sourceOverride: SourceOverride | None = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
@@ -369,7 +422,8 @@ class SourceObject(BaseModel):
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
         with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
 
 
 class SourceField(BaseModel):
@@ -381,6 +435,7 @@ class SourceField(BaseModel):
     numbericScale: Annotated[int | None, Field(ge=0)] = None
     isNullable: bool
     isPrimaryKey: bool | None = None
+    description: str | None = None
     properties: Sequence[property.PropertyReference] | None = None
 
     def to_dict(self) -> dict:
@@ -416,4 +471,5 @@ class SourceField(BaseModel):
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
         with open(path, mode) as file:
-            file.write(self.model_dump_json(**dump_options))
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")

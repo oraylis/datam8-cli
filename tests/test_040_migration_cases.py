@@ -18,7 +18,6 @@ from datam8_model import (
     data_product as dp,
     data_source as ds,
     model as m,
-    property as p,  # noqa: F401
 )
 from datam8 import migration_v1, parser_v1
 import pathlib
