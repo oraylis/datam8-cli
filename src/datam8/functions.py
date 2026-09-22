@@ -222,14 +222,6 @@ def prepare_function_moves(
         if transformation.function is not None
     ]
 
-    # Moving an entity within the same directory does not require moving its
-    # function files. Keep the transformation path unchanged instead of
-    # treating the source file as a move target.
-    to_move = [
-        FunctionMove(transformation, src, None if src == trg else trg)
-        for transformation, src, trg in to_move
-    ]
-
     # in case a non-builtin transformation already exists raise an error
     # non-builtins will not be moved, so can be ignored
     existing_transformations = [
