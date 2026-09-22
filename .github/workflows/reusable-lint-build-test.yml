@@ -84,7 +84,7 @@ jobs:
         with:
           repository: oraylis/datam8-sample-solution
           # TODO: remove after v2 is done
-          ref: v2.0.0-beta.2
+          ref: v2.0.0-beta.3
           path: datam8-sample-solution
           persist-credentials: false
 
