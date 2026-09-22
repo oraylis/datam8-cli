@@ -156,11 +156,12 @@ def move_function(
     new_path: Path,
     *,
     force: bool = False,
+    source_path: Path | None = None,
 ) -> None:
     assert transformation.kind == m.TransformationKind.FUNCTION
     assert transformation.function is not None
 
-    current_path = _build_source_file_path(wrapper, transformation)
+    current_path = source_path or _build_source_file_path(wrapper, transformation)
 
     new_path = new_path.resolve()
     new_path_relative = new_path.relative_to(wrapper.source_file.parent, walk_up=True)
@@ -239,8 +240,12 @@ def prepare_function_moves(
     # in case the wrapper source file path was overwritten, adapt the transformation function
     # sources to be relative to the overwrite loation, NOT the input wrapper location
     if source_file_overwrite is not None:
-        for t, src, _ in to_move:
-            if t.function is not None and t.kind == m.TransformationKind.FUNCTION:
+        for t, src, trg in to_move:
+            if (
+                t.function is not None
+                and t.kind == m.TransformationKind.FUNCTION
+                and trg is None
+            ):
                 t.function.source = src.relative_to(
                     source_file_overwrite.parent, walk_up=True
                 ).as_posix()
@@ -268,13 +273,13 @@ def move_functions(
     to_move = prepare_function_moves(wrapper, new_path, force=force) if to_move is None else to_move
     result: list[str | None] = [None for _ in range(len(to_move))]
 
-    for idx, (t, _, trg) in enumerate(to_move):
+    for idx, (t, src, trg) in enumerate(to_move):
         if trg is None and t.function is None:
             result[idx] = "skipped - not a function"
         elif trg is None:
             result[idx] = f"shared transformation - updated path to {trg}"
         else:
-            move_function(wrapper, t, new_path=trg, force=force)
+            move_function(wrapper, t, new_path=trg, force=force, source_path=src)
             result[idx] = f"moved to {trg}"
 
     for idx, r in enumerate(result):
