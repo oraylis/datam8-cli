@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 import json
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
@@ -64,6 +64,24 @@ async def get_table_metadata(
     metadata = plugin.get_table_metadata(source_location)
     source_fields = list(metadata.iter_source_fields())
     return MultiItemResponse.from_list(source_fields)
+
+
+class ImportDescription(BaseModel):
+    entity: ModelEntity | None = None
+
+
+@sources_router.get("/{data_source}/locations/import-description")
+async def get_import_description(data_source: str, source_location: str) -> ImportDescription:
+    model_ = factory.get_model()
+    plugin = factory.get_plugin_for_data_source(data_source, model=model_)
+    source_definitions = plugin.get_sources(source_location)
+    if source_definitions is None:
+        return ImportDescription()
+    return ImportDescription(
+        entity=source.read_from_data_source(
+            data_source, source_location, model=model_, source_definitions=source_definitions
+        )
+    )
 
 
 @sources_router.get("/{data_source}/locations/preview")
@@ -114,9 +132,11 @@ class CompareResponse(BaseModel):
 
 
 @sources_router.get("/compare")
-async def compare_with_source(locator: str) -> CompareResponse:
+async def compare_with_source(
+    locator: str, mode: Literal["complete", "sources-only"] = "complete"
+) -> CompareResponse:
     model_ = factory.get_model()
-    wrapper, diff = source.compare_entity_with_source(locator, model=model_)
+    wrapper, diff = source.compare_entity_with_source(locator, model=model_, mode=mode)
     return CompareResponse(
         # convert custom objects from DeepDiff into plain dicts/objects
         wrapper=wrapper,

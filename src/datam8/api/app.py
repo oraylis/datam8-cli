@@ -105,20 +105,6 @@ def create_app(*, token: str | None = None, enable_openapi: bool = False) -> Fas
             lifespan=lifespan,
         )
 
-    origins_env = os.environ.get("DATAM8_CORS_ORIGINS")
-    allow_origin_regex = os.environ.get("DATAM8_CORS_ORIGIN_REGEX")
-    allow_origins = [o.strip() for o in (origins_env or "").split(",") if o.strip()]
-    if not allow_origins:
-        allow_origins = [
-            "http://localhost:4320",
-            "http://127.0.0.1:4320",
-            "http://localhost:4321",
-            "http://127.0.0.1:4321",
-            "null",
-        ]
-    if not allow_origin_regex:
-        allow_origin_regex = r"^http://(localhost|127\.0\.0\.1):\d+$"
-
     @app.middleware("http")
     async def trace_middleware(request: Request, call_next):
         request.state.trace_id = str(uuid.uuid4())
@@ -157,17 +143,6 @@ def create_app(*, token: str | None = None, enable_openapi: bool = False) -> Fas
                 return JSONResponse(status_code=401, content=env.model_dump())
 
             return await call_next(request)
-
-    # Add CORS outermost so preflight OPTIONS are handled before auth and
-    # CORS headers are present on all responses (including errors).
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=allow_origins,
-        allow_origin_regex=allow_origin_regex,
-        allow_credentials=False,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
 
     @app.exception_handler(Datam8Error)
     async def datam8_error_handler(request: Request, exc: Datam8Error):
@@ -227,9 +202,33 @@ def create_server(*, host: str, port: int, app: FastAPI) -> uvicorn.Server:
         "version": config.get_version(),
     }
 
+    origins_env = os.environ.get("DATAM8_CORS_ORIGINS")
+    allow_origin_regex = os.environ.get("DATAM8_CORS_ORIGIN_REGEX")
+    allow_origins = [o.strip() for o in (origins_env or "").split(",") if o.strip()]
+    if not allow_origins:
+        allow_origins = [
+            "http://localhost:4320",
+            "http://127.0.0.1:4320",
+            "http://localhost:4321",
+            "http://127.0.0.1:4321",
+            "null",
+        ]
+    if not allow_origin_regex:
+        allow_origin_regex = r"^http://(localhost|127\.0\.0\.1):\d+$"
+
+    # Wrap the complete FastAPI app so CORS headers cover unhandled 500 responses too.
+    cors_app = CORSMiddleware(
+        app,
+        allow_origins=allow_origins,
+        allow_origin_regex=allow_origin_regex,
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
     server = uvicorn.Server(
         uvicorn.Config(
-            app,
+            cors_app,
             host=host,
             port=port,
             log_level=config.log_level.value,

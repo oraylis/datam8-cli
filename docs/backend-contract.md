@@ -74,6 +74,40 @@ All non-readiness logs are written to stderr.
   - Body: `{ "solutionPath": "...", "target": "...", "logLevel": "info", "cleanOutput": true, "payloads": [], "lazy": false }`
   - Response: `{ "status": "succeeded", "target": "...", "outputPath": "..." }`
 
+### Source import and refresh
+
+- Plugins may implement `get_sources(source_location)` and return a list of dictionaries
+  with `sourceLocation`, `sourceName`, and `targetName` keys. Optional keys are
+  `sourceAlias`, `sourceProperties`, `mappingProperties`, `sourceDataType`, and
+  `metadataLocation`. A row's `metadataLocation` overrides the selected import handle
+  for that external source.
+- `sourceProperties` are assigned to the `ExternalModelSource`; `mappingProperties`
+  are assigned to the corresponding `SourceAttributeMapping`.
+- `sourceProperties` may be supplied on any one row for a source or repeated with the
+  same value on its rows. Conflicting values for the same source are rejected.
+- A returned list is authoritative for external sources and mappings. Rows are
+  grouped by `(sourceLocation, sourceAlias, metadataLocation)`; omitted source columns
+  are not mapped.
+- Returning `None` keeps the default one-source, one-column mapping derived from
+  `get_table_metadata()`.
+- Each imported `ExternalModelSource` may contain `metadataLocation`, the connector
+  object used to describe its metadata. `sourceLocation` remains the data read location.
+  Several sources may share one `metadataLocation`; refresh describes that contract once.
+  Sources without `metadataLocation` continue to use `sourceLocation` for metadata.
+- Complete refresh combines distinct attributes and entity properties from every
+  contract of the selected entity; conflicting definitions are rejected. A source-only
+  refresh replaces the external sources returned by authoritative `get_sources()`
+  calls, including their properties and mappings.
+- `GET /sources/{data_source}/locations/import-description?source_location=<handle>`
+  returns `{ "entity": null }` when the connector does not provide `get_sources()`, or a
+  generated `ModelEntity` when the plugin supplies `get_sources()`. The endpoint does not
+  save the entity.
+- `GET /sources/compare?locator=<locator>` performs the complete refresh and remains
+  the default.
+- `GET /sources/compare?locator=<locator>&mode=sources-only` refreshes only external
+  sources and mappings. Entity attributes, properties, transformations, and
+  relationships remain unchanged.
+
 ## `GET /solution/full` payload
 
 - `solution`: parsed solution metadata.

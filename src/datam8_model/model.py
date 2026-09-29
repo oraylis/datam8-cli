@@ -496,6 +496,7 @@ class ExternalModelSource(BaseModel):
     dataSource: str
     sourceAlias: str | None = None
     sourceLocation: str
+    metadataLocation: str | None = None
     properties: Sequence[property.PropertyReference] | None = None
     mapping: Sequence[SourceAttributeMapping] | None = None
 

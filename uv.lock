@@ -7,7 +7,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
+exclude-newer = "2026-09-15T20:46:07.7611057Z"
 exclude-newer-span = "P1W"
 
 [[package]]
@@ -550,6 +550,7 @@ dependencies = [
     { name = "polars" },
     { name = "pyarrow" },
     { name = "pydantic" },
+    { name = "pyyaml" },
     { name = "typer" },
 ]
 
@@ -591,6 +592,7 @@ requires-dist = [
     { name = "polars", specifier = "~=1.39.0" },
     { name = "pyarrow", specifier = "~=23.0.0" },
     { name = "pydantic", specifier = "~=2.12.0" },
+    { name = "pyyaml", specifier = "~=6.0" },
     { name = "typer", specifier = "~=0.19.0" },
     { name = "uvicorn", marker = "extra == 'api'", specifier = "~=0.51.0" },
 ]

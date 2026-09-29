@@ -19,7 +19,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 from deepdiff import DeepDiff
 from deepdiff.helper import CannotCompare
@@ -34,9 +34,142 @@ from datam8_model import property as p
 
 from . import factory, model, utils
 
+_SOURCE_DEFINITIONS_UNSET = object()
+
+
+def _property_references(value: Any, property_name: str, /) -> list[p.PropertyReference] | None:
+    if value is None or value == []:
+        return None
+    if not isinstance(value, list):
+        raise utils.create_error(ValueError(f"{property_name} must be a list"))
+    return [p.PropertyReference.model_validate(item) for item in value]
+
+
+def _sources_from_definitions(
+    definitions: list[dict[str, Any]], data_source: str, /, *, metadata_location: str | None = None
+) -> list[m.ExternalModelSource]:
+    grouped: dict[
+        tuple[str, str | None, str | None],
+        tuple[list[m.SourceAttributeMapping], list[p.PropertyReference] | None],
+    ] = {}
+    seen_mappings: set[tuple[str, str | None, str | None, str, str]] = set()
+
+    for row in definitions:
+        if not isinstance(row, dict):
+            raise utils.create_error(ValueError("Each source definition must be a dictionary"))
+        location = row.get("sourceLocation")
+        source_name = row.get("sourceName")
+        target_name = row.get("targetName")
+        alias = row.get("sourceAlias")
+        row_metadata_location = row.get("metadataLocation", metadata_location)
+        if not all(
+            isinstance(value, str) and value for value in (location, source_name, target_name)
+        ):
+            raise utils.create_error(
+                ValueError("sourceLocation, sourceName and targetName must be non-empty strings")
+            )
+        if alias is not None and not isinstance(alias, str):
+            raise utils.create_error(ValueError("sourceAlias must be a string or null"))
+        if row_metadata_location is not None and (
+            not isinstance(row_metadata_location, str) or not row_metadata_location
+        ):
+            raise utils.create_error(ValueError("metadataLocation must be a non-empty string or null"))
+
+        key = (location, alias, row_metadata_location)
+        mapping_key = (location, alias, row_metadata_location, source_name, target_name)
+        if mapping_key in seen_mappings:
+            raise utils.create_error(ValueError(f"Duplicate source mapping: {mapping_key}"))
+        seen_mappings.add(mapping_key)
+
+        source_properties = _property_references(row.get("sourceProperties"), "sourceProperties")
+        mapping_properties = _property_references(row.get("mappingProperties"), "mappingProperties")
+        source_data_type = row.get("sourceDataType")
+        if source_data_type is not None:
+            source_data_type = dt.DataType.model_validate(source_data_type)
+        if key in grouped:
+            mappings, existing_properties = grouped[key]
+            if (
+                existing_properties is not None
+                and source_properties is not None
+                and existing_properties != source_properties
+            ):
+                raise utils.create_error(
+                    ValueError(f"Conflicting sourceProperties for source: {key}")
+                )
+            if source_properties is not None:
+                existing_properties = source_properties
+            mappings.append(
+                m.SourceAttributeMapping(
+                    sourceName=source_name,
+                    targetName=target_name,
+                    sourceDataType=source_data_type,
+                    properties=mapping_properties,
+                )
+            )
+            grouped[key] = (mappings, existing_properties)
+        else:
+            grouped[key] = (
+                [
+                    m.SourceAttributeMapping(
+                        sourceName=source_name,
+                        targetName=target_name,
+                        sourceDataType=source_data_type,
+                        properties=mapping_properties,
+                    )
+                ],
+                source_properties,
+            )
+
+    return [
+        m.ExternalModelSource(
+            dataSource=data_source,
+            sourceLocation=location,
+            metadataLocation=row_metadata_location,
+            sourceAlias=alias,
+            properties=properties,
+            mapping=mappings,
+        )
+        for (location, alias, row_metadata_location), (mappings, properties) in grouped.items()
+    ]
+
+
+def _default_source(
+    data_source: str,
+    source_location: str,
+    mappings: list[m.SourceAttributeMapping],
+    *,
+    existing_source: m.ExternalModelSource | None = None,
+    metadata_location: str | None = None,
+) -> list[m.ExternalModelSource]:
+    if existing_source is not None:
+        existing_mappings = {
+            (mapping.sourceName, mapping.targetName): mapping
+            for mapping in existing_source.mapping or []
+        }
+        for mapping in mappings:
+            existing = existing_mappings.get((mapping.sourceName, mapping.targetName))
+            if existing is not None:
+                by_name = {prop.property: prop for prop in existing.properties or []}
+                by_name.update({prop.property: prop for prop in mapping.properties or []})
+                mapping.properties = list(by_name.values()) or existing.properties
+    return [
+        m.ExternalModelSource(
+            sourceLocation=source_location,
+            dataSource=data_source,
+            metadataLocation=metadata_location,
+            sourceAlias=existing_source.sourceAlias if existing_source is not None else None,
+            properties=existing_source.properties if existing_source is not None else None,
+            mapping=mappings,
+        )
+    ]
+
 
 def compare_entity_with_source(
-    locator: l.LocatorOrString, /, *, model: model.Model | None = None
+    locator: l.LocatorOrString,
+    /,
+    *,
+    model: model.Model | None = None,
+    mode: Literal["complete", "sources-only"] = "complete",
 ) -> tuple[ew.EntityWrapper[m.ModelEntity], DeepDiff]:
     """
     Compares a model entity with its current source representation.
@@ -55,79 +188,128 @@ def compare_entity_with_source(
     wrapper = model_.modelEntities[locator].model_copy(deep=True)
     original_entity = wrapper.entity.model_copy(deep=True)
 
-    attribute_index = {
-        wrapper.entity.attributes[idx].name: idx for idx in range(0, len(wrapper.entity.attributes))
-    }
     current_attributes = [attr.model_copy(deep=True) for attr in wrapper.entity.attributes]
-    source_entities: dict[str, m.ModelEntity] = {}
-
-    for source in wrapper.entity.sources:
-        # refresh is only relevant for external sources
-        if isinstance(source, m.InternalModelSource):
+    current_by_name = {attr.name: attr for attr in current_attributes}
+    previously_mapped_targets = {
+        mapping.targetName
+        for source in wrapper.entity.sources
+        if isinstance(source, m.ExternalModelSource)
+        for mapping in source.mapping or []
+    }
+    groups: list[tuple[m.ExternalModelSource, str, int]] = []
+    seen_locations: set[tuple[str, str]] = set()
+    group_indices: dict[tuple[str, str], list[int]] = {}
+    for index, existing in enumerate(wrapper.entity.sources):
+        if not isinstance(existing, m.ExternalModelSource):
             continue
-
-        modified_date = datetime.now(UTC)
-
-        # get current source definition from model and live from the source
-        source_entities[f"{source.dataSource}|{source.sourceLocation}"] = (
-            source_entity := read_from_data_source(
-                source.dataSource, source.sourceLocation, model=model_
-            )
-        )
-        current_mapping: dict[str, m.SourceAttributeMapping] = {
-            f"{f.sourceName}|{f.targetName}": f for f in source.mapping or []
-        }
-        refreshed_mapping: dict[str, m.SourceAttributeMapping] = {
-            f"{col_mapping.sourceName}|{col_mapping.targetName}": col_mapping
-            for refreshed_source in source_entity.sources
-            if isinstance(refreshed_source, m.ExternalModelSource)
-            and refreshed_source.sourceLocation == source.sourceLocation
-            and refreshed_source.dataSource == source.dataSource
-            and refreshed_source.mapping is not None
-            for col_mapping in refreshed_source.mapping
-        }
-
-        # enrich the live source mappings with properties etc. that are already set in the model
-        for key, val in current_mapping.items():
-            if key not in refreshed_mapping:
+        location = existing.metadataLocation or existing.sourceLocation
+        if existing.metadataLocation is not None:
+            key = (existing.dataSource, location)
+            if key in seen_locations:
+                group_indices[key].append(index)
                 continue
+            seen_locations.add(key)
+            group_indices[key] = [index]
+        groups.append((existing, location, index))
 
-            property_refs: list[p.PropertyReference] = list(refreshed_mapping[key].properties or [])
-            # only add new properties from the source, keep existing ones the same
-            property_refs.extend(
-                [prop for prop in val.properties or [] if prop not in property_refs]
+    refreshed_groups: dict[tuple[str, str], list[m.ExternalModelSource]] = {}
+    refreshed_by_index: dict[int, list[m.ExternalModelSource]] = {}
+    described_attributes: dict[str, at.Attribute] = {}
+    described_properties: dict[str, p.PropertyReference] = {}
+    for existing, location, index in groups:
+        if mode == "sources-only":
+            refreshed = read_external_sources(
+                existing.dataSource,
+                location,
+                model=model_,
+                current_source=existing,
+                metadata_location=existing.metadataLocation,
             )
+        else:
+            described = read_from_data_source(
+                existing.dataSource,
+                location,
+                model=model_,
+                existing_source=existing,
+                metadata_location=existing.metadataLocation,
+            )
+            refreshed = list(described.sources)
+            for attr in described.attributes:
+                previous = described_attributes.get(attr.name)
+                comparable = {"ordinalNumber", "dateAdded", "dateModified"}
+                if previous is not None and previous.model_dump(
+                    mode="json", exclude=comparable
+                ) != attr.model_dump(mode="json", exclude=comparable):
+                    raise utils.create_error(ValueError(f"Conflicting attribute: {attr.name}"))
+                described_attributes[attr.name] = attr
+            for prop in described.properties or []:
+                previous = described_properties.get(prop.property)
+                if previous is not None and previous != prop:
+                    raise utils.create_error(
+                        ValueError(f"Conflicting entity property: {prop.property}")
+                    )
+                described_properties[prop.property] = prop
 
-            refreshed_mapping[key].properties = property_refs if len(property_refs) > 0 else None
+        if existing.metadataLocation is None:
+            refreshed_by_index[index] = refreshed
+        else:
+            refreshed_groups[(existing.dataSource, location)] = refreshed
 
-            if property_refs != (val.properties or []):
-                current_attributes[attribute_index[val.targetName]].dateModified = modified_date
+    for key, refreshed in refreshed_groups.items():
+        indices = group_indices[key]
+        for index in indices:
+            refreshed_by_index[index] = []
+        for index, source in zip(indices, refreshed):
+            refreshed_by_index[index] = [source]
+        if len(refreshed) > len(indices):
+            refreshed_by_index[indices[-1]].extend(refreshed[len(indices) :])
 
-        source.mapping = list(refreshed_mapping.values())
+    refreshed_sources: list[m.ExternalModelSource | m.InternalModelSource] = []
+    for index, existing in enumerate(wrapper.entity.sources):
+        if isinstance(existing, m.InternalModelSource):
+            refreshed_sources.append(existing)
+        else:
+            refreshed_sources.extend(refreshed_by_index[index])
+    wrapper.entity.sources = refreshed_sources
 
-    # check for new attributes/source mappings and add them to the wrapper
-    current_attributes.extend(
-        [
-            attr
-            for source_entity in source_entities.values()
-            for attr in source_entity.attributes
-            if attr.name not in [ex.name for ex in current_attributes]
-        ]
-    )
+    if mode == "sources-only":
+        wrapper._changed = wrapper.entity.sources != original_entity.sources
+        return wrapper, DeepDiff(
+            original_entity.model_dump(mode="json", exclude_none=True),
+            wrapper.entity.model_dump(mode="json", exclude_none=True),
+            threshold_to_diff_deeper=0,
+        )
 
+    if described_properties:
+        entity_properties = {prop.property: prop for prop in wrapper.entity.properties or []}
+        entity_properties.update(described_properties)
+        wrapper.entity.properties = list(entity_properties.values()) or None
+    for name, refreshed in described_attributes.items():
+        old = current_by_name.get(name)
+        if old is None:
+            current_attributes.append(refreshed.model_copy(deep=True))
+            continue
+        refreshed = refreshed.model_copy(deep=True)
+        refreshed.dateAdded = old.dateAdded
+        comparable = {"ordinalNumber", "dateAdded", "dateModified"}
+        refreshed.dateModified = (
+            datetime.now(UTC)
+            if refreshed.model_dump(mode="json", exclude=comparable)
+            != old.model_dump(mode="json", exclude=comparable)
+            else old.dateModified
+        )
+        current_attributes[current_attributes.index(old)] = refreshed
     # cleanup attribute list (remove non-referenced attributes and update ordinal number)
-    current_attributes.sort(key=lambda attr: attr.ordinalNumber)
+    refreshed_targets = {
+        mapping.targetName
+        for source in wrapper.entity.sources
+        if isinstance(source, m.ExternalModelSource)
+        for mapping in source.mapping or []
+    }
     current_attributes = [
         attr
         for attr in current_attributes
-        if any(
-            [
-                attr.name in map.targetName
-                for src in wrapper.entity.sources
-                if isinstance(src, m.ExternalModelSource) and src.mapping is not None
-                for map in src.mapping
-            ]
-        )
+        if attr.name not in previously_mapped_targets or attr.name in refreshed_targets
     ]
 
     # update ordinal numbers to account for new fields
@@ -160,9 +342,10 @@ def compare_entity_with_source(
 
         raise CannotCompare() from None
 
+    diff_exclude = {"attributes": {"__all__": {"dateModified"}}}
     diff = DeepDiff(
-        original_entity.model_dump(mode="json", exclude_none=True),
-        wrapper.entity.model_dump(mode="json", exclude_none=True),
+        original_entity.model_dump(mode="json", exclude_none=True, exclude=diff_exclude),
+        wrapper.entity.model_dump(mode="json", exclude_none=True, exclude=diff_exclude),
         iterable_compare_func=compare_iterable,
         threshold_to_diff_deeper=0,
     )
@@ -190,7 +373,14 @@ def import_from_source(
 
 
 def read_from_data_source(
-    data_source: str, source_location: str, /, *, model: model.Model
+    data_source: str,
+    source_location: str,
+    /,
+    *,
+    model: model.Model,
+    source_definitions: list[dict[str, Any]] | None | object = _SOURCE_DEFINITIONS_UNSET,
+    existing_source: m.ExternalModelSource | None = None,
+    metadata_location: str | None = None,
 ) -> m.ModelEntity:
     plugin = factory.get_plugin_for_data_source(data_source, model=model)
     metadata = plugin.get_table_metadata(source_location)
@@ -244,6 +434,25 @@ def read_from_data_source(
         attributes.append(attr)
         source_attribute_mapping.append(sam)
 
+    if source_definitions is _SOURCE_DEFINITIONS_UNSET:
+        source_definitions = plugin.get_sources(source_location)
+    source_metadata_location = metadata_location
+    if source_metadata_location is None and existing_source is None:
+        source_metadata_location = source_location
+    sources = (
+        _sources_from_definitions(
+            source_definitions, data_source, metadata_location=source_metadata_location
+        )
+        if source_definitions is not None
+        else _default_source(
+            data_source,
+            existing_source.sourceLocation if existing_source is not None else source_location,
+            source_attribute_mapping,
+            existing_source=existing_source,
+            metadata_location=metadata_location,
+        )
+    )
+
     entity = m.ModelEntity(
         # name and id are placeholders htat will be replace by model.add_entity()
         name="temp",
@@ -251,15 +460,50 @@ def read_from_data_source(
         description=source_object.description,
         attributes=attributes,
         properties=source_object.properties,
-        sources=[
-            m.ExternalModelSource(
-                sourceLocation=source_location,
-                dataSource=data_source,
-                mapping=source_attribute_mapping,
-            )
-        ],
+        sources=sources,
         transformations=[],
         relationships=[],
     )
 
     return entity
+
+
+def read_external_sources(
+    data_source: str,
+    source_location: str,
+    /,
+    *,
+    model: model.Model,
+    current_source: m.ExternalModelSource | None = None,
+    metadata_location: str | None = None,
+) -> list[m.ExternalModelSource]:
+    plugin = factory.get_plugin_for_data_source(data_source, model=model)
+    source_definitions = plugin.get_sources(source_location)
+    if source_definitions is not None:
+        return _sources_from_definitions(
+            source_definitions, data_source, metadata_location=metadata_location
+        )
+
+    metadata = plugin.get_table_metadata(source_location)
+    source_attribute_mapping = [
+        m.SourceAttributeMapping(
+            sourceName=field.name,
+            targetName=field.name,
+            sourceDataType=dt.DataType(
+                type=field.dataType,
+                nullable=field.isNullable,
+                precision=field.numericPrecision,
+                scale=field.numbericScale,
+                charLen=field.maxLength,
+            ),
+            properties=field.properties,
+        )
+        for field in metadata.iter_source_fields()
+    ]
+    return _default_source(
+        data_source,
+        current_source.sourceLocation if current_source is not None else source_location,
+        source_attribute_mapping,
+        existing_source=current_source,
+        metadata_location=metadata_location,
+    )
