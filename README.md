@@ -1,9 +1,12 @@
 # ORAYLIS DataM8 CLI
 
+DataM8's Python backend opens `.dm8s` solutions, imports and refreshes source metadata,
+validates models, generates output, and serves the desktop/web editor over HTTP.
+
 > [!IMPORTANT]
 > The main branch may contain active development, which could contain a broken solution.
 > Always use [releases] or their respective [version tags] or commit hashes directly when
-> referencing the schema.
+> installing the backend or referencing its schema.
 
 [releases]: https://github.com/oraylis/datam8-cli/releases
 [version tags]: https://github.com/oraylis/datam8-cli/tags
@@ -17,10 +20,14 @@ Issues are tracked centrally in the DataM8 repository:
 ## Key docs
 
 - Central DataM8 docs: https://github.com/oraylis/datam8/tree/main/docs
+- [Backend HTTP contract, including source import and refresh](docs/backend-contract.md#source-import-and-refresh)
+- [Server startup, authentication and CORS](docs/server.md)
+- [Plugin development and compatibility](docs/connectors.md)
+- [Test setup and commands](tests/README.md)
 
 ## Local development
 
-Check out `justfile`, which contains common commands during development. They can be execute with
+Check out `justfile`, which contains common commands during development. They can be executed with
 [just][just-manual] which is a command runner.
 
 [just-manual]: https://just.systems/man/en/introduction.html
@@ -29,8 +36,8 @@ Check out `justfile`, which contains common commands during development. They ca
 
 - Python 3.12+
 - `uv` (https://docs.astral.sh/uv/getting-started/installation/)
-    - setup local venv with `uv sync --all-extras`
-    - upgrade dependencies with `uv add -U <dpackage>'
+    - set up the local environment with `uv sync --all-extras`
+    - upgrade dependencies intentionally with `uv add -U <package>`
     - use `uv audit` to check for vulnerabilities (experimental at this time)
 
 ### Clone
@@ -38,9 +45,9 @@ Check out `justfile`, which contains common commands during development. They ca
 The repository uses the `datam8-model` git submodule as schema source during model-code generation.
 
 ```sh
-git clone --recurse-submodules https://github.com/oraylis/datam8-generator.git
-cd datam8-generator
-git submodule update --init --recursive
+git clone --recurse-submodules https://github.com/oraylis/datam8-cli.git
+cd datam8-cli
+uv sync --all-extras
 ```
 
 ### Run CLI
@@ -67,13 +74,15 @@ uv build
 
 ### Tests
 
-Testing requires a path to a DataM8 solution.
+Model-dependent tests require a path to a disposable DataM8 solution copy.
 You can pass it via `--solution-path` or environment variable (`DATAM8_SOLUTION_PATH`).
 See `tests/README.md` for more details.
 
 ```sh
-uv sync --all-extras
-uv run pytest --solution-path "<path-to-solution.dm8s>"
+# Self-contained source regression tests:
+uv run pytest tests/test_015_source_mappings.py
+# Full suite, including model-dependent tests:
+uv run pytest tests --solution-path "<path-to-disposable-solution.dm8s>"
 ```
 
 ### Linting / checks
@@ -84,11 +93,13 @@ lot faster than e.g. `pyright`.
 
 ```sh
 # running the tools directly via uv
-uvx ruff check src
-uvx ty check src
+uvx ruff check . --respect-gitignore --exclude datam8-model/
+uvx --from ty==0.0.60 ty check src --exit-zero-on-warning
 ```
 
-Alternative use the tasks defined in `justfile` to execute them together.
+These commands match the CI lint scope and type-checker pin. A failing `linting`
+job can come from `ty` even when Ruff passes. The `justfile` formatting tasks also
+modify files and use an unpinned type checker.
 
 ### License headers
 

@@ -32,8 +32,7 @@ def test_function_http_lifecycle(
         w
         for w in model.modelEntities.values()
         if any(
-            t.function is not None
-            and (w.source_file.parent / Path(t.function.source)).is_file()
+            t.function is not None and (w.source_file.parent / Path(t.function.source)).is_file()
             for t in w.entity.transformations
         )
     )
@@ -98,7 +97,7 @@ def test_unexpected_error_response_includes_cors_headers(monkeypatch) -> None:
 def test_cors_preflight_and_disallowed_origin(monkeypatch) -> None:
     monkeypatch.delenv("DATAM8_CORS_ORIGINS", raising=False)
     monkeypatch.delenv("DATAM8_CORS_ORIGIN_REGEX", raising=False)
-    server = create_server(host="127.0.0.1", port=8123, app=create_app())
+    server = create_server(host="127.0.0.1", port=8123, app=create_app(token="test-token"))
 
     with TestClient(server.config.app) as client:
         preflight = client.options(
@@ -113,8 +112,14 @@ def test_cors_preflight_and_disallowed_origin(monkeypatch) -> None:
             "/health",
             headers={"Origin": "https://not-allowed.example"},
         )
+        unauthorized = client.get(
+            "/sources/compare?locator=modelEntities/test",
+            headers={"Origin": "http://localhost:4320"},
+        )
 
     assert preflight.status_code == 200
     assert preflight.headers["access-control-allow-origin"] == "http://localhost:4320"
     assert disallowed.status_code == 204
     assert "access-control-allow-origin" not in disallowed.headers
+    assert unauthorized.status_code == 401
+    assert unauthorized.headers["access-control-allow-origin"] == "http://localhost:4320"

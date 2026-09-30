@@ -24,8 +24,10 @@ All other logs go to stderr.
 
 - `--host` (default `127.0.0.1`): bind interface (desktop-safe default).
 - `--port` (default `0`): bind port. `0` lets the OS pick a free port.
-- `--token` (required): bearer token for all non-health endpoints.
-- `--solution-path` (optional): convenience to set `DATAM8_SOLUTION_PATH`.
+- `--token`: supply a non-empty bearer token for desktop use. The CLI currently
+  permits omission, which disables auth; it does not enforce the desktop requirement.
+- `--solution-path` / `--solution`: active solution; falls back to
+  `DATAM8_SOLUTION_PATH` or the current directory.
 - `--openapi` (optional): enables `/docs` and `/openapi.json` (off by default for desktop).
 - `--log-level` (optional): uvicorn log level (`debug|info|warning|error|critical`).
 
@@ -33,22 +35,24 @@ All other logs go to stderr.
 
 - Single CLI root: `src/datam8/app.py`
 - Command groups: `src/datam8/cmd/*.py`
-- `serve` is one regular command module (`src/datam8/cmd/serve.py`) and shares the same root CLI entry as all other commands.
+- `serve` is registered in `src/datam8/cmd/root.py` and shares the same root CLI entry as all other commands.
 
 ## Health/version
 
 No auth required:
 
-- `GET /health` -> `{"status":"ok"}`
-- `GET /version` -> `{"version":"..."}`
+- `GET /health` -> `204 No Content`.
+- `GET /version` -> `{"schemaVersion":"...","appVersion":"..."}`; this endpoint
+  reads the active solution's schema version, so a loadable solution is required.
 
 ## Auth
 
-All endpoints except `/health` and `/version` require:
+When a token is supplied, all endpoints except `/health` and `/version` require:
 
 `Authorization: Bearer <token>`
 
-If `--token` is missing/blank, the server exits non-zero.
+Do not pass a blank token: it enables auth middleware but cannot authenticate protected
+requests. The omission behavior above is a pre-existing difference from the desktop contract.
 
 ## CORS (dev desktop)
 
@@ -61,11 +65,14 @@ The server enables CORS for localhost dev by default and supports overrides:
 
 ## Generation flow
 
+For source import/refresh endpoints and property ownership, see the
+[canonical source contract](backend-contract.md#source-import-and-refresh).
+
 Generation is synchronous:
 
-- `POST /generate`
-- Request body: `{"solutionPath":"...","target":"...","logLevel":"info","cleanOutput":true}`
-- Response body: `{"status":"succeeded","target":"...","outputPath":"..."}`
+- See [the current route surface](backend-contract.md#current-v2-beta-route-surface)
+  for the implemented `/model/generate` body and response. The older `/generate`
+  parity endpoint is not registered in this checkout.
 
 ## Error envelope
 
@@ -75,9 +82,14 @@ For auth failures, the server returns HTTP 401 with a `Datam8Error` envelope and
 
 ## Code pointers (contributors)
 
-- CLI entrypoint: `src/datam8/cmd/serve.py`
+- CLI entrypoint: `src/datam8/cmd/root.py:serve`
 - CLI root and command registration: `src/datam8/app.py`
 - FastAPI app factory + middleware: `src/datam8/api/app.py`
-- Routes:
-  - system: `src/datam8/api/routes/system.py`
-  - workspace/connectors/generate: `src/datam8/api/routes/api.py`
+- Routes: `src/datam8/api/routes/`; health/version are in `__init__.py`, source
+  metadata/import/compare in `sources.py`, and plugin discovery in `plugins.py`.
+
+`create_server()` wraps the entire FastAPI application in CORS middleware, including
+unexpected error responses. When embedding the backend, use that server factory;
+`create_app()` alone constructs the routes and auth/error handlers without CORS.
+Server middleware tests should exercise `server.config.app`. CORS preflight runs
+before bearer-token authentication; actual protected requests still require the token.

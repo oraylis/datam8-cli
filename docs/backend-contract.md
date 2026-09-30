@@ -21,9 +21,36 @@ All non-readiness logs are written to stderr.
 ## Auth
 
 - No auth required: `GET /health`, `GET /version`
-- All other endpoints require: `Authorization: Bearer <token>`
+- In the desktop launch above, all other endpoints require: `Authorization: Bearer <token>`.
+- Implementation note: the CLI currently also accepts an omitted token, which disables
+  authentication. Desktop launchers must always provide a non-empty token.
 
-## Endpoint surface used by Neon (plus parity extensions)
+## Current v2 beta route surface
+
+The current `create_app().openapi()` exposes these domains (no `/api` prefix):
+
+- `GET /health` (204), `GET /version` (`schemaVersion`, `appVersion`), `GET /config`.
+- `GET /solution`, `GET /solution/full`.
+- `GET /entities`, `GET|PUT|PATCH|DELETE /entities/{locator}`, `PUT /entities/clone`,
+  `POST /entities/rename`, `POST /entities/move`, `POST /entities/move-single`.
+- `POST /model/save`, `POST /model/reload`, `GET /model/unsaved`.
+- `POST /model/generate`: optional body `{ "target": "...", "cleanOutput": true,
+  "payloads": [] }`; synchronous response `{ "target": "...", "outputPath": "...",
+  "message": null }`. Uses the currently loaded solution.
+- `/functions/*` for function retrieval, updates and moves.
+- `GET /plugins`, `POST /plugins/reload`, `GET /plugins/{plugin_id}` and its
+  `/ui-schema`, `/data-type-mappings`, `/connection-properties` subpaths.
+- `POST /secrets/check`, `PUT /secrets/set`.
+- `/sources/*` for connection checks, navigation, metadata, preview, import and compare;
+  see the source section below.
+
+The older Neon parity list below is retained as integration context, **not a list of
+available routes in this checkout**. In particular `/generate`, `/fs/list`,
+`/connectors/*` and `/model/entities` are not currently registered. This discrepancy
+predates source-refresh support; clients must use the implemented surface or coordinate
+a separate parity change. The source contract below describes the implemented feature.
+
+## Historical Neon parity surface (not implemented in full)
 
 ### System
 
@@ -74,7 +101,7 @@ All non-readiness logs are written to stderr.
   - Body: `{ "solutionPath": "...", "target": "...", "logLevel": "info", "cleanOutput": true, "payloads": [], "lazy": false }`
   - Response: `{ "status": "succeeded", "target": "...", "outputPath": "..." }`
 
-### Source import and refresh
+## Source import and refresh
 
 - Plugins may implement `get_sources(source_location)` and return a list of dictionaries
   with `sourceLocation`, `sourceName`, and `targetName` keys. Optional keys are
@@ -88,12 +115,26 @@ All non-readiness logs are written to stderr.
 - A returned list is authoritative for external sources and mappings. Rows are
   grouped by `(sourceLocation, sourceAlias, metadataLocation)`; omitted source columns
   are not mapped.
+- Metadata field names describe target attributes. On import and complete refresh,
+  every `targetName` must match a metadata field name; invalid targets are rejected
+  before the model is changed. Source-only refresh does not read attribute metadata.
 - Returning `None` keeps the default one-source, one-column mapping derived from
   `get_table_metadata()`.
+- Complete refresh updates source-owned attribute metadata (data type, description,
+  business-key flag and supplied properties), while preserving local expressions,
+  display names, history, units, refactor names and deletion markers. Existing
+  attribute properties absent from metadata are retained; supplied values take
+  precedence by property name. A custom attribute type is retained when the mapped
+  data type has not changed.
+- An attribute removed from an external mapping is retained if an internal source
+  still maps to it. Unmapped, locally modeled attributes are also retained.
 - Each imported `ExternalModelSource` may contain `metadataLocation`, the connector
   object used to describe its metadata. `sourceLocation` remains the data read location.
   Several sources may share one `metadataLocation`; refresh describes that contract once.
   Sources without `metadataLocation` continue to use `sourceLocation` for metadata.
+- When `get_sources()` supplies definitions during refresh of a legacy source,
+  the metadata handle used for that call is retained for subsequent refreshes,
+  unless a row explicitly overrides it. The `None` fallback does not add a handle.
 - Complete refresh combines distinct attributes and entity properties from every
   contract of the selected entity; conflicting definitions are rejected. A source-only
   refresh replaces the external sources returned by authoritative `get_sources()`
@@ -111,11 +152,14 @@ All non-readiness logs are written to stderr.
 ## `GET /solution/full` payload
 
 - `solution`: parsed solution metadata.
-- `baseEntities`: base JSON entities (`content` is a typed base wrapper object).
-- `modelEntities`: model JSON entities (excludes folder metadata files; `locator` is a locator object).
-- `folderEntities`: folder metadata files discovered under `Model/**/.properties.json`.
+- `base_entities`: typed base entity wrappers (`entity` contains the typed entity).
+- `model_entities`: model entity wrappers; `locator` is a locator object.
+- `folder_entities`: folder entity wrappers from the loaded model.
 
-## Folder Metadata Contract
+## Historical Neon folder metadata integration
+
+The save URLs in this section belong to the historical parity surface above; current
+entity updates use `/entities/{locator}` followed by `/model/save` where required.
 
 - Folder metadata file path: `Model/**/.properties.json`.
 - File content is a direct folder object (no `folders[]` wrapper).
@@ -155,8 +199,8 @@ All non-readiness logs are written to stderr.
 
 ## Implementation notes (non-contract)
 
-- Route implementation is split by domain (`api_solution.py`, `api_workspace.py`, `api_connectors.py`) and composed in `api.py`.
-- This split does not change endpoint URLs; it is a maintainability refactor only.
+- Route implementation is split under `src/datam8/api/routes/` and composed in its
+  `__init__.py`; `src/datam8/api/app.py` creates the app and CORS-wrapped server.
 
 ## Change policy
 

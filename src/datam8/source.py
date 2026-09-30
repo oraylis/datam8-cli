@@ -34,7 +34,12 @@ from datam8_model import property as p
 
 from . import factory, model, utils
 
-_SOURCE_DEFINITIONS_UNSET = object()
+
+class _SourceDefinitionsUnset:
+    pass
+
+
+_SOURCE_DEFINITIONS_UNSET = _SourceDefinitionsUnset()
 
 
 def _property_references(value: Any, property_name: str, /) -> list[p.PropertyReference] | None:
@@ -62,8 +67,13 @@ def _sources_from_definitions(
         target_name = row.get("targetName")
         alias = row.get("sourceAlias")
         row_metadata_location = row.get("metadataLocation", metadata_location)
-        if not all(
-            isinstance(value, str) and value for value in (location, source_name, target_name)
+        if (
+            not isinstance(location, str)
+            or not location
+            or not isinstance(source_name, str)
+            or not source_name
+            or not isinstance(target_name, str)
+            or not target_name
         ):
             raise utils.create_error(
                 ValueError("sourceLocation, sourceName and targetName must be non-empty strings")
@@ -73,7 +83,9 @@ def _sources_from_definitions(
         if row_metadata_location is not None and (
             not isinstance(row_metadata_location, str) or not row_metadata_location
         ):
-            raise utils.create_error(ValueError("metadataLocation must be a non-empty string or null"))
+            raise utils.create_error(
+                ValueError("metadataLocation must be a non-empty string or null")
+            )
 
         key = (location, alias, row_metadata_location)
         mapping_key = (location, alias, row_metadata_location, source_name, target_name)
@@ -233,7 +245,9 @@ def compare_entity_with_source(
                 existing_source=existing,
                 metadata_location=existing.metadataLocation,
             )
-            refreshed = list(described.sources)
+            refreshed = [
+                item for item in described.sources if isinstance(item, m.ExternalModelSource)
+            ]
             for attr in described.attributes:
                 previous = described_attributes.get(attr.name)
                 comparable = {"ordinalNumber", "dateAdded", "dateModified"}
@@ -290,6 +304,22 @@ def compare_entity_with_source(
             current_attributes.append(refreshed.model_copy(deep=True))
             continue
         refreshed = refreshed.model_copy(deep=True)
+        # Connector metadata does not own locally modeled transformation settings.
+        for field in (
+            "displayName",
+            "history",
+            "expression",
+            "expressionLanguage",
+            "unit",
+            "refactorNames",
+            "dateDeleted",
+        ):
+            setattr(refreshed, field, getattr(old, field))
+        if refreshed.dataType.type == old.dataType.type:
+            refreshed.attributeType = old.attributeType
+        properties = {prop.property: prop for prop in old.properties or []}
+        properties.update({prop.property: prop for prop in refreshed.properties or []})
+        refreshed.properties = list(properties.values()) or old.properties
         refreshed.dateAdded = old.dateAdded
         comparable = {"ordinalNumber", "dateAdded", "dateModified"}
         refreshed.dateModified = (
@@ -301,10 +331,7 @@ def compare_entity_with_source(
         current_attributes[current_attributes.index(old)] = refreshed
     # cleanup attribute list (remove non-referenced attributes and update ordinal number)
     refreshed_targets = {
-        mapping.targetName
-        for source in wrapper.entity.sources
-        if isinstance(source, m.ExternalModelSource)
-        for mapping in source.mapping or []
+        mapping.targetName for source in wrapper.entity.sources for mapping in source.mapping or []
     }
     current_attributes = [
         attr
@@ -378,7 +405,9 @@ def read_from_data_source(
     /,
     *,
     model: model.Model,
-    source_definitions: list[dict[str, Any]] | None | object = _SOURCE_DEFINITIONS_UNSET,
+    source_definitions: list[dict[str, Any]]
+    | None
+    | _SourceDefinitionsUnset = _SOURCE_DEFINITIONS_UNSET,
     existing_source: m.ExternalModelSource | None = None,
     metadata_location: str | None = None,
 ) -> m.ModelEntity:
@@ -434,11 +463,9 @@ def read_from_data_source(
         attributes.append(attr)
         source_attribute_mapping.append(sam)
 
-    if source_definitions is _SOURCE_DEFINITIONS_UNSET:
+    if isinstance(source_definitions, _SourceDefinitionsUnset):
         source_definitions = plugin.get_sources(source_location)
-    source_metadata_location = metadata_location
-    if source_metadata_location is None and existing_source is None:
-        source_metadata_location = source_location
+    source_metadata_location = metadata_location or source_location
     sources = (
         _sources_from_definitions(
             source_definitions, data_source, metadata_location=source_metadata_location
@@ -452,6 +479,18 @@ def read_from_data_source(
             metadata_location=metadata_location,
         )
     )
+
+    attribute_names = {attr.name for attr in attributes}
+    unknown_targets = {
+        mapping.targetName
+        for external_source in sources
+        for mapping in external_source.mapping or []
+        if mapping.targetName not in attribute_names
+    }
+    if unknown_targets:
+        raise utils.create_error(
+            ValueError(f"Unknown target attributes: {', '.join(sorted(unknown_targets))}")
+        )
 
     entity = m.ModelEntity(
         # name and id are placeholders htat will be replace by model.add_entity()
@@ -481,7 +520,7 @@ def read_external_sources(
     source_definitions = plugin.get_sources(source_location)
     if source_definitions is not None:
         return _sources_from_definitions(
-            source_definitions, data_source, metadata_location=metadata_location
+            source_definitions, data_source, metadata_location=metadata_location or source_location
         )
 
     metadata = plugin.get_table_metadata(source_location)

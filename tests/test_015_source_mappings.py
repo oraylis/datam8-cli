@@ -14,6 +14,7 @@ from datam8 import factory, source
 from datam8.api.routes.sources import get_import_description
 from datam8.model import EntityRepository, EntityWrapper, Locator
 from datam8.plugins.base import TableMetadata
+from datam8.plugins.builtins.file import CsvFile
 from datam8_model import attribute as at
 from datam8_model import data_type as dt
 from datam8_model import model as m
@@ -166,7 +167,7 @@ def test_source_only_uses_plugin_sources_without_reading_metadata(monkeypatch) -
     refreshed = source.read_external_sources("crm", "logical", model=SimpleNamespace())
 
     assert refreshed[0].sourceLocation == "physical"
-    assert refreshed[0].metadataLocation is None
+    assert refreshed[0].metadataLocation == "logical"
 
 
 def test_default_source_refresh_preserves_existing_properties() -> None:
@@ -198,13 +199,13 @@ class SourcePluginStub:
             pl.DataFrame(
                 [
                     {
-                        "name": "customer_id",
+                        "name": "id",
                         "ordinal": 1,
                         "dataType": "varchar",
                         "isNullable": False,
                     },
                     {
-                        "name": "first_name",
+                        "name": "firstName",
                         "ordinal": 2,
                         "dataType": "varchar",
                         "isNullable": True,
@@ -288,6 +289,21 @@ def test_import_description_exposes_plugin_entity(monkeypatch) -> None:
     assert response.entity is not None
     assert {item.metadataLocation for item in response.entity.sources} == {"customer_view"}
     assert len(response.entity.sources) == 2
+
+
+def test_import_rejects_mapping_to_missing_target_attribute(monkeypatch) -> None:
+    monkeypatch.setattr(
+        factory, "get_plugin_for_data_source", lambda *_args, **_kwargs: SourcePluginStub()
+    )
+    with pytest.raises(ValueError, match="Unknown target attributes: missing"):
+        source.read_from_data_source(
+            "crm",
+            "customer_view",
+            model=SimpleNamespace(attributeTypes=AttributeTypesStub()),
+            source_definitions=[
+                {"sourceLocation": "physical", "sourceName": "id", "targetName": "missing"}
+            ],
+        )
 
 
 def test_import_description_without_source_definitions(monkeypatch) -> None:
@@ -510,7 +526,7 @@ class MultiContractPlugin:
             {
                 "sourceLocation": "events",
                 "sourceName": "code",
-                "targetName": "code",
+                "targetName": "id" if self.conflicting_attribute else "code",
                 "sourceProperties": [{"property": "layer", "value": "curated"}],
             }
         ]
@@ -650,3 +666,160 @@ def test_external_source_without_metadata_location_round_trips() -> None:
     assert legacy.metadataLocation is None
     assert "metadataLocation" not in legacy.model_dump(exclude_none=True)
     assert m.ExternalModelSource.model_validate(legacy.model_dump()).metadataLocation is None
+
+
+def test_complete_refresh_preserves_locally_modeled_attribute_fields(monkeypatch) -> None:
+    model, locator, original = _source_model()
+    old = original.attributes[0]
+    old.expression = "upper(id)"
+    old.displayName = "Customer ID"
+    old.history = at.HistoryType.SCD2
+    old.properties = [p.PropertyReference(property="local", value="keep")]
+    model.modelEntities[locator].entity = original
+    refreshed = original.model_copy(deep=True)
+    refreshed.attributes = [_attribute("id", 1)]
+    refreshed.attributes[0].description = "Source description"
+    refreshed.attributes[0].properties = [
+        p.PropertyReference(property="classification", value="pii")
+    ]
+    monkeypatch.setattr(source, "read_from_data_source", lambda *_args, **_kwargs: refreshed)
+
+    wrapper, _ = source.compare_entity_with_source(locator, model=model)
+
+    actual = wrapper.entity.attributes[0]
+    assert actual.expression == "upper(id)"
+    assert actual.displayName == "Customer ID"
+    assert actual.history == at.HistoryType.SCD2
+    assert actual.description == "Source description"
+    assert {prop.property: prop.value for prop in actual.properties} == {
+        "local": "keep",
+        "classification": "pii",
+    }
+    assert original.attributes[0] == old
+
+
+@pytest.mark.parametrize("mode", ["complete", "sources-only"])
+def test_refresh_upgrades_legacy_source_and_retains_metadata_handle(monkeypatch, mode) -> None:
+    model, locator, original = _source_model()
+    original.sources[0].metadataLocation = None
+    original.sources[0].sourceLocation = "contract_a"
+    model.modelEntities[locator].entity = original
+    model.attributeTypes = AttributeTypesStub()
+    plugin = MultiContractPlugin()
+    monkeypatch.setattr(factory, "get_plugin_for_data_source", lambda *_args, **_kwargs: plugin)
+
+    first, _ = source.compare_entity_with_source(locator, model=model, mode=mode)
+    assert {item.metadataLocation for item in first.entity.sources} == {"contract_a"}
+    model.modelEntities[locator].entity = first.entity
+    second, diff = source.compare_entity_with_source(locator, model=model, mode=mode)
+
+    assert plugin.source_calls == ["contract_a", "contract_a"]
+    assert second.entity == first.entity
+    assert not diff
+
+
+def test_complete_refresh_keeps_attributes_still_mapped_by_internal_source(monkeypatch) -> None:
+    model, locator, original = _source_model()
+    original.sources.append(
+        m.InternalModelSource(
+            sourceLocation=2, mapping=[m.SourceAttributeMapping(sourceName="key", targetName="id")]
+        )
+    )
+    model.modelEntities[locator].entity = original
+    refreshed = m.ModelEntity(
+        id=1,
+        name="empty",
+        attributes=[_attribute("other", 1)],
+        sources=[],
+        transformations=[],
+        relationships=[],
+    )
+    monkeypatch.setattr(source, "read_from_data_source", lambda *_args, **_kwargs: refreshed)
+
+    wrapper, _ = source.compare_entity_with_source(locator, model=model)
+
+    assert [attr.name for attr in wrapper.entity.attributes] == ["id", "computedName", "other"]
+    assert wrapper.entity.sources == [original.sources[1]]
+
+
+@pytest.mark.parametrize("invalid", [None, "", 42])
+@pytest.mark.parametrize("key", ["sourceLocation", "sourceName", "targetName"])
+def test_source_definition_required_strings_are_validated(key, invalid) -> None:
+    row = {"sourceLocation": "table", "sourceName": "id", "targetName": "id"}
+    row[key] = invalid
+    with pytest.raises(ValueError, match="non-empty strings"):
+        source._sources_from_definitions([row], "test")
+
+
+@pytest.mark.parametrize("mode", ["complete", "sources-only"])
+def test_plugin_without_get_sources_override_keeps_default_import_and_refresh(
+    monkeypatch, tmp_path, mode
+) -> None:
+    from datam8_model.data_source import DataSource, DataSourceType
+
+    (tmp_path / "customers.csv").write_text("id,name\na,Alice\n", encoding="utf-8")
+    data_source = DataSource(name="csv", type="CsvFile", extendedProperties={"path": str(tmp_path)})
+    source_type = DataSourceType(
+        name="CsvFile",
+        connectionProperties=CsvFile.get_connection_properties(),
+        dataTypeMapping=CsvFile.get_data_type_mappings(),
+        authModes=CsvFile.get_auth_modes(),
+    )
+    monkeypatch.setattr(
+        factory,
+        "get_plugin_for_data_source",
+        lambda *_args, **_kwargs: CsvFile(CsvFile.manifest(), data_source, source_type),
+    )
+    model, locator, _ = _source_model()
+    model.attributeTypes = AttributeTypesStub()
+
+    imported = source.read_from_data_source("csv", "customers.csv", model=model)
+    assert imported.sources[0].metadataLocation is None
+    assert [(item.sourceName, item.targetName) for item in imported.sources[0].mapping] == [
+        ("id", "id"),
+        ("name", "name"),
+    ]
+    model.modelEntities[locator].entity = imported
+    wrapper, diff = source.compare_entity_with_source(locator, model=model, mode=mode)
+    assert not diff
+    assert wrapper.entity == imported
+
+
+def test_http_source_description_and_repeated_refresh(monkeypatch) -> None:
+    from fastapi.testclient import TestClient
+
+    from datam8.api.app import create_app, create_server
+
+    model, locator = _multi_contract_model()
+    plugin = MultiContractPlugin()
+    monkeypatch.setattr(factory, "get_model", lambda: model)
+    monkeypatch.setattr(factory, "get_plugin_for_data_source", lambda *_args, **_kwargs: plugin)
+    original = model.modelEntities[locator].entity.model_copy(deep=True)
+    server = create_server(host="127.0.0.1", port=8123, app=create_app(token="test-token"))
+    with TestClient(server.config.app) as client:
+        headers = {"Authorization": "Bearer test-token"}
+        description = client.get(
+            "/sources/test/locations/import-description",
+            params={"source_location": "contract_a"},
+            headers=headers,
+        )
+        assert description.status_code == 200
+        entity = m.ModelEntity.model_validate(description.json()["entity"])
+        assert {item.metadataLocation for item in entity.sources} == {"contract_a"}
+        assert [attr.name for attr in entity.attributes] == ["id", "name"]
+        for mode in ("sources-only", "complete"):
+            response = client.get(
+                "/sources/compare", params={"locator": locator, "mode": mode}, headers=headers
+            )
+            assert response.status_code == 200
+            assert response.json()["has_changes"]
+            assert model.modelEntities[locator].entity == original
+        refreshed = m.ModelEntity.model_validate(response.json()["wrapper"]["entity"])
+        model.modelEntities[locator].entity = refreshed
+        repeated = client.get("/sources/compare", params={"locator": locator}, headers=headers)
+        assert repeated.status_code == 200
+        assert repeated.json()["has_changes"] is False
+        invalid = client.get(
+            "/sources/compare", params={"locator": locator, "mode": "invalid"}, headers=headers
+        )
+        assert invalid.status_code == 400
