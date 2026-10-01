@@ -761,6 +761,7 @@ def test_plugin_without_get_sources_override_keeps_default_import_and_refresh(
     data_source = DataSource(name="csv", type="CsvFile", extendedProperties={"path": str(tmp_path)})
     source_type = DataSourceType(
         name="CsvFile",
+        pluginId="builtin:CsvFile",
         connectionProperties=CsvFile.get_connection_properties(),
         dataTypeMapping=CsvFile.get_data_type_mappings(),
         authModes=CsvFile.get_auth_modes(),

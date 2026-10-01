@@ -20,10 +20,12 @@ outside it. A manifest uses the case-sensitive `entryPoint` field, for example:
 }
 ```
 
-Bind `DataSourceType.pluginId` to the manifest ID. When omitted, the manager falls
-back to the data source type name. Connection properties and type mappings belong
-on the data source type; concrete values belong on `DataSource.extendedProperties`.
-Built-in manifests use IDs such as `builtin:SQLServer`.
+When a data source type uses a plugin, bind its optional `pluginId` to the manifest ID.
+Plugin resolution uses this ID exactly and never infers it from the data source type
+name. A type without `pluginId` remains unbound; operations that need a plugin require
+an explicit binding. Connection properties and type mappings belong on the data source
+type; concrete values belong on `DataSource.extendedProperties`. Built-in manifests use
+IDs such as `builtin:SQLServer`.
 
 The current manager does not discover plugins using `DATAM8_PLUGIN_DIR/connectors`,
 `pluginType`, or `__connector.id` properties. Those describe an older architecture.
