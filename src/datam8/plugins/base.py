@@ -349,6 +349,21 @@ class Plugin(abc.ABC):
             NotImplementedError(f"get_table_metadata not implemented by {self.manifest().id}")
         )
 
+    def get_sources(self, source_location: str, /) -> list[dict[str, Any]] | None:
+        """Get the external sources and mappings for an imported object.
+
+        ``source_location`` is the connector's metadata location, which may differ
+        from the physical ``sourceLocation`` values returned by this method.
+        Refreshed sources retain this metadata location for subsequent calls.
+        Each returned dictionary must contain ``sourceLocation``, ``sourceName`` and
+        ``targetName``. It may also contain ``sourceAlias``, ``sourceProperties``,
+        ``mappingProperties``, ``sourceDataType`` and ``metadataLocation``. The
+        per-row ``metadataLocation`` overrides the import location for that source.
+        ``sourceDataType`` is a DataType object or dictionary. Returning ``None``
+        keeps the default mapping derived from :meth:`get_table_metadata`.
+        """
+        return None
+
     def preview_data(self, source_location: str, *, limit: int = 10) -> pl.LazyFrame:
         """
         Preview data from a table or file.

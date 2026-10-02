@@ -669,6 +669,7 @@ class MigrationV1:
 
                         data_source_types[src.type] = ds.DataSourceType(
                             name=src.type,
+                            pluginId=f"builtin:{src.type}",
                             dataTypeMapping=data_type_mappings,
                             authModes=[],
                             connectionProperties=connection_properties,

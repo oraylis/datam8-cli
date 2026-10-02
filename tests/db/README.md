@@ -15,9 +15,11 @@ Make sure you are inside the `db` directory.
 
 ```sh
 # downloads the container image and starts it
+
 docker compose up -d
 
 # imports (restores) the adventrue works db
+
 docker exec adventure-works-for-datam8 /bin/bash /restore-db.sh #
 ```
 
