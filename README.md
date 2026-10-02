@@ -19,7 +19,9 @@ Issues are tracked centrally in the DataM8 repository:
 
 ## Key docs
 
-- Central DataM8 docs: https://github.com/oraylis/datam8/tree/main/docs
+- [Central DataM8 handbook](https://github.com/oraylis/datam8/blob/codex/documentation-v2/docs/index.md)
+- [Backend documentation index](docs/index.md)
+- [CLI examples and exit/output checks](docs/cli.md)
 - [Backend HTTP contract, including source import and refresh](docs/backend-contract.md#source-import-and-refresh)
 - [Server startup, authentication and CORS](docs/server.md)
 - [Plugin development and compatibility](docs/connectors.md)
@@ -60,6 +62,7 @@ uv run datam8 validate --help
 uv run datam8 generate --help
 
 # or with just
+
 just r --help
 just r validate --help
 ```
@@ -80,8 +83,10 @@ See `tests/README.md` for more details.
 
 ```sh
 # Self-contained source regression tests:
+
 uv run pytest tests/test_015_source_mappings.py
 # Full suite, including model-dependent tests:
+
 uv run pytest tests --solution-path "<path-to-disposable-solution.dm8s>"
 ```
 
@@ -93,6 +98,7 @@ lot faster than e.g. `pyright`.
 
 ```sh
 # running the tools directly via uv
+
 uvx ruff check . --respect-gitignore --exclude datam8-model/
 uvx --from ty==0.0.60 ty check src --exit-zero-on-warning
 ```

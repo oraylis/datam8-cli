@@ -1,12 +1,12 @@
 # DataM8 Server (`datam8 serve`)
 
-This document describes the desktop-safe FastAPI backend used by DataM8 Neon.
+This document describes the desktop-safe FastAPI backend used by DataM8 v2.
 
-Canonical endpoint contract for Neon lives in `docs/backend-contract.md`.
+Canonical endpoint contract is [backend-contract.md](backend-contract.md).
 
 ## Desktop-safe startup protocol
 
-Neon starts the backend as a long-lived process:
+Electron starts the backend as a long-lived process:
 
 ```sh
 datam8 serve --host 127.0.0.1 --port 0 --token <random>
@@ -71,8 +71,7 @@ For source import/refresh endpoints and property ownership, see the
 Generation is synchronous:
 
 - See [the current route surface](backend-contract.md#current-v2-beta-route-surface)
-  for the implemented `/model/generate` body and response. The older `/generate`
-  parity endpoint is not registered in this checkout.
+  for the implemented `/model/generate` body and response.
 
 ## Error envelope
 

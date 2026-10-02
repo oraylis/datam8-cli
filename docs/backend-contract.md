@@ -1,10 +1,10 @@
 # Backend Contract (Canonical)
 
-This document is the canonical HTTP contract between `datam8-generator` and `datam8-neon`.
+This document is the canonical HTTP contract between the DataM8 Python backend (`datam8-cli`) and the v2 frontend.
 
 ## Startup and readiness
 
-Neon starts the backend as a long-lived process:
+Electron starts the backend as a long-lived process:
 
 ```bash
 datam8 serve --host 127.0.0.1 --port 0 --token <random>
@@ -44,62 +44,21 @@ The current `create_app().openapi()` exposes these domains (no `/api` prefix):
 - `/sources/*` for connection checks, navigation, metadata, preview, import and compare;
   see the source section below.
 
-The older Neon parity list below is retained as integration context, **not a list of
-available routes in this checkout**. In particular `/generate`, `/fs/list`,
-`/connectors/*` and `/model/entities` are not currently registered. This discrepancy
-predates source-refresh support; clients must use the implemented surface or coordinate
-a separate parity change. The source contract below describes the implemented feature.
+The implemented route surface is authoritative. Workspace selection in browser
+mode reads the solution bound at server startup; entering another path does not
+switch workspaces. Coordinate any additional route with consumers before shipping.
 
-## Historical Neon parity surface (not implemented in full)
+## Entity and function invariants
 
-### System
-
-- `GET /health`
-- `GET /version`
-- `GET /config`
-
-### Workspace and editor operations
-
-- Filesystem: `GET /fs/list`
-- Solution: `GET /solution`, `GET /solution/full`, `GET /solution/inspect`, `POST /solution/new-project`
-  - Full model validate parity: `POST /validate`
-- Migration: `POST /migration/v1-to-v2`
-- Model entities: `GET|POST|DELETE /model/entities`, `POST /model/entities/move`, `POST /model/folder/rename`
-  - Parity aliases: `GET /model/entity`, `POST /model/entity/create`, `POST /model/entity/validate`, `POST /model/entity/set`, `POST /model/entity/patch`, `POST /model/entity/duplicate`
-  - Folder metadata explicit endpoints: `GET|POST|DELETE /model/folder-metadata`
-- Model functions: `GET|POST|DELETE /model/function/source`, `POST /model/function/rename`
-- Base entities: `GET|POST|DELETE /base/entities`
-  - Parity aliases: `GET /base/entity`, `POST /base/entity/set`, `POST /base/entity/patch`
-- Solution parity aliases: `GET /solution/info`, `POST /solution/validate`
-- Index/refactor: `POST /index/regenerate`, `GET /index/show`, `GET /index/validate`, `POST /refactor/properties`, `POST /refactor/keys`, `POST /refactor/values`, `POST /refactor/entity-id`
-- Search: `GET /search/entities`, `GET /search/text`
-- Connectors/plugins/secrets under `/connectors/*`, `/plugins/*`, `/datasources/*`, `/http/datasources/*`, `/secrets/*`
-  - Datasource parity endpoint: `POST /datasources/{dataSourceId}/test`
-  - Plugin parity endpoints: `GET /plugins/{pluginId}/info`, `POST /plugins/{pluginId}/verify`, `POST /plugins/verify`
-  - Secrets parity endpoints: `GET /secrets/runtime/list`, `GET /secrets/runtime/key`
-
-### v2 beta compatibility extensions
-
-- Entity rename: `POST /entities/rename`
-  - Body: `{ "from": "dataTypes/Text", "to": "dataTypes/String", "content": {} }`
-  - Model entities and folders continue to use `POST /entities/move`.
-- Entity folder operations include the complete subtree.
-  - Moving a folder rebases nested folders, model entities, metadata paths, and function directories.
-  - Function-directory moves are preflighted and rolled back if the model move fails.
-  - Deleting a folder marks nested folders and model entities for deletion; save also removes their function directories.
-- Function source paths are relative to their model entity.
-  - Absolute paths, drive-qualified paths, traversal segments, empty segments, and symlink escapes are rejected.
-- Built-in plugin IDs use the canonical `builtin:*` form, for example `builtin:SQLServer`.
-- `PUT /secrets/set` is an upsert and returns `204 No Content`.
-- Canonical source navigation remains under `/sources/{dataSource}/locations`.
-- Source metadata may include `description`, `properties`, and `sourceOverride`.
-- Preview endpoints require the plugin capability `previewData`.
-
-### Generation
-
-- `POST /generate` (synchronous)
-  - Body: `{ "solutionPath": "...", "target": "...", "logLevel": "info", "cleanOutput": true, "payloads": [], "lazy": false }`
-  - Response: `{ "status": "succeeded", "target": "...", "outputPath": "..." }`
+- Entity rename uses `POST /entities/rename`; model entities and folders use
+  `POST /entities/move`.
+- Folder moves include the complete subtree and rebase entity, metadata and
+  function paths. Function-directory moves are preflighted and rolled back if
+  the model move fails. Saving a deleted folder also removes child functions.
+- Function source paths are relative to their model entity. Absolute/drive-qualified
+  paths, traversal, empty segments and symlink escapes are rejected.
+- Built-in plugin IDs use `builtin:*`, for example `builtin:SQLServer`.
+- Preview requires the plugin capability `previewData`.
 
 ## Source import and refresh
 
@@ -156,30 +115,16 @@ a separate parity change. The source contract below describes the implemented fe
 - `model_entities`: model entity wrappers; `locator` is a locator object.
 - `folder_entities`: folder entity wrappers from the loaded model.
 
-## Historical Neon folder metadata integration
+## Folder metadata integration
 
-The save URLs in this section belong to the historical parity surface above; current
-entity updates use `/entities/{locator}` followed by `/model/save` where required.
+Folder metadata is a direct object in `Model/**/.properties.json`. Use the typed
+folder locator with `/entities/{locator}`, then `/model/save` to persist changes.
+See the pinned schema's `schema/folder.json` for fields.
 
-- Folder metadata file path: `Model/**/.properties.json`.
-- File content is a direct folder object (no `folders[]` wrapper).
-- Folder fields used by Neon/backend:
-  - `id` (number), `name` (string)
-  - optional `displayName`, `description`, `path`
-  - optional `properties` (array of `{ property, value }`)
-  - optional `dataProduct` (string) and `dataModule` (string)
-- Save/update uses `POST /model/entities` or `POST /model/folder-metadata` with `relPath` pointing to `.properties.json`.
-
-### Folder Validation Rules
-
-- `dataModule` requires `dataProduct`.
-- `dataProduct` must exist in `Base/DataProducts.json`.
-- `dataModule` must exist under the selected `dataProduct` in `Base/DataProducts.json`.
-
-### Folder Inheritance Semantics (UI Consumption)
-
-- Folder `properties` inherit down the folder chain (child overrides parent by `property` key).
-- `dataProduct` and `dataModule` inherit from nearest available ancestors.
+The backend validates that a module belongs to the selected product. Folder
+properties inherit down the chain; a child overrides a parent by property name.
+Product/module context inherits from the nearest applicable ancestor. The UI
+displays the effective context while editing the local folder's own values.
 
 ## Response contract
 
@@ -207,5 +152,5 @@ entity updates use `/entities/{locator}` followed by `/model/save` where require
 Contract changes must include:
 
 - updates to this document,
-- coordinated generator + Neon changes,
+- coordinated backend + frontend changes,
 - integration tests for affected flows.

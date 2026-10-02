@@ -14,6 +14,8 @@ connector plugins and Jinja2 generation. Use `uv`; the CLI entry point is `datam
   [backend contract](docs/backend-contract.md) before changing behavior. Link to it
   from frontend docs instead of duplicating its text. Endpoints have no `/api` prefix;
   generation is synchronous, with no Jobs/SSE layer.
+- Documentation changes run `node scripts/check-docs.mjs` with Node 24.
+  Public user workflows belong in the central DataM8 handbook; keep API contracts here.
 - For plugin work, use [connectors](docs/connectors.md). Preserve existing plugin
   hooks and distinguish regressions from incompatibilities already present on the base.
 - For server startup/auth/CORS, use [server](docs/server.md). For test setup and

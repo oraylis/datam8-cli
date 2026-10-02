@@ -1,19 +1,10 @@
-# Security Policy
+# Security Reporting
 
-The DataM8 team and community take security bugs in DataM8 seriously. We appreciate your efforts to responsibly disclose your findings, and will make every effort to acknowledge your contributions.
+Use the central [private vulnerability-report route](https://github.com/oraylis/datam8/security/advisories/new)
+or DataM8@Oraylis.de if that route is unavailable. Include component versions,
+reproduction and impact; keep sensitive data out of public issues.
 
-## Supported Versions
-
-
-| Version | Supported          |
-| ------- | ------------------ |
-| 1.0.x   | :white_check_mark: |
-
-
-## Reporting a Vulnerability
-
-To report a security issue, please use the GitHub Security Advisory ["Report a Vulnerability"](https://github.com/oraylis/datam8/security/advisories/new) tab.
-
-The DataM8 team will send a response indicating the next steps in handling your report. After the initial reply to your report, the security team will keep you informed of the progress towards a fix and full announcement, and may ask for additional information or guidance.
-
-Report security bugs in third-party modules to the person or team maintaining the module.
+The current documentation covers v2 beta behavior. A supported-release commitment
+has not been established by this documentation patch. Do not infer a support or
+response-time guarantee from an old version table. Follow the
+[central reporting guidance](https://github.com/oraylis/datam8/blob/codex/documentation-v2/SECURITY.md).
