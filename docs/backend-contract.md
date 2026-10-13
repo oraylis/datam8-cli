@@ -1,6 +1,8 @@
 # Backend Contract (Canonical)
 
 This document is the canonical HTTP contract between the DataM8 Python backend (`datam8-cli`) and the v2 frontend.
+It describes this development checkout and its pinned schema, not every published
+beta runtime. See [connector development](connectors.md) for the Python interface.
 
 ## Startup and readiness
 
@@ -93,6 +95,10 @@ switch workspaces. Coordinate any additional route with consumers before shippin
 - Source metadata retains its existing schema: `dataType` is the source type.
   ODCS uses `physicalType`, or the declared `logicalType` when no physical type exists.
   Business names enrich existing model fields; no metadata hook overrides target types.
+  Plugins may split physical type parameters into length/precision/scale metadata or
+  retain parameterized type strings. The backend preserves the supplied source type
+  and does not parse dimensions out of it. Dataframe metadata uses `numericScale`;
+  serialized `SourceField` currently retains its legacy spelling `numbericScale`.
 - Import and complete refresh translate types exclusively using persisted mappings.
   Data Source mappings take precedence over Data Source Type mappings. Each level
   matches the complete type first, then its base type (`DECIMAL(18,2)` matches
@@ -101,8 +107,13 @@ switch workspaces. Coordinate any additional route with consumers before shippin
   never changes metadata or source types stored in source mappings.
 - Missing mappings fail with source, object, column and type context. There is no
   plugin-resolver fallback, implicit canonical-type acceptance or default target.
-  Existing default attribute-type selection remains; source-only refresh does not
-  translate target types. Plugin mappings are suggestions copied into the solution
+  Backend import and complete refresh require exactly one Attribute Type whose
+  `defaultType` equals the mapped target type and whose `isDefaultProperty` is true.
+  No additional Data Types existence lookup is performed by this translation path.
+  Clients receiving a non-null import description retain its attribute types.
+  The frontend metadata-only path uses the same saved mappings but assigns `Regular`;
+  it does not run backend default Attribute Type selection. Source-only refresh does
+  not translate target types. Plugin mappings are suggestions copied into the solution
   at binding time, not a runtime substitute for the saved configuration.
 - Explicit short builtin IDs alias their canonical `builtin:*` IDs. A data source type
   still requires an explicit `pluginId`; no binding is inferred from its name.

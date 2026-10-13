@@ -62,7 +62,7 @@ class TableMetadata:
         - name : str
             Name of the column
         - dataType : str
-            Data type of the column
+            Original source type; saved solution mappings determine the model type.
         - ordinal : int
             1-indexed position of the column
         Optional columns:
@@ -75,7 +75,11 @@ class TableMetadata:
         - numericScale : int
             Scale for numeric types
         - isPrimaryKey : bool
-            Whether the column is a primary key
+            Whether the column is a primary key (defaults to False)
+        - description : str
+            Column description
+        - properties : list
+            Existing property references for the column and default mapping
     source_object : SourceObject
         The source object (table/view/file) that this metadata describes.
 
@@ -143,7 +147,8 @@ class TableMetadata:
         ------
         SourceField
             SourceField objects representing table columns, yielded one at a time
-            in ordinal position order.
+            in dataframe row order. Plugins should supply rows in ordinal order.
+            The dataframe's numericScale maps to the legacy numbericScale field.
         """
         for row in self._df.iter_rows(named=True):
             yield SourceField(
@@ -160,7 +165,7 @@ class TableMetadata:
             )
 
     def apply_import_metadata(self, entity: ModelEntity) -> None:
-        """Optional connector enrichment of existing entity and attribute fields."""
+        """Enrich existing model fields, such as display names, without changing types."""
 
 
 class MissingCapabilityError(Exception):
@@ -302,12 +307,20 @@ class Plugin(abc.ABC):
 
     def list_source(self, source_location: str | None = None, /) -> pl.DataFrame:
         """
-        List all schemas (databases, file systems, containers) in the data source.
+        List root entries or children of the supplied connector-owned handle.
+
+        Parameters
+        ----------
+        source_location : str | None
+            None lists the root; otherwise list children of this navigation handle.
 
         Returns
         -------
         pl.DataFrame
-            DataFrame with a single column 'schema' containing schema names.
+            Entries with name, type and opaque sourceLocation columns.
+            SCHEMA, CONTAINER and DIRECTORY identify navigable entries.
+            Legacy schema/container/object rows are adapted by the backend.
+            Explicit plugin handles are preserved.
 
         Raises
         ------
@@ -326,21 +339,16 @@ class Plugin(abc.ABC):
 
         Parameters
         ----------
-        table : str
-            The table or file name.
-        schema : str | None, optional
-            The schema or container name. Some data sources require this parameter.
+        source_location : str
+            Opaque connector-owned handle for the object to describe.
 
         Returns
         -------
-        pl.DataFrame
-            DataFrame containing column metadata with columns:
-            - COLUMN_NAME : str
-                Name of the column
-            - DATA_TYPE : str
-                Data type of the column in source format
-            - ORDINAL_POSITION : int
-                1-indexed position of the column
+        TableMetadata
+            Metadata dataframe and SourceObject. Required dataframe columns are
+            name, dataType (the original source type) and ordinal (one-based).
+            Supply dimensions separately through maxLength, numericPrecision and
+            numericScale. Import uses saved mappings, not the plugin resolver.
 
         Raises
         ------
@@ -365,6 +373,8 @@ class Plugin(abc.ABC):
         per-row ``metadataLocation`` overrides the import location for that source.
         ``sourceDataType`` is a DataType object or dictionary. Returning ``None``
         keeps the default mapping derived from :meth:`get_table_metadata`.
+        Returning an empty list supplies no external sources. Any list is
+        authoritative and enables a complete backend import description.
         """
         return None
 
@@ -490,7 +500,9 @@ class Plugin(abc.ABC):
 
     @classmethod
     @abc.abstractmethod
-    def resolve_source_type(cls, source_type: str, /) -> str: ...
+    def resolve_source_type(cls, source_type: str, /) -> str:
+        """Compatibility hook; current import/complete refresh uses saved mappings."""
+        ...
 
     @classmethod
     def get_ui_schema(cls) -> UiSchema:
@@ -535,7 +547,9 @@ class Plugin(abc.ABC):
 
     @staticmethod
     @abc.abstractmethod
-    def parse_source_location(source_location: str) -> tuple[str, ...]: ...
+    def parse_source_location(source_location: str) -> tuple[str, ...]:
+        """Parse a connector-owned handle; clients pass locations unchanged."""
+        ...
 
     @staticmethod
     @functools.lru_cache
@@ -572,12 +586,13 @@ class Plugin(abc.ABC):
     @abc.abstractmethod
     def get_data_type_mappings() -> list[SourceDataTypeMapping]:
         """
-        Get data type mappings from source types to target types.
+        Suggest source-to-model type mappings for persisted solution configuration.
 
         Returns
         -------
         list[SourceDataTypeMapping]
             List of mappings from source-specific data types to standardized
-            target data types used by the DataM8 system.
+            model data types. An empty list requires manual configuration.
+            Current import and complete refresh use saved mappings, not this hook.
         """
         ...
