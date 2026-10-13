@@ -6,7 +6,7 @@ import functools
 import json
 import re
 from importlib.resources import files
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 from urllib.parse import quote, unquote
 
@@ -176,7 +176,14 @@ class OdcsFile(Plugin):
         root = self._root()
         base = root if root.is_dir() else root.parent
         candidate = Path(relative)
-        if candidate.is_absolute() or candidate.drive or ".." in candidate.parts:
+        windows = PureWindowsPath(relative)
+        if (
+            candidate.is_absolute()
+            or windows.drive
+            or windows.root
+            or ".." in candidate.parts
+            or ".." in windows.parts
+        ):
             raise Datam8ValidationError(message="ODCS locations must stay within the source root")
         path = (base / candidate).resolve()
         if not path.is_relative_to(base) or (root.is_file() and path != root):

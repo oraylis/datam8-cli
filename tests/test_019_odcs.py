@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from urllib.parse import quote
 
 import pytest
@@ -11,6 +11,7 @@ from pytest_cases import parametrize_with_cases
 from test_019_odcs_cases import CasesOdcsTypes, contract
 
 from datam8.errors import Datam8NotFoundError, Datam8ValidationError
+from datam8.plugins.builtins import odcs
 from datam8.plugins.builtins.odcs import OdcsFile
 from datam8.plugins.type_mapping import SourceTypeMapper
 from datam8_model.attribute import Attribute
@@ -211,6 +212,12 @@ def test_dates_and_unused_variables(tmp_path, builtin_plugin):
         "../outside.json#customers",
         "%2E%2E/outside.json#customers",
         "C:/outside.json#customers",
+        "C%3A%2Foutside.json#customers",
+        "C:outside.json#customers",
+        "C:%5Coutside.json#customers",
+        "%5C%5Cserver%5Cshare%5Coutside.json#customers",
+        "%5Coutside.json#customers",
+        "..%5Coutside.json#customers",
         "/outside.json#customers",
     ],
 )
@@ -218,6 +225,20 @@ def test_path_escape(location, tmp_path, builtin_plugin):
     (tmp_path / "contracts").mkdir()
     with pytest.raises(Datam8ValidationError, match="root"):
         builtin_plugin(OdcsFile, {"path": "contracts"}).get_table_metadata(location)
+
+
+@pytest.mark.parametrize(
+    "relative", ["C:/outside.json", "C:outside.json", r"\\server\share\outside.json"]
+)
+def test_windows_paths_rejected_with_posix_parser(relative, tmp_path, builtin_plugin, monkeypatch):
+    root = tmp_path / "contracts"
+    root.mkdir()
+    plugin = builtin_plugin(OdcsFile, {"path": "contracts"})
+    # Exercise Linux parsing on every host without changing filesystem semantics.
+    monkeypatch.setattr(plugin, "_root", lambda: root)
+    monkeypatch.setattr(odcs, "Path", PurePosixPath)
+    with pytest.raises(Datam8ValidationError, match="root"):
+        plugin._path(relative)
 
 
 def test_single_file_boundary_and_missing_files(tmp_path, builtin_plugin):
