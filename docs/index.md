@@ -4,6 +4,7 @@
 - [Canonical HTTP contract](backend-contract.md)
 - [Server startup/authentication/CORS](server.md)
 - [Python connector development](connectors.md)
+- [ODCS and Unity Catalog builtin configuration](builtin-sources.md)
 - [Frontend integration](neon-cli-mapping.md)
 - [Test fixtures and commands](../tests/README.md)
 - [Local SQL fixture](../tests/db/README.md)

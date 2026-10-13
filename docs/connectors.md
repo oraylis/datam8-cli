@@ -1,7 +1,9 @@
 # Connector plugins
 
 This backend loads Python plugins from the solution and includes CSV, SQL Server and
-Azure Data Lake built-ins. SQL and Azure built-ins require their corresponding extras.
+Azure Data Lake built-ins, plus local ODCS 3.2 and Databricks Unity Catalog.
+See [builtin configuration](builtin-sources.md).
+SQL and Azure built-ins require their corresponding extras.
 The source import/refresh API is specified in [the backend contract](backend-contract.md#source-import-and-refresh).
 
 ## Discovery and binding
@@ -21,11 +23,12 @@ outside it. A manifest uses the case-sensitive `entryPoint` field, for example:
 ```
 
 When a data source type uses a plugin, bind its optional `pluginId` to the manifest ID.
-Plugin resolution uses this ID exactly and never infers it from the data source type
+Plugin resolution uses an explicit ID and never infers it from the data source type
 name. A type without `pluginId` remains unbound; operations that need a plugin require
 an explicit binding. Connection properties and type mappings belong on the data source
 type; concrete values belong on `DataSource.extendedProperties`. Built-in manifests use
 IDs such as `builtin:SQLServer`.
+Explicit short builtin IDs such as `SQLServer` alias their canonical IDs.
 
 The current manager does not discover plugins using `DATAM8_PLUGIN_DIR/connectors`,
 `pluginType`, or `__connector.id` properties. Those describe an older architecture.
@@ -42,6 +45,12 @@ SourceObject(...))`. The built-in `SqlServer` connector already follows this int
 Its metadata conversion and validation tests now run instead of being skipped. The dataframe needs `name`, `ordinal`, and `dataType`; optional
 columns include description, properties, nullability, primary-key flags, lengths,
 precision and `numericScale`. Use the built-in connectors as implementation examples.
+`SourceField.dataType` retains the original source type. Import and complete refresh
+use the mappings persisted on the Data Source and its Data Source Type, never the
+plugin resolver. Missing mappings are errors. See the
+[canonical matching rules](backend-contract.md#source-import-and-refresh).
+`apply_import_metadata(entity)` can enrich existing fields such as business names;
+it must not override data types. No serialized source metadata fields are added.
 Declare capabilities for the operations actually supported; preview requires
 `previewData` and returns a Polars lazy frame.
 

@@ -37,6 +37,7 @@ from datam8_model.data_source import (
     SourceField,
     SourceObject,
 )
+from datam8_model.model import ModelEntity
 from datam8_model.plugin import Capability, PluginManifest, UiAuthMode, UiField, UiSchema
 
 VALIDATION_CONNECTION = Capability.VALIDATION_CONNECTION
@@ -157,6 +158,9 @@ class TableMetadata:
                 description=row["description"],
                 properties=row["properties"],
             )
+
+    def apply_import_metadata(self, entity: ModelEntity) -> None:
+        """Optional connector enrichment of existing entity and attribute fields."""
 
 
 class MissingCapabilityError(Exception):
@@ -363,6 +367,17 @@ class Plugin(abc.ABC):
         keeps the default mapping derived from :meth:`get_table_metadata`.
         """
         return None
+
+    def get_source_capabilities(self) -> dict[str, bool]:
+        """Connection-specific UI capabilities; plugins can narrow these at runtime."""
+        cls = type(self)
+        metadata = self.is_capable_of(METADATA)
+        return {
+            "listSource": metadata and cls.list_source is not Plugin.list_source,
+            "metadata": metadata and cls.get_table_metadata is not Plugin.get_table_metadata,
+            "previewData": self.is_capable_of(PREVIEW_DATA)
+            and cls.preview_data is not Plugin.preview_data,
+        }
 
     def preview_data(self, source_location: str, *, limit: int = 10) -> pl.LazyFrame:
         """

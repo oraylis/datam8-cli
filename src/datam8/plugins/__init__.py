@@ -17,7 +17,9 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 from .base import Plugin, TableMetadata
+from .builtins.databricks_uc import DatabricksUnityCatalog
 from .builtins.file import CsvFile
+from .builtins.odcs import OdcsFile
 from .manager import PluginManager
 
 __all__ = [
@@ -27,6 +29,10 @@ __all__ = [
 ]
 
 PluginManager.register_builtin_plugin("builtin:CsvFile", CsvFile.manifest())
+PluginManager.register_builtin_plugin("builtin:OdcsFile", OdcsFile.manifest())
+PluginManager.register_builtin_plugin(
+    "builtin:DatabricksUnityCatalog", DatabricksUnityCatalog.manifest()
+)
 
 
 # the AzureDataLake and SQLServer plugins require additional extra dependencies to be installed, so
@@ -45,16 +51,9 @@ def register_sql_server() -> None:
     PluginManager.register_builtin_plugin("builtin:SQLServer", SqlServer.manifest())
 
 
-def init_builtin_plugins(
-    *, plugin_id: str | None = None
-) -> None:
-    match plugin_id:
-        case "builtin:AzureDataLake":
-            register_lake_source()
-
-        case "builtin:SQLServer":
-            register_sql_server()
-
-        case None:
-            register_lake_source()
-            register_sql_server()
+def init_builtin_plugins(*, plugin_id: str | None = None) -> None:
+    selected = plugin_id.removeprefix("builtin:") if plugin_id is not None else None
+    if selected is None or selected == "AzureDataLake":
+        register_lake_source()
+    if selected is None or selected == "SQLServer":
+        register_sql_server()

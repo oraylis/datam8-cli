@@ -62,6 +62,50 @@ switch workspaces. Coordinate any additional route with consumers before shippin
 
 ## Source import and refresh
 
+- Source UI behavior is independent of plugin IDs and authentication modes.
+  `GET /sources/{data_source}/capabilities` returns connection-specific booleans
+  `listSource`, `metadata`, and `previewData`. The optional plugin hook
+  `get_source_capabilities()` defaults to implemented methods and manifest capabilities;
+  plugins may narrow these for the configured connection. Preview enforces this result.
+- Navigation returns `name`, `type`, and an opaque `sourceLocation` for every item.
+  `SCHEMA`, `CONTAINER`, and `DIRECTORY` are navigable; other types are selectable.
+  All hierarchy levels follow the same rules. Explicit plugin handles and
+  `sourceOverride` values are preserved. The backend adapts legacy rows containing
+  only `schema`, `container`, or `object`; clients do not construct or parse handles.
+- Metadata responses retain `count` and `items`, and add `object` (the existing
+  `SourceObject`), the requested `sourceLocation`, and optional `sourceOverride`.
+  Clients use the object name and metadata rather than interpreting the handle.
+- A non-null import-description entity is authoritative, including display names,
+  attributes, sources, relationships, and transformations. Clients may override
+  explicitly edited wizard values and the target name/ID, but do not re-map supplied
+  types or reconstruct sources. A null entity retains the metadata/mapping fallback;
+  it does not trigger backend type resolution. The fallback uses supplied handles
+  and source overrides, without connector-specific syntax.
+- Builtins include `builtin:OdcsFile` (offline local ODCS 3.2.0 metadata, no preview)
+  and `builtin:DatabricksUnityCatalog` (UC metadata and SQL preview).
+  See [configuration](builtin-sources.md).
+- ODCS contract files are navigable `CONTAINER` entries; directories remain
+  `DIRECTORY`. Selected schema objects retain their opaque `<file>#<schema>` handle.
+- ODCS supplies `get_sources()` so its import description includes resolved target
+  types, business names and the technical object name as a suggested entity name.
+  The selected target locator still determines the imported entity name. Plugins
+  inheriting `get_sources() -> None` keep their existing import path.
+- Source metadata retains its existing schema: `dataType` is the source type.
+  ODCS uses `physicalType`, or the declared `logicalType` when no physical type exists.
+  Business names enrich existing model fields; no metadata hook overrides target types.
+- Import and complete refresh translate types exclusively using persisted mappings.
+  Data Source mappings take precedence over Data Source Type mappings. Each level
+  matches the complete type first, then its base type (`DECIMAL(18,2)` matches
+  `DECIMAL`, and `STRUCT<...>` matches `STRUCT`). Matching ignores case and surrounding
+  whitespace; duplicate keys within one level are rejected. Lookup normalization
+  never changes metadata or source types stored in source mappings.
+- Missing mappings fail with source, object, column and type context. There is no
+  plugin-resolver fallback, implicit canonical-type acceptance or default target.
+  Existing default attribute-type selection remains; source-only refresh does not
+  translate target types. Plugin mappings are suggestions copied into the solution
+  at binding time, not a runtime substitute for the saved configuration.
+- Explicit short builtin IDs alias their canonical `builtin:*` IDs. A data source type
+  still requires an explicit `pluginId`; no binding is inferred from its name.
 - Plugins may implement `get_sources(source_location)` and return a list of dictionaries
   with `sourceLocation`, `sourceName`, and `targetName` keys. Optional keys are
   `sourceAlias`, `sourceProperties`, `mappingProperties`, `sourceDataType`, and

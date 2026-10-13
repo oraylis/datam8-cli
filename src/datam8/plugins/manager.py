@@ -80,6 +80,11 @@ class PluginManager:
             del self.__solution_plugins[plugin_id]
 
     def get_plugin_manifest(self, plugin_id: str, /) -> PluginManifest:
+        # Preserve exact solution bindings; explicit short names alias builtin IDs.
+        if plugin_id not in self.__solution_plugins and plugin_id not in self.__builtin_plugins:
+            canonical = f"builtin:{plugin_id}"
+            if canonical in self.__builtin_plugins:
+                plugin_id = canonical
         match plugin_id:
             case _ if plugin_id in self.__solution_plugins:
                 manifest = self.__solution_plugins[plugin_id]
@@ -110,10 +115,10 @@ class PluginManager:
         return _create_plugin_instantiator(PluginClass, manifest)
 
     def get_plugin(self, plugin_id: str, /) -> type[Plugin]:
+        manifest = self.get_plugin_manifest(plugin_id)
+        plugin_id = manifest.id
         if plugin_id in self.__loaded_plugins:
             return self.__loaded_plugins[plugin_id]
-
-        manifest = self.get_plugin_manifest(plugin_id)
 
         if ":" not in manifest.entryPoint:
             raise utils.create_error(

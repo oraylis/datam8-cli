@@ -27,6 +27,7 @@ from deepdiff.model import DiffLevel
 
 from datam8.model import entity_wrapper as ew
 from datam8.model import locator as l
+from datam8.plugins.type_mapping import SourceTypeMapper
 from datam8_model import attribute as at
 from datam8_model import data_type as dt
 from datam8_model import model as m
@@ -415,11 +416,20 @@ def read_from_data_source(
     metadata = plugin.get_table_metadata(source_location)
     source_object = metadata.source_object
 
+    source_config = model.dataSources.get(data_source).entity
+    type_config = model.dataSourceTypes.get(source_config.type).entity
+    type_mapper = SourceTypeMapper(
+        type_config.dataTypeMapping,
+        source_config.dataTypeMapping,
+        data_source=data_source,
+        source_location=source_location,
+    )
+
     attributes: list[at.Attribute] = []
     source_attribute_mapping: list[m.SourceAttributeMapping] = []
 
     for field in metadata.iter_source_fields():
-        mapped_data_type = plugin.resolve_source_type(field.dataType)
+        mapped_data_type = type_mapper.resolve(field.dataType, column=field.name)
         attribute_types = model.attributeTypes.get_many_where(
             lambda x: (
                 x.entity.defaultType == mapped_data_type and x.entity.isDefaultProperty or False
@@ -493,8 +503,8 @@ def read_from_data_source(
         )
 
     entity = m.ModelEntity(
-        # name and id are placeholders htat will be replace by model.add_entity()
-        name="temp",
+        # Suggested technical name; model.add_entity() applies the selected target locator.
+        name=source_object.name,
         id=1,
         description=source_object.description,
         attributes=attributes,
@@ -504,6 +514,7 @@ def read_from_data_source(
         relationships=[],
     )
 
+    metadata.apply_import_metadata(entity)
     return entity
 
 

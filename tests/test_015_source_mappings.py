@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 import polars as pl
 import pytest
+from builtin_plugins.model_stub import configure_mappings
 
 from datam8 import factory, source
 from datam8.api.routes.sources import get_import_description
@@ -260,7 +261,7 @@ def test_read_from_data_source_uses_plugin_sources_and_import_location(monkeypat
     monkeypatch.setattr(
         factory, "get_plugin_for_data_source", lambda *_args, **_kwargs: SourcePluginStub()
     )
-    model = SimpleNamespace(attributeTypes=AttributeTypesStub())
+    model = configure_mappings(SimpleNamespace(attributeTypes=AttributeTypesStub()))
 
     entity = source.read_from_data_source("crm", "customer_view", model=model)
 
@@ -278,7 +279,7 @@ def test_read_from_data_source_uses_plugin_sources_and_import_location(monkeypat
 
 
 def test_import_description_exposes_plugin_entity(monkeypatch) -> None:
-    model = SimpleNamespace(attributeTypes=AttributeTypesStub())
+    model = configure_mappings(SimpleNamespace(attributeTypes=AttributeTypesStub()))
     monkeypatch.setattr(factory, "get_model", lambda: model)
     monkeypatch.setattr(
         factory, "get_plugin_for_data_source", lambda *_args, **_kwargs: SourcePluginStub()
@@ -299,7 +300,7 @@ def test_import_rejects_mapping_to_missing_target_attribute(monkeypatch) -> None
         source.read_from_data_source(
             "crm",
             "customer_view",
-            model=SimpleNamespace(attributeTypes=AttributeTypesStub()),
+            model=configure_mappings(SimpleNamespace(attributeTypes=AttributeTypesStub())),
             source_definitions=[
                 {"sourceLocation": "physical", "sourceName": "id", "targetName": "missing"}
             ],
@@ -351,7 +352,7 @@ def _source_model() -> tuple[SimpleNamespace, str, m.ModelEntity]:
         resolved=True,
     )
     repository = EntityRepository({wrapper.locator: wrapper}, "modelEntities")
-    return SimpleNamespace(modelEntities=repository), locator, entity
+    return configure_mappings(SimpleNamespace(modelEntities=repository)), locator, entity
 
 
 def _refreshed_sources() -> list[m.ExternalModelSource]:
@@ -774,6 +775,8 @@ def test_plugin_without_get_sources_override_keeps_default_import_and_refresh(
     model, locator, _ = _source_model()
     model.attributeTypes = AttributeTypesStub()
 
+    model.dataSources["csv"] = SimpleNamespace(entity=data_source)
+    model.dataSourceTypes["CsvFile"] = SimpleNamespace(entity=source_type)
     imported = source.read_from_data_source("csv", "customers.csv", model=model)
     assert imported.sources[0].metadataLocation is None
     assert [(item.sourceName, item.targetName) for item in imported.sources[0].mapping] == [

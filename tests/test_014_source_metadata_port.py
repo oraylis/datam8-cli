@@ -11,6 +11,7 @@
 from types import SimpleNamespace
 
 import polars as pl
+from builtin_plugins.model_stub import configure_mappings
 
 from datam8.plugins.base import TableMetadata
 from datam8.plugins.builtins.file import CsvFile
@@ -33,6 +34,9 @@ class AttributeTypesStub:
 
 class SourceModelStub:
     attributeTypes = AttributeTypesStub()
+
+    def __init__(self):
+        configure_mappings(self)
 
 
 class SourcePluginStub:

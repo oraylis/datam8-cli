@@ -17,6 +17,7 @@ dependencies = [
   "keyring~=25.6.0",
   "keyrings-cryptfile~=1.3.9",
   "PyYAML~=6.0",
+  "jsonschema~=4.26.0",
   # connecting stuff
   "polars~=1.39.0",
   "pyarrow~=23.0.0",
