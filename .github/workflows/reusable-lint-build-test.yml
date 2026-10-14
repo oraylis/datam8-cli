@@ -61,6 +61,19 @@ jobs:
       - name: Build the application
         run: uv build
 
+      - name: Smoke-test the installed wheel without development dependencies
+        run: |
+          uv venv .package-smoke
+          uv pip install --python .package-smoke/bin/python dist/*.whl
+          .package-smoke/bin/datam8 --help
+          .package-smoke/bin/datam8 --version
+
+      - name: Smoke-test API and offline ODCS from the installed package
+        run: |
+          WHEEL=$(find dist -name '*.whl' -print -quit)
+          uv pip install --python .package-smoke/bin/python "$WHEEL[api]"
+          .package-smoke/bin/python scripts/check_package.py .package-smoke/evidence tests/builtin_plugins/full-example.odcs.yaml
+
       - name: Upload Build Artifacts
         if: ${{ inputs.upload_artifacts }}
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0

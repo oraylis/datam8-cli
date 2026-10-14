@@ -6,6 +6,12 @@ Canonical endpoint contract is [backend-contract.md](backend-contract.md).
 
 ## Desktop-safe startup protocol
 
+Install the HTTP extra with `pip install "datam8[api]"`. Azure Data Lake and SQL
+Server require their separate `azure` and `sql` extras; plugin discovery lists
+these builtins only when their dependencies are installed. CSV, ODCS and Unity
+Catalog do not require those extras. Explicit Azure/SQL source bindings still
+require the matching extra.
+
 Electron starts the backend as a long-lived process:
 
 ```sh

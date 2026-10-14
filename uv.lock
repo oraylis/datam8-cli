@@ -7,7 +7,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-09-25T20:38:36.5045895Z"
+exclude-newer = "2026-10-07T07:21:35.5030511Z"
 exclude-newer-span = "P1W"
 
 [[package]]
@@ -553,6 +553,7 @@ name = "datam8"
 version = "2.0.0"
 source = { editable = "." }
 dependencies = [
+    { name = "deepdiff" },
     { name = "jinja2" },
     { name = "jsonschema" },
     { name = "keyring" },
@@ -582,7 +583,6 @@ sql = [
 dev = [
     { name = "bandit" },
     { name = "coverage" },
-    { name = "deepdiff" },
     { name = "hatchling" },
     { name = "httpx" },
     { name = "pytest" },
@@ -594,6 +594,7 @@ requires-dist = [
     { name = "azure-identity", marker = "extra == 'azure'", specifier = "~=1.25.3" },
     { name = "azure-storage-file-datalake", marker = "extra == 'azure'", specifier = "~=12.23.0" },
     { name = "connectorx", marker = "extra == 'sql'", specifier = "~=0.4.0" },
+    { name = "deepdiff", specifier = "==8.6.2" },
     { name = "deltalake", marker = "extra == 'azure'", specifier = "~=1.5.1" },
     { name = "fastapi", marker = "extra == 'api'", specifier = "~=0.140.0" },
     { name = "jinja2", specifier = "~=3.1.0" },
@@ -613,7 +614,6 @@ provides-extras = ["azure", "api", "sql"]
 dev = [
     { name = "bandit", specifier = "~=1.9.0" },
     { name = "coverage", specifier = "~=7.13.5" },
-    { name = "deepdiff", specifier = "==8.6.2" },
     { name = "hatchling", specifier = "~=1.27.0" },
     { name = "httpx", specifier = "~=0.25.0" },
     { name = "pytest", specifier = "~=8.3.0" },
