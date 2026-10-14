@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 import json
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
@@ -28,13 +28,18 @@ from starlette.status import (
 
 from datam8 import factory, source
 from datam8.model import EntityWrapper, Locator
-from datam8_model.data_source import SourceField
+from datam8.plugins.navigation import normalize_source_item
+from datam8_model.data_source import SourceField, SourceObject, SourceOverride
 from datam8_model.model import ExternalModelSource, ModelEntity
-from datam8_model.plugin import Capability
 
 from .responses import MultiItemResponse
 
 sources_router = APIRouter(prefix="/sources", tags=["sources"])
+
+
+@sources_router.get("/{data_source}/capabilities")
+async def get_source_capabilities(data_source: str) -> dict[str, bool]:
+    return factory.get_plugin_for_data_source(data_source).get_source_capabilities()
 
 
 @sources_router.get("/{data_source}/test")
@@ -52,18 +57,51 @@ async def list_locations(
 ) -> MultiItemResponse[dict[str, Any]]:
     "List available source tables if a source does not support schemas"
     plugin = factory.get_plugin_for_data_source(data_source)
-    locations = plugin.list_source(source_location).to_dicts()
+    locations = [
+        normalize_source_item(item, source_location)
+        for item in plugin.list_source(source_location).to_dicts()
+    ]
     return MultiItemResponse.from_list(locations)
+
+
+class SourceMetadataResponse(MultiItemResponse[SourceField]):
+    object: SourceObject
+    sourceLocation: str
+    sourceOverride: SourceOverride | None = None
 
 
 @sources_router.get("/{data_source}/locations/metadata")
 async def get_table_metadata(
     data_source: str, source_location: str
-) -> MultiItemResponse[SourceField]:
+) -> SourceMetadataResponse:
     plugin = factory.get_plugin_for_data_source(data_source)
     metadata = plugin.get_table_metadata(source_location)
     source_fields = list(metadata.iter_source_fields())
-    return MultiItemResponse.from_list(source_fields)
+    return SourceMetadataResponse(
+        count=len(source_fields),
+        items=source_fields,
+        object=metadata.source_object,
+        sourceLocation=source_location,
+        sourceOverride=metadata.source_object.sourceOverride,
+    )
+
+
+class ImportDescription(BaseModel):
+    entity: ModelEntity | None = None
+
+
+@sources_router.get("/{data_source}/locations/import-description")
+async def get_import_description(data_source: str, source_location: str) -> ImportDescription:
+    model_ = factory.get_model()
+    plugin = factory.get_plugin_for_data_source(data_source, model=model_)
+    source_definitions = plugin.get_sources(source_location)
+    if source_definitions is None:
+        return ImportDescription()
+    return ImportDescription(
+        entity=source.read_from_data_source(
+            data_source, source_location, model=model_, source_definitions=source_definitions
+        )
+    )
 
 
 @sources_router.get("/{data_source}/locations/preview")
@@ -72,7 +110,7 @@ async def preview(
 ) -> MultiItemResponse[dict[str, Any]]:
     plugin = factory.get_plugin_for_data_source(data_source)
 
-    if not plugin.is_capable_of(Capability.PREVIEW_DATA):
+    if not plugin.get_source_capabilities().get("previewData", False):
         raise HTTPException(
             status_code=HTTP_400_BAD_REQUEST,
             detail=f"Plugin '{plugin.manifest().id}' does not support data preview",
@@ -114,9 +152,11 @@ class CompareResponse(BaseModel):
 
 
 @sources_router.get("/compare")
-async def compare_with_source(locator: str) -> CompareResponse:
+async def compare_with_source(
+    locator: str, mode: Literal["complete", "sources-only"] = "complete"
+) -> CompareResponse:
     model_ = factory.get_model()
-    wrapper, diff = source.compare_entity_with_source(locator, model=model_)
+    wrapper, diff = source.compare_entity_with_source(locator, model=model_, mode=mode)
     return CompareResponse(
         # convert custom objects from DeepDiff into plain dicts/objects
         wrapper=wrapper,

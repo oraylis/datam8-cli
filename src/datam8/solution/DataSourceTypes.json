@@ -3,6 +3,7 @@
   "dataSourceTypes": [
     {
       "name": "DataSourceType1",
+      "pluginId": "builtin:CsvFile",
       "dataTypeMapping": [
         {
           "sourceType": "string",

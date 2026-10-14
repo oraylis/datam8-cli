@@ -73,7 +73,6 @@ def _make_sql_plugin() -> SqlServer:
     return plugin
 
 
-@pytest.mark.skip(reason="Source has trailing comma bug: properties=(pl.lit(None),) creates tuple")
 def test_sql_metadata_maps_driver_column_names_and_retains_zero_scale(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -111,7 +110,6 @@ def test_sql_metadata_maps_driver_column_names_and_retains_zero_scale(
     )
 
 
-@pytest.mark.skip(reason="Source has trailing comma bug: properties=(pl.lit(None),) creates tuple")
 def test_sql_metadata_rejects_missing_required_fields(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

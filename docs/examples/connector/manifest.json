@@ -1,0 +1,7 @@
+{
+  "id": "example:Static",
+  "displayName": "Static example",
+  "version": "1.0.0",
+  "entryPoint": "static_example/plugin.py:ExamplePlugin",
+  "capabilities": ["metadata", "uiSchema", "validationConnection"]
+}

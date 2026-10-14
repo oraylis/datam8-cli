@@ -1,10 +1,12 @@
 # Backend Contract (Canonical)
 
-This document is the canonical HTTP contract between `datam8-generator` and `datam8-neon`.
+This document is the canonical HTTP contract between the DataM8 Python backend (`datam8-cli`) and the v2 frontend.
+It describes this development checkout and its pinned schema, not every published
+beta runtime. See [connector development](connectors.md) for the Python interface.
 
 ## Startup and readiness
 
-Neon starts the backend as a long-lived process:
+Electron starts the backend as a long-lived process:
 
 ```bash
 datam8 serve --host 127.0.0.1 --port 0 --token <random>
@@ -21,87 +23,163 @@ All non-readiness logs are written to stderr.
 ## Auth
 
 - No auth required: `GET /health`, `GET /version`
-- All other endpoints require: `Authorization: Bearer <token>`
+- In the desktop launch above, all other endpoints require: `Authorization: Bearer <token>`.
+- Implementation note: the CLI currently also accepts an omitted token, which disables
+  authentication. Desktop launchers must always provide a non-empty token.
 
-## Endpoint surface used by Neon (plus parity extensions)
+## Current v2 beta route surface
 
-### System
+The current `create_app().openapi()` exposes these domains (no `/api` prefix):
 
-- `GET /health`
-- `GET /version`
-- `GET /config`
+- `GET /health` (204), `GET /version` (`schemaVersion`, `appVersion`), `GET /config`.
+- `GET /solution`, `GET /solution/full`.
+- `GET /entities`, `GET|PUT|PATCH|DELETE /entities/{locator}`, `PUT /entities/clone`,
+  `POST /entities/rename`, `POST /entities/move`, `POST /entities/move-single`.
+- `POST /model/save`, `POST /model/reload`, `GET /model/unsaved`.
+- `POST /model/generate`: optional body `{ "target": "...", "cleanOutput": true,
+  "payloads": [] }`; synchronous response `{ "target": "...", "outputPath": "...",
+  "message": null }`. Uses the currently loaded solution.
+- `/functions/*` for function retrieval, updates and moves.
+- `GET /plugins`, `POST /plugins/reload`, `GET /plugins/{plugin_id}` and its
+  `/ui-schema`, `/data-type-mappings`, `/connection-properties` subpaths.
+- `POST /secrets/check`, `PUT /secrets/set`.
+- `/sources/*` for connection checks, navigation, metadata, preview, import and compare;
+  see the source section below.
 
-### Workspace and editor operations
+The implemented route surface is authoritative. Workspace selection in browser
+mode reads the solution bound at server startup; entering another path does not
+switch workspaces. Coordinate any additional route with consumers before shipping.
 
-- Filesystem: `GET /fs/list`
-- Solution: `GET /solution`, `GET /solution/full`, `GET /solution/inspect`, `POST /solution/new-project`
-  - Full model validate parity: `POST /validate`
-- Migration: `POST /migration/v1-to-v2`
-- Model entities: `GET|POST|DELETE /model/entities`, `POST /model/entities/move`, `POST /model/folder/rename`
-  - Parity aliases: `GET /model/entity`, `POST /model/entity/create`, `POST /model/entity/validate`, `POST /model/entity/set`, `POST /model/entity/patch`, `POST /model/entity/duplicate`
-  - Folder metadata explicit endpoints: `GET|POST|DELETE /model/folder-metadata`
-- Model functions: `GET|POST|DELETE /model/function/source`, `POST /model/function/rename`
-- Base entities: `GET|POST|DELETE /base/entities`
-  - Parity aliases: `GET /base/entity`, `POST /base/entity/set`, `POST /base/entity/patch`
-- Solution parity aliases: `GET /solution/info`, `POST /solution/validate`
-- Index/refactor: `POST /index/regenerate`, `GET /index/show`, `GET /index/validate`, `POST /refactor/properties`, `POST /refactor/keys`, `POST /refactor/values`, `POST /refactor/entity-id`
-- Search: `GET /search/entities`, `GET /search/text`
-- Connectors/plugins/secrets under `/connectors/*`, `/plugins/*`, `/datasources/*`, `/http/datasources/*`, `/secrets/*`
-  - Datasource parity endpoint: `POST /datasources/{dataSourceId}/test`
-  - Plugin parity endpoints: `GET /plugins/{pluginId}/info`, `POST /plugins/{pluginId}/verify`, `POST /plugins/verify`
-  - Secrets parity endpoints: `GET /secrets/runtime/list`, `GET /secrets/runtime/key`
+## Entity and function invariants
 
-### v2 beta compatibility extensions
+- Entity rename uses `POST /entities/rename`; model entities and folders use
+  `POST /entities/move`.
+- Folder moves include the complete subtree and rebase entity, metadata and
+  function paths. Function-directory moves are preflighted and rolled back if
+  the model move fails. Saving a deleted folder also removes child functions.
+- Function source paths are relative to their model entity. Absolute/drive-qualified
+  paths, traversal, empty segments and symlink escapes are rejected.
+- Built-in plugin IDs use `builtin:*`, for example `builtin:SQLServer`.
+- Preview requires the plugin capability `previewData`.
 
-- Entity rename: `POST /entities/rename`
-  - Body: `{ "from": "dataTypes/Text", "to": "dataTypes/String", "content": {} }`
-  - Model entities and folders continue to use `POST /entities/move`.
-- Entity folder operations include the complete subtree.
-  - Moving a folder rebases nested folders, model entities, metadata paths, and function directories.
-  - Function-directory moves are preflighted and rolled back if the model move fails.
-  - Deleting a folder marks nested folders and model entities for deletion; save also removes their function directories.
-- Function source paths are relative to their model entity.
-  - Absolute paths, drive-qualified paths, traversal segments, empty segments, and symlink escapes are rejected.
-- Built-in plugin IDs use the canonical `builtin:*` form, for example `builtin:SQLServer`.
-- `PUT /secrets/set` is an upsert and returns `204 No Content`.
-- Canonical source navigation remains under `/sources/{dataSource}/locations`.
-- Source metadata may include `description`, `properties`, and `sourceOverride`.
-- Preview endpoints require the plugin capability `previewData`.
+## Source import and refresh
 
-### Generation
-
-- `POST /generate` (synchronous)
-  - Body: `{ "solutionPath": "...", "target": "...", "logLevel": "info", "cleanOutput": true, "payloads": [], "lazy": false }`
-  - Response: `{ "status": "succeeded", "target": "...", "outputPath": "..." }`
+- Source UI behavior is independent of plugin IDs and authentication modes.
+  `GET /sources/{data_source}/capabilities` returns connection-specific booleans
+  `listSource`, `metadata`, and `previewData`. The optional plugin hook
+  `get_source_capabilities()` defaults to implemented methods and manifest capabilities;
+  plugins may narrow these for the configured connection. Preview enforces this result.
+- Navigation returns `name`, `type`, and an opaque `sourceLocation` for every item.
+  `SCHEMA`, `CONTAINER`, and `DIRECTORY` are navigable; other types are selectable.
+  All hierarchy levels follow the same rules. Explicit plugin handles and
+  `sourceOverride` values are preserved. The backend adapts legacy rows containing
+  only `schema`, `container`, or `object`; clients do not construct or parse handles.
+- Metadata responses retain `count` and `items`, and add `object` (the existing
+  `SourceObject`), the requested `sourceLocation`, and optional `sourceOverride`.
+  Clients use the object name and metadata rather than interpreting the handle.
+- A non-null import-description entity is authoritative, including display names,
+  attributes, sources, relationships, and transformations. Clients may override
+  explicitly edited wizard values and the target name/ID, but do not re-map supplied
+  types or reconstruct sources. A null entity retains the metadata/mapping fallback;
+  it does not trigger backend type resolution. The fallback uses supplied handles
+  and source overrides, without connector-specific syntax.
+- Builtins include `builtin:OdcsFile` (offline local ODCS 3.2.0 metadata, no preview)
+  and `builtin:DatabricksUnityCatalog` (UC metadata and SQL preview).
+  See [configuration](builtin-sources.md).
+- ODCS contract files are navigable `CONTAINER` entries; directories remain
+  `DIRECTORY`. Selected schema objects retain their opaque `<file>#<schema>` handle.
+- ODCS supplies `get_sources()` so its import description includes resolved target
+  types, business names and the technical object name as a suggested entity name.
+  The selected target locator still determines the imported entity name. Plugins
+  inheriting `get_sources() -> None` keep their existing import path.
+- Source metadata retains its existing schema: `dataType` is the source type.
+  ODCS uses `physicalType`, or the declared `logicalType` when no physical type exists.
+  Business names enrich existing model fields; no metadata hook overrides target types.
+  Plugins may split physical type parameters into length/precision/scale metadata or
+  retain parameterized type strings. The backend preserves the supplied source type
+  and does not parse dimensions out of it. Dataframe metadata uses `numericScale`;
+  serialized `SourceField` currently retains its legacy spelling `numbericScale`.
+- Import and complete refresh translate types exclusively using persisted mappings.
+  Data Source mappings take precedence over Data Source Type mappings. Each level
+  matches the complete type first, then its base type (`DECIMAL(18,2)` matches
+  `DECIMAL`, and `STRUCT<...>` matches `STRUCT`). Matching ignores case and surrounding
+  whitespace; duplicate keys within one level are rejected. Lookup normalization
+  never changes metadata or source types stored in source mappings.
+- Missing mappings fail with source, object, column and type context. There is no
+  plugin-resolver fallback, implicit canonical-type acceptance or default target.
+  Backend import and complete refresh require exactly one Attribute Type whose
+  `defaultType` equals the mapped target type and whose `isDefaultProperty` is true.
+  No additional Data Types existence lookup is performed by this translation path.
+  Clients receiving a non-null import description retain its attribute types.
+  The frontend metadata-only path uses the same saved mappings but assigns `Regular`;
+  it does not run backend default Attribute Type selection. Source-only refresh does
+  not translate target types. Plugin mappings are suggestions copied into the solution
+  at binding time, not a runtime substitute for the saved configuration.
+- Explicit short builtin IDs alias their canonical `builtin:*` IDs. A data source type
+  still requires an explicit `pluginId`; no binding is inferred from its name.
+- Plugins may implement `get_sources(source_location)` and return a list of dictionaries
+  with `sourceLocation`, `sourceName`, and `targetName` keys. Optional keys are
+  `sourceAlias`, `sourceProperties`, `mappingProperties`, `sourceDataType`, and
+  `metadataLocation`. A row's `metadataLocation` overrides the selected import handle
+  for that external source.
+- `sourceProperties` are assigned to the `ExternalModelSource`; `mappingProperties`
+  are assigned to the corresponding `SourceAttributeMapping`.
+- `sourceProperties` may be supplied on any one row for a source or repeated with the
+  same value on its rows. Conflicting values for the same source are rejected.
+- A returned list is authoritative for external sources and mappings. Rows are
+  grouped by `(sourceLocation, sourceAlias, metadataLocation)`; omitted source columns
+  are not mapped.
+- Metadata field names describe target attributes. On import and complete refresh,
+  every `targetName` must match a metadata field name; invalid targets are rejected
+  before the model is changed. Source-only refresh does not read attribute metadata.
+- Returning `None` keeps the default one-source, one-column mapping derived from
+  `get_table_metadata()`.
+- Complete refresh updates source-owned attribute metadata (data type, description,
+  business-key flag and supplied properties), while preserving local expressions,
+  display names, history, units, refactor names and deletion markers. Existing
+  attribute properties absent from metadata are retained; supplied values take
+  precedence by property name. A custom attribute type is retained when the mapped
+  data type has not changed.
+- An attribute removed from an external mapping is retained if an internal source
+  still maps to it. Unmapped, locally modeled attributes are also retained.
+- Each imported `ExternalModelSource` may contain `metadataLocation`, the connector
+  object used to describe its metadata. `sourceLocation` remains the data read location.
+  Several sources may share one `metadataLocation`; refresh describes that contract once.
+  Sources without `metadataLocation` continue to use `sourceLocation` for metadata.
+- When `get_sources()` supplies definitions during refresh of a legacy source,
+  the metadata handle used for that call is retained for subsequent refreshes,
+  unless a row explicitly overrides it. The `None` fallback does not add a handle.
+- Complete refresh combines distinct attributes and entity properties from every
+  contract of the selected entity; conflicting definitions are rejected. A source-only
+  refresh replaces the external sources returned by authoritative `get_sources()`
+  calls, including their properties and mappings.
+- `GET /sources/{data_source}/locations/import-description?source_location=<handle>`
+  returns `{ "entity": null }` when the connector does not provide `get_sources()`, or a
+  generated `ModelEntity` when the plugin supplies `get_sources()`. The endpoint does not
+  save the entity.
+- `GET /sources/compare?locator=<locator>` performs the complete refresh and remains
+  the default.
+- `GET /sources/compare?locator=<locator>&mode=sources-only` refreshes only external
+  sources and mappings. Entity attributes, properties, transformations, and
+  relationships remain unchanged.
 
 ## `GET /solution/full` payload
 
 - `solution`: parsed solution metadata.
-- `baseEntities`: base JSON entities (`content` is a typed base wrapper object).
-- `modelEntities`: model JSON entities (excludes folder metadata files; `locator` is a locator object).
-- `folderEntities`: folder metadata files discovered under `Model/**/.properties.json`.
+- `base_entities`: typed base entity wrappers (`entity` contains the typed entity).
+- `model_entities`: model entity wrappers; `locator` is a locator object.
+- `folder_entities`: folder entity wrappers from the loaded model.
 
-## Folder Metadata Contract
+## Folder metadata integration
 
-- Folder metadata file path: `Model/**/.properties.json`.
-- File content is a direct folder object (no `folders[]` wrapper).
-- Folder fields used by Neon/backend:
-  - `id` (number), `name` (string)
-  - optional `displayName`, `description`, `path`
-  - optional `properties` (array of `{ property, value }`)
-  - optional `dataProduct` (string) and `dataModule` (string)
-- Save/update uses `POST /model/entities` or `POST /model/folder-metadata` with `relPath` pointing to `.properties.json`.
+Folder metadata is a direct object in `Model/**/.properties.json`. Use the typed
+folder locator with `/entities/{locator}`, then `/model/save` to persist changes.
+See the pinned schema's `schema/folder.json` for fields.
 
-### Folder Validation Rules
-
-- `dataModule` requires `dataProduct`.
-- `dataProduct` must exist in `Base/DataProducts.json`.
-- `dataModule` must exist under the selected `dataProduct` in `Base/DataProducts.json`.
-
-### Folder Inheritance Semantics (UI Consumption)
-
-- Folder `properties` inherit down the folder chain (child overrides parent by `property` key).
-- `dataProduct` and `dataModule` inherit from nearest available ancestors.
+The backend validates that a module belongs to the selected product. Folder
+properties inherit down the chain; a child overrides a parent by property name.
+Product/module context inherits from the nearest applicable ancestor. The UI
+displays the effective context while editing the local folder's own values.
 
 ## Response contract
 
@@ -121,13 +199,13 @@ All non-readiness logs are written to stderr.
 
 ## Implementation notes (non-contract)
 
-- Route implementation is split by domain (`api_solution.py`, `api_workspace.py`, `api_connectors.py`) and composed in `api.py`.
-- This split does not change endpoint URLs; it is a maintainability refactor only.
+- Route implementation is split under `src/datam8/api/routes/` and composed in its
+  `__init__.py`; `src/datam8/api/app.py` creates the app and CORS-wrapped server.
 
 ## Change policy
 
 Contract changes must include:
 
 - updates to this document,
-- coordinated generator + Neon changes,
+- coordinated backend + frontend changes,
 - integration tests for affected flows.

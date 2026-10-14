@@ -16,10 +16,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-from datam8_model.data_source import DataSourceType
+from importlib.util import find_spec
 
 from .base import Plugin, TableMetadata
+from .builtins.databricks_uc import DatabricksUnityCatalog
 from .builtins.file import CsvFile
+from .builtins.odcs import OdcsFile
 from .manager import PluginManager
 
 __all__ = [
@@ -28,7 +30,11 @@ __all__ = [
     "init_builtin_plugins",
 ]
 
-PluginManager.register_builtin_plugin("CsvFile", CsvFile.manifest())
+PluginManager.register_builtin_plugin("builtin:CsvFile", CsvFile.manifest())
+PluginManager.register_builtin_plugin("builtin:OdcsFile", OdcsFile.manifest())
+PluginManager.register_builtin_plugin(
+    "builtin:DatabricksUnityCatalog", DatabricksUnityCatalog.manifest()
+)
 
 
 # the AzureDataLake and SQLServer plugins require additional extra dependencies to be installed, so
@@ -38,28 +44,30 @@ PluginManager.register_builtin_plugin("CsvFile", CsvFile.manifest())
 def register_lake_source() -> None:
     from .builtins.lake_source import AzureDataLake
 
-    PluginManager.register_builtin_plugin("AzureDataLake", AzureDataLake.manifest())
+    PluginManager.register_builtin_plugin("builtin:AzureDataLake", AzureDataLake.manifest())
 
 
 def register_sql_server() -> None:
     from .builtins.sql_server import SqlServer
 
-    PluginManager.register_builtin_plugin("SQLServer", SqlServer.manifest())
+    PluginManager.register_builtin_plugin("builtin:SQLServer", SqlServer.manifest())
 
 
-def init_builtin_plugins(
-    *, data_source_type: DataSourceType | None = None, plugin_id: str | None = None
-) -> None:
-    possible_type_name = None if data_source_type is None else data_source_type.name
-    possible_plugin_id = None if plugin_id is None else plugin_id.removeprefix("builtin:")
+def _module_available(module: str) -> bool:
+    try:
+        return find_spec(module) is not None
+    except ModuleNotFoundError:
+        return False
 
-    match [possible_type_name, possible_plugin_id]:
-        case ["AzureDataLake", None] | [None, "AzureDataLake"]:
-            register_lake_source()
 
-        case ["SQLServer", None] | [None, "SQLServer"]:
-            register_sql_server()
-
-        case [None, None]:
-            register_lake_source()
-            register_sql_server()
+def init_builtin_plugins(*, plugin_id: str | None = None) -> None:
+    """Discover installed builtins; explicit bindings still require their extras."""
+    selected = plugin_id.removeprefix("builtin:") if plugin_id is not None else None
+    if selected == "AzureDataLake" or (
+        selected is None
+        and _module_available("azure.identity")
+        and _module_available("azure.storage.filedatalake")
+    ):
+        register_lake_source()
+    if selected == "SQLServer" or (selected is None and _module_available("connectorx")):
+        register_sql_server()

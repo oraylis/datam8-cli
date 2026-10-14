@@ -80,6 +80,11 @@ class PluginManager:
             del self.__solution_plugins[plugin_id]
 
     def get_plugin_manifest(self, plugin_id: str, /) -> PluginManifest:
+        # Preserve exact solution bindings; explicit short names alias builtin IDs.
+        if plugin_id not in self.__solution_plugins and plugin_id not in self.__builtin_plugins:
+            canonical = f"builtin:{plugin_id}"
+            if canonical in self.__builtin_plugins:
+                plugin_id = canonical
         match plugin_id:
             case _ if plugin_id in self.__solution_plugins:
                 manifest = self.__solution_plugins[plugin_id]
@@ -97,19 +102,23 @@ class PluginManager:
         This is a lazy operation, as a plugin is only loaded once then stored in an internal dictionary.
         To reset all plugins or remove specific ones use `remove_plugin()` and `reset_plugins()` respectivly.
         """
-        plugin_id = data_source_type.pluginId or data_source_type.name
+        plugin_id = data_source_type.pluginId
+        if plugin_id is None:
+            raise utils.create_error(
+                ValueError(
+                    f"Data source type `{data_source_type.name}` has no pluginId configured."
+                )
+            )
         manifest = self.get_plugin_manifest(plugin_id)
         PluginClass = self.get_plugin(plugin_id)
 
         return _create_plugin_instantiator(PluginClass, manifest)
 
     def get_plugin(self, plugin_id: str, /) -> type[Plugin]:
-        plugin_id = plugin_id.removeprefix("builtin:")
-
+        manifest = self.get_plugin_manifest(plugin_id)
+        plugin_id = manifest.id
         if plugin_id in self.__loaded_plugins:
             return self.__loaded_plugins[plugin_id]
-
-        manifest = self.get_plugin_manifest(plugin_id)
 
         if ":" not in manifest.entryPoint:
             raise utils.create_error(

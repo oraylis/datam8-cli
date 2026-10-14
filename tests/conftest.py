@@ -131,3 +131,94 @@ def __get_variable_from_env(var: str) -> str | None:
 
 def __get_variable_from_cli(config: pytest.Config, var: str) -> str | None:
     return config.getoption(f"--{var}")
+
+
+@pytest.fixture
+def builtin_environment(monkeypatch, tmp_path):
+    """Isolate builtin tests from the configured sample and the user's keyring."""
+    import datam8.secrets as secrets
+    from datam8 import factory
+    from datam8.plugins.builtins.databricks_uc import DatabricksUnityCatalog
+    from datam8.secrets import SecretResolver
+
+    store = {}
+    monkeypatch.setattr(secrets.keyring, "get_keyring", lambda: None)
+    monkeypatch.setattr(
+        secrets.keyring, "get_password", lambda service, user: store.get((service, user))
+    )
+    monkeypatch.setattr(
+        secrets.keyring,
+        "set_password",
+        lambda service, user, value: store.__setitem__((service, user), value),
+    )
+    monkeypatch.setattr(
+        secrets.keyring, "delete_password", lambda service, user: store.pop((service, user), None)
+    )
+    monkeypatch.setattr(datam8_config, "solution_path", tmp_path / "Builtin.dm8s", raising=False)
+    monkeypatch.setattr(datam8_config, "solution_folder_path", tmp_path, raising=False)
+    monkeypatch.setattr(datam8_config, "mode", datam8_config.RunMode.TEST)
+    monkeypatch.setattr(factory, "_model", None)
+    monkeypatch.setattr(factory, "_plugin_manager", None)
+    monkeypatch.setattr(secrets.os, "getlogin", lambda: "builtin-tests")
+    SecretResolver.reset_singleton()
+    DatabricksUnityCatalog._tokens.clear()
+    yield
+    DatabricksUnityCatalog._tokens.clear()
+    SecretResolver.reset_singleton()
+
+
+@pytest.fixture
+def builtin_plugin(builtin_environment):
+    from datam8_model.data_source import DataSource, DataSourceType
+
+    def make(cls, properties, name="Builtin"):
+        source_type = DataSourceType(
+            name=cls.__name__,
+            pluginId=cls.manifest().id,
+            connectionProperties=cls.get_connection_properties(),
+            authModes=cls.get_auth_modes(),
+            dataTypeMapping=cls.get_data_type_mappings(),
+        )
+        return cls(
+            cls.manifest(),
+            DataSource(name=name, type=source_type.name, extendedProperties=properties),
+            source_type,
+        )
+
+    return make
+
+
+@pytest.fixture
+def workspace():
+    from builtin_plugins.mock_workspace import MockWorkspace
+
+    with MockWorkspace() as server:
+        yield server
+
+
+@pytest.fixture
+def make_plugin(workspace, builtin_plugin):
+    from datam8.plugins.builtins.databricks_uc import DatabricksUnityCatalog
+    from datam8.secrets import SecretResolver
+
+    def make(mode="pat", **changes):
+        properties = {
+            "workspace_url": workspace.url,
+            "authMode": mode,
+            "warehouse_id": "warehouse1",
+        }
+        secret_key = "token" if mode == "pat" else "client_secret"
+        SecretResolver().set_secret(
+            f"datasources/UC/{secret_key}",
+            "developer-pat" if mode == "pat" else "client-secret",
+            force=True,
+        )
+        properties[secret_key] = f"ref://datasources/UC/{secret_key}"
+        if mode != "pat":
+            properties["client_id"] = "client-id"
+        if mode == "azureServicePrincipal":
+            properties["tenant_id"] = "tenant-id"
+        properties.update(changes)
+        return builtin_plugin(DatabricksUnityCatalog, properties, name="UC")
+
+    return make

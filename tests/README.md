@@ -1,85 +1,69 @@
 # Testing
 
-The project uses `pytest`.
+Use Python 3.12+ and `uv sync --all-extras`. The suite uses pytest with
+numbered domain modules and optional `*_cases.py` data providers. Shared model
+fixtures are in `conftest.py`; focused tests use `tmp_path` and `monkeypatch`.
 
-## Test architecture
+## Focused regression tests
 
-The canonical test layout follows the existing `feature/v2` pattern:
-
-- Domain tests live in numbered modules: `test_0xx_<domain>.py`
-- Parameter data lives in matching case files: `test_0xx_<domain>_cases.py`
-- Cross-test fixtures/helpers live in `tests/conftest.py`
-
-When adding new tests, prefer extending an existing numbered domain and its `*_cases.py`
-before creating a new domain module.
-
-## Domain map (what is tested where)
-
-- `test_010_model.py` + `test_010_model_cases.py`: model access, lookup, locator behavior
-- `test_020_helper.py` + `test_020_helper_cases.py`: helper/hash/uuid behavior
-- `test_030_factory.py` + `test_030_factory_cases.py`: factory/property-value resolution
-- `test_040_connector_binding.py` + `test_040_connector_binding_cases.py`: connector binding encode/decode rules
-- `test_050_api_connectors.py` + `test_050_api_connectors_cases.py`: connectors API endpoints
-- `test_060_api_plugins.py` + `test_060_api_plugins_cases.py`: plugin lifecycle endpoints (install/enable/disable/uninstall)
-- `test_070_plugin_loader.py` + `test_070_plugin_loader_cases.py`: plugin loader + vendored dependencies
-- `test_080_workspace_io.py` + `test_080_workspace_io_cases.py`: workspace/index/rename scan behavior
-- `test_090_cli.py` + `test_090_cli_cases.py`: CLI surface and command behavior
-- `test_100_server_integration.py` + `test_100_server_integration_cases.py`: server integration flow (health/auth/generate)
-
-## Shared fixtures and helpers
-
-`tests/conftest.py` is the single place for cross-test setup. Most important fixtures:
-
-- `solution_file_path`: resolves the active `.dm8s` path from `--solution-path` or `DATAM8_SOLUTION_PATH`
-- `config`, `model_lazy`, `model`: shared model-centric setup for existing v2-style tests
-- `api_client`: context manager fixture to spin up a `TestClient` with optional plugin/solution env wiring
-- `fixture_connector_plugins_dir`, `fixture_job_solution_dir`, `temp_plugin_dir`: canonical fixture paths/temp dirs
-
-Do not duplicate env/path/bootstrap logic inside individual test modules. Extend `conftest.py` instead.
-
-## Run all tests
+These tests provide their own data and need no external solution:
 
 ```sh
-uv sync
-uv run pytest
+uv run pytest tests/test_014_source_metadata_port.py tests/test_015_source_mappings.py
 ```
 
-## Solution path
+The source tests cover optional plugin source definitions, legacy fallback, metadata
+handles, properties, repeated refresh, invalid targets, internal mappings and HTTP
+preview behavior. New tests must not depend on customer solutions or live services.
 
-Model-centric and server integration tests require a solution path.
+## Full suite
 
-Set it via environment variable:
+Model-dependent tests use `config`, `model_lazy` and `model` fixtures. Provide a
+**disposable copy** of a compatible solution, because model/CLI tests can write files.
+The existing CI uses `oraylis/datam8-sample-solution` at `v2.0.0-beta.3`; new focused
+regressions should continue to use self-contained fixtures instead of extending that
+dependency.
 
 ```sh
-export DATAM8_SOLUTION_PATH="/absolute/path/to/ORAYLISDatabricksSample.dm8s"
-uv run pytest
+uv run pytest tests --solution-path /path/to/copy/ORAYLISDatabricksSample.dm8s
 ```
 
-Or per invocation with `--solution-path`:
+Alternatively set `DATAM8_SOLUTION_PATH`. The command-line option takes precedence.
+Keep `tests` explicit so pytest loads its option registration before parsing the
+custom option. Without a configured solution, model fixtures attempt the current
+directory and fail if it has no unique `.dm8s`; they do not automatically skip.
+
+## Domain map
+
+- `010`, `011`, `012`: model access, entities and schema contracts.
+- `014`, `015`: metadata and source import/refresh.
+- `016`: entity tree operations.
+- `017`: plugin, secret and SQL regressions.
+- `018`: blank solution initialization.
+- `020`, `030`: utilities and property resolution.
+- `040_migration`: v1 migration.
+- `081`: HTTP lifecycle, readiness and CORS.
+- `090`: CLI behavior.
+- `model/test_locator.py`: locator unit tests.
+
+Prefer extending the relevant domain. Exercise the public request or operation and
+assert the resulting state, including that read-only previews do not mutate the model.
+For plugin changes, test default `get_sources() -> None` and authoritative definitions
+separately. `[]` is authoritative and is not equivalent to `None`.
+
+## CI checks
 
 ```sh
-uv run pytest --solution-path="/absolute/path/to/ORAYLISDatabricksSample.dm8s"
+uvx ruff check . --respect-gitignore --exclude datam8-model/
+uvx --from ty==0.0.60 ty check src --exit-zero-on-warning
+uv build
 ```
 
-## CI behavior
+The canonical workflow is `.github/workflows/reusable-lint-build-test.yml`.
+The `linting` job runs Ruff and then ty. The full CI test run writes JUnit results;
+inspect pytest output and the report, including skip reasons (`pytest -rs`). A green
+build alone is not evidence that source behavior or external plugins work.
 
-CI configures `DATAM8_SOLUTION_PATH` to the sample solution path.
-If the configured path is invalid (missing/wrong), solution-dependent tests fail.
-If no solution path is configured, solution-dependent tests are skipped.
-
-## How to add a new test (recommended flow)
-
-1. Find the matching numbered domain (`test_0xx_<domain>.py`).
-2. Add input/expected variants to `test_0xx_<domain>_cases.py`.
-3. Keep setup minimal in tests; use shared fixtures from `conftest.py`.
-4. Add a new domain only if no existing domain fits.
-5. Run:
-   - `uv run pytest`
-   - `uv tool run pyright src`
-   - `uv tool run ruff check src`
-
-## Reading skips/failures
-
-- Local runs without solution path: solution-dependent tests are expected to be skipped.
-- Runs with an invalid configured solution path: treated as a hard failure.
-- Use `uv run pytest -rs` to see skip reasons in detail.
+Builds regenerate `src/datam8_model/` from the pinned submodule. Review generated
+changes before retaining them. `just check-format` and `just check-format-tests`
+also apply formatting and fixes; they are not read-only checks.
