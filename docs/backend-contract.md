@@ -54,16 +54,40 @@ switch workspaces. Coordinate any additional route with consumers before shippin
 
 - Entity rename uses `POST /entities/rename`; model entities and folders use
   `POST /entities/move`.
+- Renaming a Base item preserves its existing source JSON file, including custom
+  filenames and locations. Changing a Property Value's property also preserves
+  that file: the final locator folder denotes its property, not a disk directory.
+  Its property field and assignment references change with the locator.
+  Other locator folder changes remain explicit moves.
+  Property Values are identified by both property and value name when saving.
 - Folder moves include the complete subtree and rebase entity, metadata and
-  function paths. Function-directory moves are preflighted and rolled back if
+  function paths, including the source folder's own `.properties.json`. Folder
+  metadata keeps its ID and assignments; its name and relative `path` follow the
+  destination. Save metadata under the current name before requesting a rename.
+  Saving removes obsolete metadata files and cleans up empty source directories;
+  unrelated files keep their source directories in place.
+  Function-directory moves are preflighted and rolled back if
   the model move fails. Saving a deleted folder also removes child functions.
 - Function source paths are relative to their model entity. Absolute/drive-qualified
   paths, traversal, empty segments and symlink escapes are rejected.
+- A bare function filename first resolves beside the entity JSON, then in its
+  same-named subdirectory for older solutions. Renaming an entity keeps function
+  files in place and persists an explicit relative path when that fallback was used.
+- Saving deleted entities also deletes their referenced local function files that
+  no surviving entity uses. Missing files are tolerated; shared files, sources
+  outside the entity directory and unrelated files are retained. Rename/move copies
+  count as surviving entities. Only empty directories are removed afterwards.
+- Desktop function creation remains beside the entity JSON and uses the existing
+  file bridge with `createOnly: true`. Existing direct or legacy source files cause
+  a conflict without overwriting content or committing the transformation change.
 - Built-in plugin IDs use `builtin:*`, for example `builtin:SQLServer`.
 - Preview requires the plugin capability `previewData`.
 
 ## Source import and refresh
 
+- The local CSV builtin treats `path`, `protocol` and `authMode` as connection
+  fields, not Polars reader options. Navigation, metadata and preview do not
+  consume or mutate the saved connection configuration.
 - Source UI behavior is independent of plugin IDs and authentication modes.
   `GET /sources/{data_source}/capabilities` returns connection-specific booleans
   `listSource`, `metadata`, and `previewData`. The optional plugin hook

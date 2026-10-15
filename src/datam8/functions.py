@@ -43,7 +43,15 @@ def _build_source_file_path(
     wrapper: EntityWrapper[m.ModelEntity], transformation: m.ModelTransformation
 ) -> Path:
     assert transformation.function is not None
-    return (wrapper.source_file.parent / transformation.function.source).resolve()
+    source = transformation.function.source
+    directory = wrapper.source_file.parent.resolve()
+    path = (directory / source).resolve()
+    if not path.exists() and Path(source).name == source:
+        for name in (wrapper.entity.name, wrapper.source_file.stem):
+            fallback = (directory / name / source).resolve()
+            if fallback.is_file() and fallback.is_relative_to(directory):
+                return fallback
+    return path
 
 
 def get_functions(wrapper: EntityWrapper[m.ModelEntity], /) -> list[Function]:
@@ -61,7 +69,11 @@ def get_functions(wrapper: EntityWrapper[m.ModelEntity], /) -> list[Function]:
         The functions of all transformations of the entity.
     """
     assert isinstance(wrapper.entity, m.ModelEntity)
-    return [get_function(wrapper, func.stepNo) for func in wrapper.entity.transformations]
+    return [
+        get_function(wrapper, func.stepNo)
+        for func in wrapper.entity.transformations
+        if func.kind == m.TransformationKind.FUNCTION
+    ]
 
 
 def get_function(wrapper: EntityWrapper[m.ModelEntity], /, step_no_or_name: int | str) -> Function:
@@ -163,10 +175,10 @@ def move_function(
     current_path = _build_source_file_path(wrapper, transformation)
 
     new_path = new_path.resolve()
-    new_path_relative = new_path.relative_to(wrapper.source_file.parent, walk_up=True)
+    new_path_relative = new_path.relative_to(wrapper.source_file.parent.resolve(), walk_up=True)
 
     if current_path == new_path:
-        raise FileExistsError("Trying to move function onto itself")
+        return
 
     if new_path.exists() and not force:
         raise FileExistsError("Target function file already exists")
@@ -199,27 +211,19 @@ def prepare_function_moves(
             "When moving all transformations for an entity, `new_path` cannot be a file"
         )
 
-    source_file_directory = wrapper.source_file.parent
-
-    to_move = [
-        FunctionMove(
-            transformation,
-            # absolute path from where the function will be moved
-            src=(source_file_directory / transformation.function.source).resolve(),
-            # absolute path to where the function will be moved, will be None if the src is located
-            # "above" the entity itself
-            trg=(new_path / transformation.function.source).resolve()
-            # only functions that are located right beside or below the model entity file should be
-            # moved, assuming that every other functions in higher directories are "shared" or reusable
-            # functions, so do not move those simply update the relative source path and be done with it
-            if (source_file_directory / transformation.function.source)
-            .resolve()
-            .is_relative_to(source_file_directory)
-            else None,
+    source_file_directory = wrapper.source_file.parent.resolve()
+    to_move = []
+    for transformation in wrapper.entity.transformations:
+        if transformation.kind != m.TransformationKind.FUNCTION or transformation.function is None:
+            continue
+        src = _build_source_file_path(wrapper, transformation)
+        # Sources above the entity directory are shared and stay in place.
+        trg = (
+            (new_path / src.relative_to(source_file_directory)).resolve()
+            if src.is_relative_to(source_file_directory)
+            else None
         )
-        for transformation in wrapper.entity.transformations
-        if transformation.function is not None
-    ]
+        to_move.append(FunctionMove(transformation, src, trg))
 
     # in case a non-builtin transformation already exists raise an error
     # non-builtins will not be moved, so can be ignored
@@ -228,6 +232,7 @@ def prepare_function_moves(
         for mv in to_move
         if mv.transformation.kind != m.TransformationKind.BUILTIN
         and mv.trg is not None
+        and mv.src != mv.trg
         and mv.trg.exists()
     ]
     if not force and len(existing_transformations) > 0:
@@ -242,7 +247,7 @@ def prepare_function_moves(
         for t, src, _ in to_move:
             if t.function is not None and t.kind == m.TransformationKind.FUNCTION:
                 t.function.source = src.relative_to(
-                    source_file_overwrite.parent, walk_up=True
+                    source_file_overwrite.parent.resolve(), walk_up=True
                 ).as_posix()
 
     logger.debug("Detected %s functions to move for '%s'", len(to_move), wrapper.locator)
@@ -268,8 +273,8 @@ def move_functions(
     to_move = prepare_function_moves(wrapper, new_path, force=force) if to_move is None else to_move
     result: list[str | None] = [None for _ in range(len(to_move))]
 
-    for idx, (t, _, trg) in enumerate(to_move):
-        if trg is None and t.function is None:
+    for idx, (t, src, trg) in enumerate(to_move):
+        if src == trg or (trg is None and t.function is None):
             result[idx] = "skipped - not a function"
         elif trg is None:
             result[idx] = f"shared transformation - updated path to {trg}"

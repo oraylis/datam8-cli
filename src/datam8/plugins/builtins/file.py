@@ -18,7 +18,7 @@
 
 import functools
 from pathlib import Path
-from typing import Final
+from typing import Any, Final
 
 import polars as pl
 
@@ -60,8 +60,8 @@ class CsvFile(Plugin):
     __manifest: PluginManifest = manifest_csv
 
     def _get_path(self) -> Path:
-        protocol = self.extended_properties.pop("protocol")
-        file_path = self.extended_properties.pop("path")
+        protocol = self.extended_properties["protocol"]
+        file_path = self.extended_properties["path"]
 
         match [protocol, file_path]:
             case ["file", path]:
@@ -72,6 +72,13 @@ class CsvFile(Plugin):
                 raise utils.create_error("Should not be reached, is a bug...")
 
         return path
+
+    def _get_csv_options(self) -> dict[str, Any]:
+        return {
+            key: value
+            for key, value in self.extended_properties.items()
+            if key not in ("path", "protocol", "authMode")
+        }
 
     def test_connection(self) -> Exception | None:
         path = self._get_path()
@@ -105,7 +112,7 @@ class CsvFile(Plugin):
         path = self._get_path() / path
 
         try:
-            df = pl.read_csv(path, sample_size=limit, **self.extended_properties)
+            df = pl.read_csv(path, n_rows=limit, **self._get_csv_options())
         except Exception as err:
             raise utils.create_error(f"Could not read csv file: {err}") from err
 
@@ -114,7 +121,7 @@ class CsvFile(Plugin):
     def get_table_metadata(self, source_location: str, /) -> TableMetadata:
         _, table = self.parse_source_location(source_location)
         path = self._get_path()
-        lf = pl.scan_csv(path / table, **self.extended_properties)
+        lf = pl.scan_csv(path / table, **self._get_csv_options())
         polars_schema = lf.collect_schema()
         metadata = pl.DataFrame(
             {

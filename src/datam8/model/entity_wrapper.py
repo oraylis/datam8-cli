@@ -432,6 +432,10 @@ class EntityWrapper[T: b.BaseEntityType](BaseModel):
         self.source_file = source_file or self.source_file
         if locator.entityName is not None:
             self.entity.name = locator.entityName
+        if isinstance(self.entity, p.PropertyValue):
+            self.entity.property = locator.folders[-1]
+        if isinstance(self.entity, f.Folder):
+            self.entity.path = "/".join([*locator.folders, self.entity.name])
 
     def has_property(self, property_name: str, /) -> bool:
         """
@@ -505,6 +509,7 @@ class EntityWrapper[T: b.BaseEntityType](BaseModel):
                     if t == b.EntityType.PROPERTIES:
                         prop.property = new_name
                     else:
+                        prop.property = to_.folders[-1]
                         prop.value = new_name
 
                 if _update_properties(self.entity, comparison_, set_):
