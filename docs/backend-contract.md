@@ -61,7 +61,12 @@ switch workspaces. Coordinate any additional route with consumers before shippin
   Other locator folder changes remain explicit moves.
   Property Values are identified by both property and value name when saving.
 - Folder moves include the complete subtree and rebase entity, metadata and
-  function paths. Function-directory moves are preflighted and rolled back if
+  function paths, including the source folder's own `.properties.json`. Folder
+  metadata keeps its ID and assignments; its name and relative `path` follow the
+  destination. Save metadata under the current name before requesting a rename.
+  Saving removes obsolete metadata files and cleans up empty source directories;
+  unrelated files keep their source directories in place.
+  Function-directory moves are preflighted and rolled back if
   the model move fails. Saving a deleted folder also removes child functions.
 - Function source paths are relative to their model entity. Absolute/drive-qualified
   paths, traversal, empty segments and symlink escapes are rejected.

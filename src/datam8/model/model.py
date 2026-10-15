@@ -567,8 +567,7 @@ class Model:
                         )
                     ]
 
-                    # after all the single entities have been moved, also get all child folders and
-                    # move those
+                    # Include the source folder itself as well as its descendants.
                     folder_search_locator = from_locator.clone_as(b.EntityType.FOLDERS)
                     folder_target_loator = to_locator.clone_as(b.EntityType.FOLDERS)
                     moved_folders = [
@@ -580,7 +579,9 @@ class Model:
                             force=force,
                         )
                         for wrapper in self.folders.get_many_where(
-                            ew.locator_in(folder_search_locator)
+                            lambda wrapper: Path(str(wrapper.locator)).is_relative_to(
+                                str(folder_search_locator)
+                            )
                         )
                     ]
 
@@ -902,8 +903,9 @@ class Model:
 
         # for every deleted file check if there are now empty sub-directories and if after
         # deleting the file, the containing dir is also empty
-        for wrapper in deleted_files:
-            utils.cleanup_directory(wrapper.parent, config.solution_folder_path)
+        for wrapper in sorted(deleted_files, key=lambda path: len(path.parts), reverse=True):
+            if wrapper.parent.exists():
+                utils.cleanup_directory(wrapper.parent, config.solution_folder_path)
 
     def cleanup_entity_file_references(self) -> None:
         deleted_files: list[Path] = []
