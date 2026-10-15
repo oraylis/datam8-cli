@@ -631,6 +631,7 @@ class Model:
 
         # built the new source file path
         _type = b.EntityType(_from.entityType)
+        from_wrapper = self[_from.entityType][_from]
 
         new_source_file_parts = [
             self.get_base_path_for_entity_type(_type),
@@ -648,7 +649,11 @@ class Model:
             new_source_file_parts.insert(-1, _to.entityName)
 
         new_source_file = Path(*new_source_file_parts)
-        from_wrapper = self[_from.entityType][_from]
+        if (
+            _type not in (b.EntityType.MODEL_ENTITIES, b.EntityType.FOLDERS)
+            and _from.folders == _to.folders
+        ):
+            new_source_file = from_wrapper.source_file
 
         # clone the original wrapper and reset the locator, source file etc.
         to_wrapper = from_wrapper.model_copy(deep=True)
@@ -831,7 +836,11 @@ class Model:
         """
         Saves the current state of the model or a specific entity to the corresponding json file.
         """
-        changed_wrappers = [w for w in self.get_entities(locator or ROOT_LOCATOR) if w.has_changed]
+        changed_wrappers = [
+            w
+            for w in self.get_entities(locator or ROOT_LOCATOR)
+            if w.has_changed and not w.is_deleted
+        ]
         deleted_wrappers = [w for w in self.get_entities(locator or ROOT_LOCATOR) if w.is_deleted]
 
         no_of_changes = len(changed_wrappers)
@@ -1008,7 +1017,6 @@ class EntityFileRef:
                 if self._type == b.EntityType.PROPERTY_VALUES:
                     # to compare property values the name is not enough for a comparison
                     # both the name (value) and the property is necessary
-                    print(type(wrappers))
                     entities_to_remove = [
                         (w.entity.property, w.locator.entityName)
                         for w in deleted_wrappers
@@ -1020,17 +1028,14 @@ class EntityFileRef:
                         if isinstance(e, p.PropertyValue)
                         and (e.property, e.name) not in entities_to_remove
                     ]
-                    self.locators = [
-                        loc
-                        for loc in self.locators
-                        if (loc.folders[-1], loc.entityName) not in entities_to_remove
-                    ]
                 else:
                     entities_to_remove = [w.locator.entityName for w in deleted_wrappers]
                     entities = [e for e in entities if e.name not in entities_to_remove]
-                    self.locators = [
-                        loc for loc in self.locators if loc not in [w.locator for w in wrappers]
-                    ]
+
+                # Renamed rows stay in the file, but their obsolete locators do not.
+                self.locators = [
+                    loc for loc in self.locators if loc not in [w.locator for w in wrappers]
+                ]
 
                 # NOTE: this should actually never not be case, if not then something went majorly
                 # wrong
@@ -1046,6 +1051,9 @@ class EntityFileRef:
 
                 with open(self.file_path, "w") as _file:
                     _file.write(current_content.model_dump_json(**MODEL_DUMP_OPTIONS))
+
+                for wrapper in wrappers:
+                    self.renamed_locators.pop(wrapper.locator, None)
 
                 return False
 
@@ -1077,15 +1085,14 @@ class EntityFileRef:
 
                 for wrapper in wrappers:
                     entity_exists = False
-                    old_locator = renamed_locators.get(wrapper.locator, None)
+                    original_locator = wrapper.locator
+                    while original_locator in renamed_locators:
+                        original_locator = renamed_locators[original_locator]
 
                     for idx, existing_entity in enumerate(entities):
-                        if (
-                            # wrapper was renamed/moved in the file itself
-                            old_locator and existing_entity.name == old_locator.entityName
-                        ) or (
-                            # existing entity found
-                            existing_entity.name == wrapper.entity.name
+                        if existing_entity.name == original_locator.entityName and (
+                            not isinstance(existing_entity, p.PropertyValue)
+                            or existing_entity.property == original_locator.folders[-1]
                         ):
                             entities[idx] = wrapper.entity
                             entity_exists = True
