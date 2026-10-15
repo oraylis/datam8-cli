@@ -70,6 +70,16 @@ switch workspaces. Coordinate any additional route with consumers before shippin
   the model move fails. Saving a deleted folder also removes child functions.
 - Function source paths are relative to their model entity. Absolute/drive-qualified
   paths, traversal, empty segments and symlink escapes are rejected.
+- A bare function filename first resolves beside the entity JSON, then in its
+  same-named subdirectory for older solutions. Renaming an entity keeps function
+  files in place and persists an explicit relative path when that fallback was used.
+- Saving deleted entities also deletes their referenced local function files that
+  no surviving entity uses. Missing files are tolerated; shared files, sources
+  outside the entity directory and unrelated files are retained. Rename/move copies
+  count as surviving entities. Only empty directories are removed afterwards.
+- Desktop function creation remains beside the entity JSON and uses the existing
+  file bridge with `createOnly: true`. Existing direct or legacy source files cause
+  a conflict without overwriting content or committing the transformation change.
 - Built-in plugin IDs use `builtin:*`, for example `builtin:SQLServer`.
 - Preview requires the plugin capability `previewData`.
 

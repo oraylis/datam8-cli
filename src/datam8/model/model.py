@@ -856,6 +856,31 @@ class Model:
             logger.info("Nothing has changed")
             return
 
+        deleted_functions: set[Path] = set()
+        if any(isinstance(w.entity, m.ModelEntity) for w in deleted_wrappers):
+            deleted_locators = {w.locator for w in deleted_wrappers}
+            retained_ids = {
+                w.entity.id
+                for w in self.modelEntities.values()
+                if w.locator not in deleted_locators
+            }
+            retained_functions: set[Path] = set()
+            for wrapper in self.modelEntities.values():
+                for transformation in wrapper.entity.transformations:
+                    if (
+                        transformation.kind != m.TransformationKind.FUNCTION
+                        or transformation.function is None
+                    ):
+                        continue
+                    source = functions._build_source_file_path(wrapper, transformation)
+                    if wrapper.locator not in deleted_locators:
+                        retained_functions.add(source)
+                    elif wrapper.entity.id not in retained_ids and source.is_relative_to(
+                        wrapper.source_file.parent.resolve()
+                    ):
+                        deleted_functions.add(source)
+            deleted_functions.difference_update(retained_functions)
+
         # group change entities by file to minimize disk operations
         file_to_wrappers: dict[Path, dict[str, list[EntityWrapperVariant]]] = {}
 
@@ -900,6 +925,11 @@ class Model:
 
         # remove file refs if there are no more locators associated with them
         self.cleanup_entity_file_references()
+
+        for source in deleted_functions:
+            if source.is_file():
+                utils.delete_path(source)
+                deleted_files.append(source)
 
         # for every deleted file check if there are now empty sub-directories and if after
         # deleting the file, the containing dir is also empty
