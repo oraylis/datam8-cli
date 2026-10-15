@@ -649,9 +649,14 @@ class Model:
             new_source_file_parts.insert(-1, _to.entityName)
 
         new_source_file = Path(*new_source_file_parts)
+        # The final Property Value locator folder identifies its property, not a disk folder.
+        source_folders = (
+            _from.folders[:-1] if _type == b.EntityType.PROPERTY_VALUES else _from.folders
+        )
+        target_folders = _to.folders[:-1] if _type == b.EntityType.PROPERTY_VALUES else _to.folders
         if (
             _type not in (b.EntityType.MODEL_ENTITIES, b.EntityType.FOLDERS)
-            and _from.folders == _to.folders
+            and source_folders == target_folders
         ):
             new_source_file = from_wrapper.source_file
 

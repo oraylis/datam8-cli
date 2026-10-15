@@ -97,8 +97,22 @@ def test_base_rename_preserves_source_file(rename_solution, entity_type, fields,
     assert len(reloaded[entity_type]) == 2
 
 
-def test_property_value_rename_api_preserves_other_properties(rename_solution, monkeypatch):
-    source = rename_solution.parent / "Base" / "PropertyValues.json"
+@pytest.mark.parametrize("custom_path", [False, True], ids=["standard", "custom"])
+@pytest.mark.parametrize(
+    "target_property, target_name",
+    [("write_mode", "Renamed"), ("destination", "Default"), ("destination", "Renamed")],
+    ids=["rename", "change-property", "change-property-and-name"],
+)
+def test_property_value_change_api_preserves_other_properties(
+    rename_solution, monkeypatch, custom_path, target_property, target_name
+):
+    base_path = rename_solution.parent / "Base"
+    source = (
+        base_path / "Definitions" / "Custom.json"
+        if custom_path
+        else base_path / "PropertyValues.json"
+    )
+    source.parent.mkdir(exist_ok=True)
     peers = [
         {"property": "other", "name": "Default"},
         {"property": "other", "name": "Renamed"},
@@ -140,21 +154,33 @@ def test_property_value_rename_api_preserves_other_properties(rename_solution, m
     monkeypatch.setattr(factory, "_model", asyncio.run(factory.load_model(rename_solution)))
     client = TestClient(create_app())
 
-    for old_name, new_name in [("Default", "Renamed"), ("Renamed", "Default")]:
+    for old_property, old_name, new_property, new_name in [
+        ("write_mode", "Default", target_property, target_name),
+        (target_property, target_name, "write_mode", "Default"),
+    ]:
+        old_locator = f"propertyValues/{old_property}/{old_name}"
+        new_locator = f"propertyValues/{new_property}/{new_name}"
         response = client.post(
-            "/entities/rename",
-            json={"from": f"propertyValues/write_mode/{old_name}", "to": new_name},
+            "/entities/rename" if old_property == new_property else "/entities/move-single",
+            json={
+                "from": old_locator,
+                "to": new_name if old_property == new_property else new_locator,
+            },
         )
         assert response.status_code == 200, response.text
+        assert factory.get_model().propertyValues[new_locator].entity.property == new_property
+        assert factory.get_model().propertyValues[new_locator].source_file == source
         assert client.post("/model/save").status_code == 204
         assert json.loads(source.read_text())["propertyValues"] == [
-            {"property": "write_mode", "name": new_name},
+            {"property": new_property, "name": new_name},
             *peers,
         ]
         assert json.loads(entity_path.read_text())["properties"] == [
-            {"property": "write_mode", "value": new_name}
+            {"property": new_property, "value": new_name}
         ]
         assert client.post("/model/reload").status_code == 200
+        assert factory.get_model().propertyValues[new_locator].entity.property == new_property
+        assert not factory.get_model().has_locator(old_locator)
         assert factory.get_model().get_unsaved_entities() == ([], [])
 
     # A normal update must also distinguish equal value names across properties.
@@ -166,7 +192,7 @@ def test_property_value_rename_api_preserves_other_properties(rename_solution, m
     rows = json.loads(source.read_text())["propertyValues"]
     assert rows[0]["displayName"] == "Updated"
     assert rows[1:] == peers
-    assert list(source.parent.rglob("*.json")) == [source]
+    assert list(base_path.rglob("*.json")) == [source]
 
 
 def test_base_move_to_different_folder_still_changes_source(rename_solution):

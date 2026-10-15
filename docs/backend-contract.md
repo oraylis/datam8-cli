@@ -55,7 +55,10 @@ switch workspaces. Coordinate any additional route with consumers before shippin
 - Entity rename uses `POST /entities/rename`; model entities and folders use
   `POST /entities/move`.
 - Renaming a Base item preserves its existing source JSON file, including custom
-  filenames and locations. A locator folder change remains an explicit move.
+  filenames and locations. Changing a Property Value's property also preserves
+  that file: the final locator folder denotes its property, not a disk directory.
+  Its property field and assignment references change with the locator.
+  Other locator folder changes remain explicit moves.
   Property Values are identified by both property and value name when saving.
 - Folder moves include the complete subtree and rebase entity, metadata and
   function paths. Function-directory moves are preflighted and rolled back if
