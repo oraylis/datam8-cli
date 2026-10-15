@@ -85,6 +85,9 @@ switch workspaces. Coordinate any additional route with consumers before shippin
 
 ## Source import and refresh
 
+- The local CSV builtin treats `path`, `protocol` and `authMode` as connection
+  fields, not Polars reader options. Navigation, metadata and preview do not
+  consume or mutate the saved connection configuration.
 - Source UI behavior is independent of plugin IDs and authentication modes.
   `GET /sources/{data_source}/capabilities` returns connection-specific booleans
   `listSource`, `metadata`, and `previewData`. The optional plugin hook
