@@ -80,7 +80,9 @@ loaded at server startup; switching does not start a second interpreter.
 - Candidate model and plugin manifests are loaded before activation. Load failure
   restores the prior model, paths, plugins and secret scope and keeps its ID.
   A successful switch releases references to old model/plugin state and clears
-  solution-local imported modules and generation registrations.
+  modules owned by the plugin/target loader and generation registrations.
+  Existing process modules shadowed by a local module are restored. Plugin reload
+  validates all manifests before replacing the registry and reloads local code.
 
 Electron updates its active path and renderer workspace ID only after success.
 Requests and responses belonging to an earlier workspace must not update the new

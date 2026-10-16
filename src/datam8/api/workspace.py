@@ -8,8 +8,6 @@ The gate surrounds the ASGI response, not just creation of a streaming response.
 from __future__ import annotations
 
 import asyncio
-import importlib
-import sys
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,7 +22,7 @@ from datam8.errors import (
     NotSupportedModelVersionError,
 )
 from datam8.secrets import SecretResolver
-from datam8.utils.importer import TargetModuleFinder
+from datam8.utils.importer import clear_workspace_modules
 
 HEADER = b"x-datam8-workspace"
 
@@ -96,23 +94,7 @@ class WorkspaceManager:
         self.id = str(uuid.uuid4())
         SecretResolver.reset_singleton()
         generate.payload_functions.clear()
-        TargetModuleFinder._path.clear()
-        # Custom plugin and target modules must not survive under a shared name.
-        # Driver libraries outside the previous solution stay imported.
-        for name, module in list(sys.modules.items()):
-            origin = getattr(module, "__file__", None)
-            # A solution can contain the development checkout/venv itself.
-            # Never unload the server or its installed driver dependencies.
-            infrastructure = (Path(factory.__file__).parent, Path(sys.prefix))
-            if (
-                isinstance(origin, str)
-                and Path(origin).is_relative_to(previous.folder)
-                and not name.startswith(("datam8.", "datam8_model."))
-                and name not in {"datam8", "datam8_model"}
-                and not any(Path(origin).is_relative_to(root) for root in infrastructure)
-            ):
-                sys.modules.pop(name, None)
-        importlib.invalidate_caches()
+        clear_workspace_modules()
         return self.describe()
 
 

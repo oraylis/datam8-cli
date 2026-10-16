@@ -2,6 +2,7 @@ import asyncio
 import gc
 import sys
 import weakref
+from types import ModuleType
 
 import httpx
 import pytest
@@ -10,11 +11,13 @@ from fastapi.testclient import TestClient
 from datam8 import config, factory, solution
 from datam8.api.app import create_app
 from datam8.secrets import SecretResolver
+from datam8.utils import importer
 from datam8_model.plugin import PluginManifest
 
 
 @pytest.fixture
 def workspaces(tmp_path, monkeypatch):
+    importer.clear_workspace_modules()
     a, b = tmp_path / "a" / "A.dm8s", tmp_path / "b" / "B.dm8s"
     for path in (a, b):
         solution.init_solution(path)
@@ -23,7 +26,8 @@ def workspaces(tmp_path, monkeypatch):
     monkeypatch.setattr(factory, "_model", None)
     monkeypatch.setattr(factory, "_plugin_manager", None)
     factory.create_model()
-    return a, b
+    yield a, b
+    importer.clear_workspace_modules()
 
 
 def test_switch_preserves_failed_workspace_and_rejects_stale_writes(workspaces):
@@ -174,3 +178,50 @@ def test_repeated_switches_release_old_models(workspaces):
             assert client.post("/workspace/open", json={"path": str(path)}).status_code == 200
     gc.collect()
     assert all(reference() is None for reference in old_models)
+
+
+def test_switch_preserves_unrelated_modules_and_restores_shadowed_module(workspaces, monkeypatch):
+    a, b = workspaces
+    unrelated = ModuleType("ordinary_workspace_module")
+    unrelated.__file__ = str(a.parent / "ordinary.py")
+    original = ModuleType("workspace_connector")
+    monkeypatch.setitem(sys.modules, unrelated.__name__, unrelated)
+    monkeypatch.setitem(sys.modules, original.__name__, original)
+    local_file = a.parent / "connector.py"
+    local_file.write_text("value = 'local'", encoding="utf-8")
+    importer.load_module(local_file, original.__name__)
+    assert sys.modules[original.__name__] is not original
+    with TestClient(create_app(token="test", workspace_switch=True)) as client:
+        client.headers["Authorization"] = "Bearer test"
+        client.headers["X-DataM8-Workspace"] = client.get("/workspace").json()["workspaceId"]
+        assert client.post("/workspace/open", json={"path": str(b)}).status_code == 200
+    assert sys.modules[original.__name__] is original
+    assert sys.modules[unrelated.__name__] is unrelated
+
+
+def test_plugin_reload_reloads_package_children_and_keeps_registry_on_failure(workspaces):
+    a, _ = workspaces
+    directory = a.parent / factory.get_model().solution.pluginsPath
+    package = directory / "workspace_plugin"
+    package.mkdir(parents=True, exist_ok=True)
+    (package / "__init__.py").write_text("from .helper import Marker", encoding="utf-8")
+    helper = package / "helper.py"
+    helper.write_text("class Marker:\n    value = 'original'\n", encoding="utf-8")
+    manifest = PluginManifest(
+        id="package",
+        displayName="Package",
+        version="1",
+        entryPoint="workspace_plugin:Marker",
+        capabilities=[],
+    )
+    manifest_file = directory / "package.json"
+    manifest_file.write_text(manifest.model_dump_json(), encoding="utf-8")
+    manager = factory.get_plugin_manager(reset=True)
+    assert manager.get_plugin("package").value == "original"
+    helper.write_text("class Marker:\n    value = 'changed on reload'\n", encoding="utf-8")
+    manager.reload(factory.get_model().solution)
+    assert manager.get_plugin("package").value == "changed on reload"
+    manifest_file.write_text("{}", encoding="utf-8")
+    with pytest.raises(ValueError):
+        manager.reload(factory.get_model().solution)
+    assert manager.get_plugin("package").value == "changed on reload"
