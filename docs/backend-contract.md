@@ -30,9 +30,14 @@ All non-readiness logs are written to stderr.
 ## Current v2 beta route surface
 
 Solution, Base and Model JSON files are read and written as UTF-8; generated text
-output and v1 migration output are also written as UTF-8 without a BOM. Existing
-Windows-1252 JSON files must be converted to UTF-8 before loading. Loading does
-not convert or rewrite files, and no legacy encoding fallback is applied.
+output and v1 migration output are also written as UTF-8 without a BOM. Before
+loading a solution, the backend checks its `.dm8s` and the JSON files under its
+configured Base and Model paths (including `.properties.json`). Files that cannot
+be decoded as UTF-8 are converted from Windows-1252 after JSON validation, with
+the original bytes preserved beside each file as `<filename>.cp1252.bak`.
+Existing backups are never overwritten. UTF-8/ASCII files remain unchanged;
+plugins, templates, Python files and existing output are outside this conversion.
+Conversion failures identify the affected path and stop loading.
 
 The current `create_app().openapi()` exposes these domains (no `/api` prefix):
 
