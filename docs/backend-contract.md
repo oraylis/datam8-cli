@@ -33,9 +33,8 @@ Solution, Base and Model JSON files are read and written as UTF-8; generated tex
 output and v1 migration output are also written as UTF-8 without a BOM. Before
 loading a solution, the backend checks its `.dm8s` and the JSON files under its
 configured Base and Model paths (including `.properties.json`). Files that cannot
-be decoded as UTF-8 are converted from Windows-1252 after JSON validation, with
-the original bytes preserved beside each file as `<filename>.cp1252.bak`.
-Existing backups are never overwritten. UTF-8/ASCII files remain unchanged;
+be decoded as UTF-8 are converted from Windows-1252 after JSON validation and
+atomically replaced without retaining backup files. UTF-8/ASCII files remain unchanged;
 plugins, templates, Python files and existing output are outside this conversion.
 Conversion failures identify the affected path and stop loading.
 

@@ -90,10 +90,8 @@ def test_loading_mixed_solution_converts_only_legacy_json_once(mixed_solution, c
     assert loaded.modelEntities["modelEntities/Stage/Unicode"].entity.description == "für 東京"
     converted = []
     for path, (raw, modified) in before.items():
-        backup = path.with_name(path.name + ".cp1252.bak")
-        if backup.exists():
+        if path.read_bytes() != raw:
             converted.append(path)
-            assert backup.read_bytes() == raw
             assert path.read_bytes() == raw.decode("cp1252").encode("utf-8")
         else:
             assert (path.read_bytes(), path.stat().st_mtime_ns) == (raw, modified)
@@ -104,6 +102,7 @@ def test_loading_mixed_solution_converts_only_legacy_json_once(mixed_solution, c
         for path in root.rglob("*")
         if path.is_file()
     }
+    assert after.keys() == before.keys()
     caplog.clear()
 
     with TestClient(create_app()) as client:
@@ -131,20 +130,7 @@ def test_invalid_legacy_file_names_path_and_prevents_conversion(mixed_solution, 
         ensure_utf8_solution(mixed_solution)
 
     assert str(invalid) in str(error.value)
-    assert {path: path.read_bytes() for path in before} == before
-    assert not list(root.rglob("*.cp1252.bak"))
-
-
-def test_existing_different_backup_is_not_overwritten(mixed_solution):
-    backup = mixed_solution.with_name(mixed_solution.name + ".cp1252.bak")
-    backup.write_bytes(b"existing backup")
-    original = mixed_solution.read_bytes()
-
-    with pytest.raises(Datam8ValidationError, match="Existing backup differs"):
-        ensure_utf8_solution(mixed_solution)
-
-    assert mixed_solution.read_bytes() == original
-    assert backup.read_bytes() == b"existing backup"
+    assert {path: path.read_bytes() for path in root.rglob("*") if path.is_file()} == before
 
 
 def test_failed_replacement_keeps_original_and_can_retry(mixed_solution, monkeypatch):
@@ -159,9 +145,23 @@ def test_failed_replacement_keeps_original_and_can_retry(mixed_solution, monkeyp
             ensure_utf8_solution(mixed_solution)
 
     assert mixed_solution.read_bytes() == original
-    assert mixed_solution.with_name(mixed_solution.name + ".cp1252.bak").read_bytes() == original
     assert not list(mixed_solution.parent.glob(f".{mixed_solution.name}.*"))
+    assert not list(mixed_solution.parent.rglob("*.bak"))
 
     ensure_utf8_solution(mixed_solution)
 
     assert mixed_solution.read_bytes() == original.decode("cp1252").encode("utf-8")
+
+
+def test_concurrent_edit_is_not_overwritten(mixed_solution, monkeypatch):
+    changed = mixed_solution.read_bytes() + b"\n"
+
+    def edit_during_conversion(*args):
+        mixed_solution.write_bytes(changed)
+
+    monkeypatch.setattr("datam8.solution_encoding.shutil.copymode", edit_during_conversion)
+    with pytest.raises(Datam8ValidationError, match="File changed during UTF-8 conversion"):
+        ensure_utf8_solution(mixed_solution)
+
+    assert mixed_solution.read_bytes() == changed
+    assert not list(mixed_solution.parent.glob(f".{mixed_solution.name}.*"))

@@ -23,7 +23,7 @@ def ensure_utf8_solution(solution_path: Path) -> None:
             try:
                 text = raw.decode("cp1252")
                 json.loads(text)
-            except (UnicodeDecodeError, ValueError) as err:
+            except ValueError as err:
                 raise Datam8ValidationError(
                     message=f"Cannot decode solution JSON as UTF-8 or Windows-1252: {path}",
                     details={"path": str(path)},
@@ -39,15 +39,8 @@ def ensure_utf8_solution(solution_path: Path) -> None:
             read(path)
 
     for path, (original, encoded) in pending.items():
-        backup = path.with_name(path.name + ".cp1252.bak")
         temporary: Path | None = None
         try:
-            try:
-                with backup.open("xb") as stream:
-                    stream.write(original)
-            except FileExistsError:
-                if backup.read_bytes() != original:
-                    raise OSError(f"Existing backup differs from the original: {backup}") from None
             with NamedTemporaryFile(
                 dir=path.parent, prefix=f".{path.name}.", delete=False
             ) as stream:
@@ -66,4 +59,4 @@ def ensure_utf8_solution(solution_path: Path) -> None:
             if temporary is not None and temporary.exists():
                 temporary.chmod(0o600)
                 temporary.unlink()
-        logger.warning("Converted Windows-1252 JSON to UTF-8: %s (backup: %s)", path, backup)
+        logger.warning("Converted Windows-1252 JSON to UTF-8: %s", path)
