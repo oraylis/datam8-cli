@@ -68,22 +68,25 @@ async def parse_full_solution_async(solution_path: pathlib.Path, /) -> Model:
     """
     logger.debug("Start parsing solution")
 
-    executor = futures.ThreadPoolExecutor()
-
     solution = parse_solution_file(solution_path)
-    worker_model = executor.submit(__parse_model_entities, solution.modelPath)
-    worker_base = executor.submit(__parse_base_entities, solution.basePath, solution.modelPath)
-
-    base_entities = worker_base.result()
-    model_entities = worker_model.result()
+    # Await every worker before restoring/changing workspace-global paths, even
+    # when one parser fails. Otherwise a failed switch could leave a worker
+    # reading the next workspace's configuration.
+    with futures.ThreadPoolExecutor() as executor:
+        worker_model = executor.submit(
+            __parse_model_entities, solution.modelPath, executor=executor
+        )
+        worker_base = executor.submit(
+            __parse_base_entities, solution.basePath, solution.modelPath, executor=executor
+        )
+        base_entities = worker_base.result()
+        model_entities = worker_model.result()
 
     model = Model(
         solution,
         modelEntities=model_entities,  # type: ignore[ty:invalid-argument-type]
         **base_entities,
     )
-
-    executor.shutdown()
 
     logger.info("Parsed all files in solution")
 

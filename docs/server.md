@@ -35,6 +35,9 @@ All other logs go to stderr.
 - `--solution-path` / `--solution`: active solution; falls back to
   `DATAM8_SOLUTION_PATH` or the current directory.
 - `--openapi` (optional): enables `/docs` and `/openapi.json` (off by default for desktop).
+- `--workspace-switch` (optional): enables the authenticated desktop
+  [workspace switching contract](backend-contract.md#desktop-workspace-switching).
+  Requires a loopback host and non-empty token. Omit it for startup-bound browser mode.
 - `--log-level` (optional): uvicorn log level (`debug|info|warning|error|critical`).
 
 ## CLI architecture

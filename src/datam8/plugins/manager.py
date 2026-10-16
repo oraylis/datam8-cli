@@ -68,6 +68,7 @@ class PluginManager:
 
     def reload(self, solution: Solution) -> list[PluginManifest]:
         self.reset_plugins()
+        self.__solution_plugins = {}
         self.load_plugins_from_solution(solution)
 
         return self.get_plugins()
