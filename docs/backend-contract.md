@@ -29,6 +29,11 @@ All non-readiness logs are written to stderr.
 
 ## Current v2 beta route surface
 
+Solution, Base and Model JSON files are read and written as UTF-8; generated text
+output and v1 migration output are also written as UTF-8 without a BOM. Existing
+Windows-1252 JSON files must be converted to UTF-8 before loading. Loading does
+not convert or rewrite files, and no legacy encoding fallback is applied.
+
 The current `create_app().openapi()` exposes these domains (no `/api` prefix):
 
 - `GET /health` (204), `GET /version` (`schemaVersion`, `appVersion`), `GET /config`.

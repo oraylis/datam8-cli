@@ -42,11 +42,11 @@ class Common(RootModel[Any]):
 
     @staticmethod
     def from_json_file(path: Path) -> Common:
-        with open(path) as file:
+        with open(path, encoding="utf-8") as file:
             model = Common.model_validate_json(file.read())
 
         return model
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
-        with open(path, mode) as file:
+        with open(path, mode, encoding="utf-8") as file:
             file.write(self.model_dump_json(**dump_options))

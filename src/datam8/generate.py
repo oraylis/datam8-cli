@@ -295,7 +295,7 @@ async def render_template(
     if not _output_path.exists():
         os.makedirs(_output_path.parent, exist_ok=True)
 
-    with open(_output_path, "w") as file:
+    with open(_output_path, "w", encoding="utf-8") as file:
         file.write(output)
 
     return None

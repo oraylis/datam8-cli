@@ -55,12 +55,12 @@ class {{ class_name }}({{ base_class }}{%- if fields -%}[{{get_type_hint(fields)
 
     @staticmethod
     def from_json_file(path: Path) -> "{{ class_name }}":
-        with open(path, "r") as file:
+        with open(path, "r", encoding="utf-8") as file:
           model = {{ class_name }}.model_validate_json(file.read())
 
         return model
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
-        with open(path, mode) as file:
+        with open(path, mode, encoding="utf-8") as file:
             file.write(self.model_dump_json(**dump_options))
 {%- endif %}
