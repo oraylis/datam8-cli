@@ -35,6 +35,8 @@ from datam8_model import folder as f
 from datam8_model import solution as s
 from datam8_model.property import PropertyReference, PropertyValue
 
+from .solution_encoding import ensure_utf8_solution
+
 logger = logging.getLogger(__name__)
 
 _model: model.Model | None = None
@@ -127,6 +129,7 @@ def create_model(solution_path: pathlib.Path | None = None, /) -> model.Model:
 
 
 async def load_model(solution_path: pathlib.Path, /) -> model.Model:
+    ensure_utf8_solution(solution_path)
     _model = await parser.parse_full_solution_async(solution_path)
     create_undefined_folders(_model)
     _model.init_file_references()

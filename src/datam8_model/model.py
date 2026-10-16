@@ -76,13 +76,13 @@ class Locator(BaseModel):
         ValidationError
             If the data in the json file does not much the model constraints.
         """
-        with open(path) as file:
+        with open(path, encoding="utf-8") as file:
             model = Locator.model_validate_json(file.read())
 
         return model
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
-        with open(path, mode) as file:
+        with open(path, mode, encoding="utf-8") as file:
             # write content to disk including a final new line
             file.write(self.model_dump_json(**dump_options) + "\n")
 
@@ -127,13 +127,13 @@ class ModelParameter(BaseModel):
         ValidationError
             If the data in the json file does not much the model constraints.
         """
-        with open(path) as file:
+        with open(path, encoding="utf-8") as file:
             model = ModelParameter.model_validate_json(file.read())
 
         return model
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
-        with open(path, mode) as file:
+        with open(path, mode, encoding="utf-8") as file:
             # write content to disk including a final new line
             file.write(self.model_dump_json(**dump_options) + "\n")
 
@@ -186,13 +186,13 @@ class TransformationFunction(BaseModel):
         ValidationError
             If the data in the json file does not much the model constraints.
         """
-        with open(path) as file:
+        with open(path, encoding="utf-8") as file:
             model = TransformationFunction.model_validate_json(file.read())
 
         return model
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
-        with open(path, mode) as file:
+        with open(path, mode, encoding="utf-8") as file:
             # write content to disk including a final new line
             file.write(self.model_dump_json(**dump_options) + "\n")
 
@@ -237,13 +237,13 @@ class ModelAttributeMapping(BaseModel):
         ValidationError
             If the data in the json file does not much the model constraints.
         """
-        with open(path) as file:
+        with open(path, encoding="utf-8") as file:
             model = ModelAttributeMapping.model_validate_json(file.read())
 
         return model
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
-        with open(path, mode) as file:
+        with open(path, mode, encoding="utf-8") as file:
             # write content to disk including a final new line
             file.write(self.model_dump_json(**dump_options) + "\n")
 
@@ -288,13 +288,13 @@ class SourceAttributeMapping(ModelAttributeMapping):
         ValidationError
             If the data in the json file does not much the model constraints.
         """
-        with open(path) as file:
+        with open(path, encoding="utf-8") as file:
             model = SourceAttributeMapping.model_validate_json(file.read())
 
         return model
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
-        with open(path, mode) as file:
+        with open(path, mode, encoding="utf-8") as file:
             # write content to disk including a final new line
             file.write(self.model_dump_json(**dump_options) + "\n")
 
@@ -348,13 +348,13 @@ class ModelTransformation(BaseModel):
         ValidationError
             If the data in the json file does not much the model constraints.
         """
-        with open(path) as file:
+        with open(path, encoding="utf-8") as file:
             model = ModelTransformation.model_validate_json(file.read())
 
         return model
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
-        with open(path, mode) as file:
+        with open(path, mode, encoding="utf-8") as file:
             # write content to disk including a final new line
             file.write(self.model_dump_json(**dump_options) + "\n")
 
@@ -419,13 +419,13 @@ class ModelRelationship(BaseModel):
         ValidationError
             If the data in the json file does not much the model constraints.
         """
-        with open(path) as file:
+        with open(path, encoding="utf-8") as file:
             model = ModelRelationship.model_validate_json(file.read())
 
         return model
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
-        with open(path, mode) as file:
+        with open(path, mode, encoding="utf-8") as file:
             # write content to disk including a final new line
             file.write(self.model_dump_json(**dump_options) + "\n")
 
@@ -471,13 +471,13 @@ class InternalModelSource(BaseModel):
         ValidationError
             If the data in the json file does not much the model constraints.
         """
-        with open(path) as file:
+        with open(path, encoding="utf-8") as file:
             model = InternalModelSource.model_validate_json(file.read())
 
         return model
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
-        with open(path, mode) as file:
+        with open(path, mode, encoding="utf-8") as file:
             # write content to disk including a final new line
             file.write(self.model_dump_json(**dump_options) + "\n")
 
@@ -526,13 +526,13 @@ class ExternalModelSource(BaseModel):
         ValidationError
             If the data in the json file does not much the model constraints.
         """
-        with open(path) as file:
+        with open(path, encoding="utf-8") as file:
             model = ExternalModelSource.model_validate_json(file.read())
 
         return model
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
-        with open(path, mode) as file:
+        with open(path, mode, encoding="utf-8") as file:
             # write content to disk including a final new line
             file.write(self.model_dump_json(**dump_options) + "\n")
 
@@ -594,12 +594,12 @@ class ModelEntity(BaseModel):
         ValidationError
             If the data in the json file does not much the model constraints.
         """
-        with open(path) as file:
+        with open(path, encoding="utf-8") as file:
             model = ModelEntity.model_validate_json(file.read())
 
         return model
 
     def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
-        with open(path, mode) as file:
+        with open(path, mode, encoding="utf-8") as file:
             # write content to disk including a final new line
             file.write(self.model_dump_json(**dump_options) + "\n")

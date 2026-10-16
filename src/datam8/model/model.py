@@ -1086,7 +1086,7 @@ class EntityFileRef:
 
                 setattr(current_content.root, self._type.value, entities)
 
-                with open(self.file_path, "w") as _file:
+                with open(self.file_path, "w", encoding="utf-8") as _file:
                     _file.write(current_content.model_dump_json(**MODEL_DUMP_OPTIONS))
 
                 for wrapper in wrappers:

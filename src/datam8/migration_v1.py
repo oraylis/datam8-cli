@@ -580,7 +580,7 @@ class MigrationV1:
             if model_entity.entity:
                 tags.extend(model_entity.entity.tags or [])
 
-            with open(output_file_path, "w") as _f:
+            with open(output_file_path, "w", encoding="utf-8") as _f:
                 _f.write(content)
 
             python_file = file.with_suffix(".py")
@@ -677,10 +677,10 @@ class MigrationV1:
 
             content = new_base_entities.model_dump_json(indent=2, exclude_none=True)
 
-            with open(output_file_path, "w") as file:
+            with open(output_file_path, "w", encoding="utf-8") as file:
                 file.write(content)
 
-        with open(output_path / "data_source_types.json", "w") as _file:
+        with open(output_path / "data_source_types.json", "w", encoding="utf-8") as _file:
             _file.write(
                 b.DataSourceTypes(
                     type="dataSourceTypes",
@@ -728,7 +728,7 @@ class MigrationV1:
         )
         content = new_zones.model_dump_json(indent=2, exclude_defaults=True, exclude_none=True)
 
-        with open(output_path, "w") as file:
+        with open(output_path, "w", encoding="utf-8") as file:
             file.write(content)
 
         return [z for z in new_zones.zones]
@@ -751,7 +751,7 @@ class MigrationV1:
         )
         content = new_soution.model_dump_json(**MODEL_DUMP_OPTIONS)
 
-        with open(output_path, "w") as file:
+        with open(output_path, "w", encoding="utf-8") as file:
             file.write(content)
 
     @staticmethod
@@ -774,10 +774,10 @@ class MigrationV1:
             ],
         )
 
-        with open(output_path / "properties.json", "w") as file:
+        with open(output_path / "properties.json", "w", encoding="utf-8") as file:
             file.write(new_properties.model_dump_json(**MODEL_DUMP_OPTIONS))
 
-        with open(output_path / "property_values.json", "w") as file:
+        with open(output_path / "property_values.json", "w", encoding="utf-8") as file:
             file.write(new_property_values.model_dump_json(**MODEL_DUMP_OPTIONS))
 
     @staticmethod
@@ -805,7 +805,7 @@ class MigrationV1:
                 )
                 next_id += 1
 
-                with open(product_path / ".properties.json", "w") as _file:
+                with open(product_path / ".properties.json", "w", encoding="utf-8") as _file:
                     _file.write(product_folder.model_dump_json(**MODEL_DUMP_OPTIONS))
 
                 for module in product.dataModules:
@@ -826,7 +826,7 @@ class MigrationV1:
                     )
                     next_id += 1
 
-                    with open(module_path / ".properties.json", "w") as _file:
+                    with open(module_path / ".properties.json", "w", encoding="utf-8") as _file:
                         _file.write(module_folder.model_dump_json(**MODEL_DUMP_OPTIONS))
 
 

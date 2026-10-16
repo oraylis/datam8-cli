@@ -1,5 +1,6 @@
 # Backend Documentation
 
+- [Generator 2.0.1 release notes](releases/2.0.1.md)
 - [CLI usage and output checks](cli.md)
 - [Canonical HTTP contract](backend-contract.md)
 - [Server startup/authentication/CORS](server.md)
