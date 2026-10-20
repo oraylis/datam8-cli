@@ -453,6 +453,8 @@ class Model:
         )
         base_file_path = self.get_base_path_for_entity_type(_type)
         source_file_path = Path(base_file_path, *_locator.folders, _locator.default_file_name())
+        if _type == b.EntityType.FOLDERS:
+            source_file_path = source_file_path.parent / _locator.entityName / source_file_path.name
         if source_file is not None:
             source_file_path = self._existing_base_target(_type, source_file)
 

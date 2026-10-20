@@ -217,6 +217,9 @@ switch workspaces. Coordinate any additional route with consumers before shippin
 Folder metadata is a direct object in `Model/**/.properties.json`. Use the typed
 folder locator with `/entities/{locator}`, then `/model/save` to persist changes.
 See the pinned schema's `schema/folder.json` for fields.
+Creating a folder writes its metadata inside that folder, for example
+`folders/Raw/Sales` saves to `Model/Raw/Sales/.properties.json`, so a subsequent
+reload retains the same folder locator.
 
 The backend validates that a module belongs to the selected product. Folder
 properties inherit down the chain; a child overrides a parent by property name.

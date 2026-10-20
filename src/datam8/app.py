@@ -16,9 +16,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-from .cmd import functions, migrate, plugin, root, secret, sources
+from .cmd import entities, functions, migrate, plugin, root, secret, solution, sources
 
 app = root.app
+app.registered_commands.extend(entities.app.registered_commands)
+app.add_typer(solution.app)
 app.add_typer(sources.app)
 app.add_typer(plugin.app)
 app.add_typer(secret.app)

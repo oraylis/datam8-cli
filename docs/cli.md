@@ -6,6 +6,9 @@ backend revision using [README](../README.md). Python `>=3.12` is declared by
 
 ## Discover commands
 
+For local model mutations, compact JSON output, keyed nested edits and batches,
+see the [agent CLI contract](cli-agent-contract.md).
+
 ```sh
 datam8 --help
 datam8 validate --help
@@ -32,7 +35,8 @@ than relying on its help description.
 
 Wait for the process exit code. Success is exit zero; invalid invocation is reported
 by Typer and model/loading/generation failures return a nonzero process result.
-Do not rely on a universal numeric error-code taxonomy. Inspect the error text and
+Machine model commands use the [documented exit codes](cli-agent-contract.md#output-and-discovery).
+Inspect the error text and
 newly written files; a checked-in output file alone is not proof of success.
 Successful generation does not deploy or execute the generated artifacts.
 

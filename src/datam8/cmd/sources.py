@@ -16,47 +16,77 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+"""Source discovery, import and refresh through the same model operations as HTTP."""
 
-import deepdiff
-import rich
+from typing import Annotated, Literal
+
 import typer
-from click import Choice
 
-from datam8 import factory, logging, opts, source, utils
+from datam8 import errors, opts
+from datam8.operations import Operation
 
 from . import common
 
-logger = logging.getLogger(__name__)
-
 app = typer.Typer(
-    name="sources",
-    help="Subcommands to connect with and view sources",
-    no_args_is_help=True,
-    context_settings={
-        "help_option_names": ["-h", "--help"],
-    },
+    name="sources", help="Inspect sources, import and refresh model entities", no_args_is_help=True
 )
+Mode = Annotated[Literal["complete", "sources-only"], typer.Option()]
+
+
+def read_source(
+    action, data_source, location, solution_path, log_level, version, json_output, limit=10
+):
+    result = common.session(solution_path, log_level, version).source_info(
+        action, data_source, location, limit
+    )
+    if not json_output:
+        if action == "test-connection":
+            typer.echo("Datasource tested successfully")
+        elif "items" in result:
+            import polars as pl
+
+            if action == "list":
+                typer.echo(f"Found {result['count']} source objects")
+            if result["items"]:
+                pl.DataFrame(result["items"]).show(limit=None, tbl_hide_dataframe_shape=True)
+        else:
+            import rich
+
+            rich.print(result.get("item"))
+    return result
 
 
 @app.command("list")
+@common.output
 def list_(
     data_source_name: opts.DataSource,
     solution_path: opts.SolutionPath,
     source_location: opts.SourceLocation | None = None,
     log_level: opts.LogLevel = opts.LogLevels.WARNING,
     version: opts.Version = False,
+    json_output: opts.JsonOutput = False,
 ):
-    "List available objects in a source (schema, tables, etc.)"
-    common.main_callback(solution_path, log_level, version)
-
-    plugin = factory.get_plugin_for_data_source(data_source_name)
-    schemas = plugin.list_source(source_location)
-
-    typer.echo(f"Found {len(schemas.rows())} source objects")
-    schemas.show(None, tbl_hide_column_data_types=True, tbl_hide_dataframe_shape=True)
+    return read_source(
+        "list", data_source_name, source_location, solution_path, log_level, version, json_output
+    )
 
 
 @app.command()
+@common.output
+def capabilities(
+    data_source_name: opts.DataSource,
+    solution_path: opts.SolutionPath,
+    log_level: opts.LogLevel = opts.LogLevels.WARNING,
+    version: opts.Version = False,
+    json_output: opts.JsonOutput = False,
+):
+    return read_source(
+        "capabilities", data_source_name, None, solution_path, log_level, version, json_output
+    )
+
+
+@app.command()
+@common.output
 def preview(
     data_source_name: opts.DataSource,
     source_location: opts.SourceLocation,
@@ -65,27 +95,78 @@ def preview(
     col_limit: opts.ColLimit = None,
     log_level: opts.LogLevel = opts.LogLevels.WARNING,
     version: opts.Version = False,
+    json_output: opts.JsonOutput = False,
 ):
-    "Preview data from a source location"
-    common.main_callback(solution_path, log_level, version)
+    return read_source(
+        "preview",
+        data_source_name,
+        source_location,
+        solution_path,
+        log_level,
+        version,
+        json_output,
+        limit,
+    )
 
-    plugin = factory.get_plugin_for_data_source(data_source_name)
-    preview = plugin.preview_data(source_location, limit=limit)
 
-    batches = preview.collect_batches(chunk_size=limit)
+@app.command()
+@common.output
+def metadata(
+    data_source_name: opts.DataSource,
+    source_location: opts.SourceLocation,
+    solution_path: opts.SolutionPath,
+    log_level: opts.LogLevel = opts.LogLevels.WARNING,
+    version: opts.Version = False,
+    json_output: opts.JsonOutput = False,
+):
+    return read_source(
+        "metadata",
+        data_source_name,
+        source_location,
+        solution_path,
+        log_level,
+        version,
+        json_output,
+    )
 
-    # since the limit is pushed down to the source, there will be only one batch
-    # batches are mostly used to safely get a dataframe from a LazyFrame
-    df = next(batches)
 
-    df.show(
-        limit=limit,
-        tbl_hide_dataframe_shape=True,
-        tbl_cols=col_limit or len(preview.collect_schema().names()),
+@app.command()
+@common.output
+def import_description(
+    data_source_name: opts.DataSource,
+    source_location: opts.SourceLocation,
+    solution_path: opts.SolutionPath,
+    log_level: opts.LogLevel = opts.LogLevels.WARNING,
+    version: opts.Version = False,
+    json_output: opts.JsonOutput = False,
+):
+    return read_source(
+        "import-description",
+        data_source_name,
+        source_location,
+        solution_path,
+        log_level,
+        version,
+        json_output,
+    )
+
+
+@app.command()
+@common.output
+def test_connection(
+    data_source_name: opts.DataSource,
+    solution_path: opts.SolutionPath,
+    log_level: opts.LogLevel = opts.LogLevels.WARNING,
+    version: opts.Version = False,
+    json_output: opts.JsonOutput = False,
+):
+    return read_source(
+        "test-connection", data_source_name, None, solution_path, log_level, version, json_output
     )
 
 
 @app.command("import")
+@common.output
 def import_(
     data_source: opts.DataSource,
     source_location: opts.SourceLocation,
@@ -93,117 +174,66 @@ def import_(
     solution_path: opts.SolutionPath,
     log_level: opts.LogLevel = opts.LogLevels.WARNING,
     version: opts.Version = False,
+    json_output: opts.JsonOutput = False,
 ):
-    "Import a table from a source into the model at the provided locator"
-    common.main_callback(solution_path, log_level, version)
-
-    model_ = factory.get_model()
-
-    if model_.has_locator(locator):
-        raise utils.create_error("Entity already exists for this locator")
-
-    _ = source.import_from_source(data_source, source_location, locator, model=model_)
-
-    model_.save(locator)
-
-    typer.echo(f"Source table imported into model at {locator}")
+    result = common.session(solution_path, log_level, version).execute(
+        Operation(
+            op="sources.import",
+            locator=locator,
+            data_source=data_source,
+            source_location=source_location,
+        )
+    )
+    if not json_output:
+        typer.echo(f"Source table imported into model at {locator}")
+    return result
 
 
 @app.command()
+@common.output
+def compare(
+    locator: opts.Locator,
+    solution_path: opts.SolutionPath,
+    mode: Mode = "complete",
+    log_level: opts.LogLevel = opts.LogLevels.WARNING,
+    version: opts.Version = False,
+    json_output: opts.JsonOutput = False,
+):
+    result = common.session(solution_path, log_level, version).compare(locator, mode)
+    if not json_output:
+        import rich
+
+        rich.print(result["item"]["diff"])
+    return result
+
+
+@app.command()
+@common.output
 def refresh(
     locator: opts.Locator,
     solution_path: opts.SolutionPath,
+    mode: Mode = "complete",
+    yes: Annotated[bool, typer.Option("--yes", "-y")] = False,
     log_level: opts.LogLevel = opts.LogLevels.WARNING,
     version: opts.Version = False,
+    json_output: opts.JsonOutput = False,
 ):
-    common.main_callback(solution_path, log_level, version)
+    if json_output and not yes:
+        raise errors.Datam8ValidationError(
+            message="refresh --json requires --yes; use compare to inspect changes"
+        )
+    session = common.session(solution_path, log_level, version)
+    if not yes:
+        result = session.compare(locator, mode)
+        if not result["item"]["hasChanges"]:
+            typer.echo(f"No changes detected for '{locator}'")
+            return result
+        import rich
 
-    model_ = factory.get_model()
-
-    wrapper, diff = source.compare_entity_with_source(locator, model=model_)
-
-    if not diff:
-        typer.echo(f"No changes detected for '{locator}'")
-        raise typer.Exit(0)
-
-    typer.echo(
-        f"Detected changes from sources: {[src.sourceLocation for src in wrapper.entity.sources]}"
-    )
-
-    # visualize the diff in a custom format, because the DeepDiffs COLOZRED_[COMPACT_]VIEW contain a
-    # bug that messes up the visual diff
-
-    if "values_changed" in diff:
-        typer.echo("\nChanged Values")
-        for path, change in diff["values_changed"].items():
-            typer.echo(f" - {path}: ", nl=False)
-            rich.print(f"{change['old_value']} -> {change['new_value']}")
-
-    change_types = ("attribute", "iterable_item", "dictionary_item")
-    change_operations = ("added", "removed")
-    plain_entity = wrapper.entity.model_dump(mode="json")
-
-    def print_change(key: str, diff, t, co):
-        typer.echo(f"\n{co.capitalize()} {t}")
-        for _, path in enumerate(diff[key]):
-            typer.echo(f" - {path}: ", nl=False)
-            rich.print(deepdiff.extract(plain_entity, path))
-
-    for t in change_types:
-        for co in change_operations:
-            key = f"{t}_{co}"
-            if key in diff:
-                print_change(key, diff, t, co)
-
-    ok = typer.prompt(
-        "Should these changes be imported [yN]",
-        default="n",
-        show_choices=False,
-        show_default=False,
-        type=Choice(choices=["y", "Y", "n", "N"]),
-        value_proc=lambda val: val.lower() == "y",
-    )
-
-    if not ok:
-        raise typer.Exit(1)
-
-    model_.modelEntities[wrapper.locator].update(**wrapper.entity.model_dump())
-    model_.save()
-
-    typer.echo("Saved detected changes")
-
-
-@app.command()
-def metadata(
-    data_source_name: opts.DataSource,
-    source_location: opts.SourceLocation,
-    solution_path: opts.SolutionPath,
-    log_level: opts.LogLevel = opts.LogLevels.WARNING,
-    version: opts.Version = False,
-):
-    "Retrieve metadata from a source object"
-    common.main_callback(solution_path, log_level, version)
-
-    plugin = factory.get_plugin_for_data_source(data_source_name)
-    metadata = plugin.get_table_metadata(source_location)
-    metadata.dataframe.show(
-        limit=None,
-        tbl_hide_dataframe_shape=True,
-        tbl_cols=8,
-    )
-
-
-@app.command()
-def test_connection(
-    data_source_name: opts.DataSource,
-    solution_path: opts.SolutionPath,
-    log_level: opts.LogLevel = opts.LogLevels.WARNING,
-    version: opts.Version = False,
-):
-    "Validate connectionstring and try connecting to the source"
-    common.main_callback(solution_path, log_level, version)
-
-    plugin = factory.get_plugin_for_data_source(data_source_name)
-    plugin.test_connection()
-
-    typer.echo("Datasource tested successfully")
+        rich.print(result["item"]["diff"])
+        if not typer.confirm("Should these changes be imported", default=False):
+            raise errors.Datam8ValidationError(message="Refresh cancelled")
+    result = session.execute(Operation(op="sources.refresh", locator=locator, mode=mode))
+    if not json_output:
+        typer.echo("Saved detected changes")
+    return result

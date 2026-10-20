@@ -111,3 +111,44 @@ def clean(
 
     if typer.confirm("Are you sure you want to delete all registered secrets?"):
         SecretResolver().clean()
+
+
+@app.command()
+@common.output
+def check(
+    path: opts.SecretPath,
+    solution_path: opts.SolutionPath,
+    log_level: opts.LogLevel = opts.LogLevels.WARNING,
+    version: opts.Version = False,
+    json_output: opts.JsonOutput = False,
+):
+    """Check whether a secret can be resolved without revealing its value."""
+    from datam8.errors import Datam8NotFoundError
+
+    common.main_callback(solution_path, log_level, version)
+    if SecretResolver().get_secret(path.as_posix()) is None:
+        raise Datam8NotFoundError(message="Secret is not available")
+    if not json_output:
+        typer.echo("Secret is available")
+    return {"item": {"path": path.as_posix(), "available": True}}
+
+
+@app.command("set")
+@common.output
+def set_(
+    path: opts.SecretPath,
+    solution_path: opts.SolutionPath,
+    file: Annotated[str, typer.Option(help="Secret value file; - reads stdin")],
+    force: bool = False,
+    log_level: opts.LogLevel = opts.LogLevels.WARNING,
+    version: opts.Version = False,
+    json_output: opts.JsonOutput = False,
+):
+    """Set a secret without prompting or echoing the value."""
+    common.main_callback(solution_path, log_level, version)
+    SecretResolver().set_secret(
+        path.as_posix(), common.input_value(file=file, text=True), force=force
+    )
+    if not json_output:
+        typer.echo(f"Stored secret '{path.as_posix()}'")
+    return {"path": path.as_posix(), "stored": True}

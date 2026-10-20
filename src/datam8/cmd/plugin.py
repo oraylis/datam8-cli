@@ -16,82 +16,121 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+"""Plugin discovery for people and agent clients."""
+
 from typing import Annotated
 
 import rich
 import typer
 
-from datam8 import config, logging, opts, parser
+from datam8 import config, opts, parser
 from datam8.plugins import PluginManager, init_builtin_plugins
 
 from . import common
 
-logger = logging.getLogger(__name__)
-
 app = typer.Typer(
     name="plugins",
-    help="Subcommands to manage plugins",
+    help="Inspect plugin manifests and connection configuration",
     no_args_is_help=True,
-    context_settings={
-        "help_option_names": ["-h", "--help"],
-    },
 )
+PluginId = Annotated[str, typer.Argument(help="Plugin ID, e.g. builtin:SQLServer")]
+
+
+def plugin_class(plugin_id, solution_path, log_level, version):
+    common.main_callback(solution_path, log_level, version)
+    init_builtin_plugins(plugin_id=plugin_id)
+    manager = PluginManager(parser.parse_solution_file(config.solution_path))
+    return manager.get_plugin_manifest(plugin_id), manager.get_plugin(plugin_id)
 
 
 @app.command()
+@common.output
 def list(
     solution_path: opts.SolutionPath,
     log_level: opts.LogLevel = opts.LogLevels.WARNING,
     version: opts.Version = False,
+    json_output: opts.JsonOutput = False,
 ):
-    "List available plugins"
     common.main_callback(solution_path, log_level, version)
-
     solution = parser.parse_solution_file(config.solution_path)
     init_builtin_plugins()
-
-    for plugin in PluginManager(solution).get_plugins():
-        rich.print(plugin)
+    items = PluginManager(solution).get_plugins()
+    if not json_output:
+        for plugin in items:
+            rich.print(plugin)
+    return {"count": len(items), "items": items}
 
 
 @app.command()
+@common.output
 def show(
-    plugin_id: Annotated[str, typer.Argument(help="Plugin ID (e.g. builtin:SQLServer)")],
+    plugin_id: PluginId,
     solution_path: opts.SolutionPath,
     log_level: opts.LogLevel = opts.LogLevels.WARNING,
     version: opts.Version = False,
+    json_output: opts.JsonOutput = False,
 ):
-    "List available plugins"
-    common.main_callback(solution_path, log_level, version)
-    init_builtin_plugins(plugin_id=plugin_id)
-
-    solution = parser.parse_solution_file(config.solution_path)
-    pm = PluginManager(solution)
-    plugin_manifest = pm.get_plugin_manifest(plugin_id)
-    PluginClass = pm.get_plugin(plugin_manifest.id)
-
-    rich.print(plugin_manifest)
-
-    typer.echo("Connection Properties")
-    rich.print(PluginClass.get_connection_properties())
-
-    typer.echo("DataType mappings")
-    rich.print(PluginClass.get_data_type_mappings())
+    manifest, plugin = plugin_class(plugin_id, solution_path, log_level, version)
+    connections = plugin.get_connection_properties()
+    mappings = plugin.get_data_type_mappings()
+    if not json_output:
+        rich.print(manifest)
+        typer.echo("Connection Properties")
+        rich.print(connections)
+        typer.echo("DataType mappings")
+        rich.print(mappings)
+    return {
+        "item": {
+            "manifest": manifest,
+            "connectionProperties": connections,
+            "dataTypeMappings": mappings,
+        }
+    }
 
 
 @app.command("ui-schema")
+@common.output
 def ui_schema(
-    plugin_id: Annotated[str, typer.Argument(help="Plugin ID (e.g. builtin:SQLServer)")],
+    plugin_id: PluginId,
     solution_path: opts.SolutionPath,
     log_level: opts.LogLevel = opts.LogLevels.WARNING,
     version: opts.Version = False,
+    json_output: opts.JsonOutput = False,
 ):
-    "Prints the results of the uiSchema capability of a plugin (intended for debugging)"
-    common.main_callback(solution_path, log_level, version)
-    init_builtin_plugins(plugin_id=plugin_id)
+    _, plugin = plugin_class(plugin_id, solution_path, log_level, version)
+    result = plugin.get_ui_schema()
+    if not json_output:
+        rich.print(result)
+    return {"item": result}
 
-    solution = parser.parse_solution_file(config.solution_path)
-    PluginClass = PluginManager(solution).get_plugin(plugin_id)
-    ui_schema = PluginClass.get_ui_schema()
 
-    rich.print(ui_schema)
+@app.command("connection-properties")
+@common.output
+def connection_properties(
+    plugin_id: PluginId,
+    solution_path: opts.SolutionPath,
+    log_level: opts.LogLevel = opts.LogLevels.WARNING,
+    version: opts.Version = False,
+    json_output: opts.JsonOutput = False,
+):
+    _, plugin = plugin_class(plugin_id, solution_path, log_level, version)
+    items = plugin.get_connection_properties()
+    if not json_output:
+        rich.print(items)
+    return {"count": len(items), "items": items}
+
+
+@app.command("data-type-mappings")
+@common.output
+def data_type_mappings(
+    plugin_id: PluginId,
+    solution_path: opts.SolutionPath,
+    log_level: opts.LogLevel = opts.LogLevels.WARNING,
+    version: opts.Version = False,
+    json_output: opts.JsonOutput = False,
+):
+    _, plugin = plugin_class(plugin_id, solution_path, log_level, version)
+    items = plugin.get_data_type_mappings()
+    if not json_output:
+        rich.print(items)
+    return {"count": len(items), "items": items}
