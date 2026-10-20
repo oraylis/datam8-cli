@@ -5,7 +5,7 @@ the [HTTP API](backend-contract.md). It does not require a running server. Each
 command reads persisted state; editor drafts are not part of that state.
 
 For a complete Windows PowerShell example, follow the
-[connected sample workflow](https://github.com/oraylis/datam8/blob/d5452b1fe01baeee67e0c2f988a7d4b6783b6ff9/docs/user-guide/cli-sample-workflow.md)
+[connected sample workflow](https://github.com/oraylis/datam8/blob/main/docs/user-guide/cli-sample-workflow.md)
 in the central handbook. It covers solution selection, plugin setup and a new
 Address pipeline through all sample layers.
 
