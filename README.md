@@ -22,6 +22,7 @@ Issues are tracked centrally in the DataM8 repository:
 - [Central DataM8 handbook](https://github.com/oraylis/datam8/blob/codex/documentation-v2/docs/index.md)
 - [Backend documentation index](docs/index.md)
 - [CLI examples and exit/output checks](docs/cli.md)
+- [Agent skill for model maintenance](skills/datam8-cli/SKILL.md)
 - [Backend HTTP contract, including source import and refresh](docs/backend-contract.md#source-import-and-refresh)
 - [Server startup, authentication and CORS](docs/server.md)
 - [Plugin development and compatibility](docs/connectors.md)
