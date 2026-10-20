@@ -17,7 +17,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 from typing import Annotated, Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 from datam8 import factory, model
@@ -74,9 +74,11 @@ async def clone_entity(
 
 @entities_router.put("/{locator:path}")
 async def create_entity(
-    body: dict[str, Any], locator: str
+    body: dict[str, Any],
+    locator: str,
+    source_file: Annotated[str | None, Query(alias="sourceFile")] = None,
 ) -> SingleItemResponse[model.EntityWrapper[b.BaseEntityType]]:
-    entity = factory.get_model().add_entity(locator, body)
+    entity = factory.get_model().add_entity(locator, body, source_file=source_file)
     return SingleItemResponse(item=entity)
 
 
