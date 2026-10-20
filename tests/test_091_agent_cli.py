@@ -244,7 +244,8 @@ def test_process_json_stdout_exit_codes_and_schema(workspace):
             assert json.loads(result.stdout)["item"]["data"]["displayName"] == "Größe 中文"
 
 
-def test_noninteractive_init_root_options_and_missing_solution(tmp_path):
+def test_noninteractive_init_root_options_and_missing_solution(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATAM8_SOLUTION_PATH", str(tmp_path / "environment.dm8s"))
     path = tmp_path / "new/CLI.dm8s"
     result = run(path, "init", "CLI")
     assert Path(result["item"]["solutionFile"]).is_file()

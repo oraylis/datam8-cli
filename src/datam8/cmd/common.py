@@ -211,7 +211,10 @@ def main_callback(
     context = click.get_current_context(silent=True)
     if context is not None and context.parent is not None:
         root = context.find_root()
-        if context.get_parameter_source("solution_path") == click.core.ParameterSource.DEFAULT:
+        if context.get_parameter_source("solution_path") in (
+            click.core.ParameterSource.DEFAULT,
+            click.core.ParameterSource.ENVIRONMENT,
+        ):
             if root.get_parameter_source("solution_path") in (
                 click.core.ParameterSource.COMMANDLINE,
                 click.core.ParameterSource.ENVIRONMENT,
