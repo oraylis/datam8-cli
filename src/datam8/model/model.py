@@ -497,10 +497,22 @@ class Model:
             )
         relative = Path(source_file)
         base = self.get_base_path_for_entity_type(_type).resolve()
-        target = (config.solution_folder_path / relative).resolve()
+        # Select a filesystem-discovered path instead of resolving an untrusted input.
+        target = (
+            next(
+                (
+                    path.resolve()
+                    for path in base.rglob("*")
+                    if path.relative_to(config.solution_folder_path.resolve()) == relative
+                    and path.suffix.lower() == ".json"
+                ),
+                None,
+            )
+            if not relative.is_absolute() and not relative.drive and ".." not in relative.parts
+            else None
+        )
         if (
-            relative.is_absolute()
-            or relative.drive
+            target is None
             or not target.is_relative_to(base)
             or target.suffix.lower() != ".json"
             or not target.is_file()
