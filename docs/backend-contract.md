@@ -90,6 +90,15 @@ editor. Runtime configuration changes and process failure may require a restart.
 
 ## Entity and function invariants
 
+- `PUT /entities/{locator}` accepts an optional `sourceFile` query parameter for
+  Attribute Types, Data Types, Data Sources, Data Source Types, Data Products,
+  Zones, Properties and Property Values. It selects the existing collection JSON
+  to append to when `/model/save` runs. The path is relative to the solution
+  directory and must resolve inside its configured Base directory, refer to an
+  existing JSON file, and contain the same entity type as the locator. Invalid
+  targets return 400 before changing model state. Without `sourceFile`, creation
+  retains its existing default file placement. The entity body and response are
+  unchanged; `sourceFile` is not an entity field.
 - Entity rename uses `POST /entities/rename`; model entities and folders use
   `POST /entities/move`.
 - Renaming a Base item preserves its existing source JSON file, including custom

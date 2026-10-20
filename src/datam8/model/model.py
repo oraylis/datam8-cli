@@ -424,16 +424,26 @@ class Model:
 
     @overload
     def add_entity(
-        self, locator: Locator | str, /, content: dict[str, Any]
+        self,
+        locator: Locator | str,
+        /,
+        content: dict[str, Any],
+        *,
+        source_file: str | Path | None = None,
     ) -> EntityWrapper[b.BaseEntityType]: ...
 
     @overload
     def add_entity[T: b.BaseEntityType](
-        self, locator: Locator | str, /, content: T
+        self, locator: Locator | str, /, content: T, *, source_file: str | Path | None = None
     ) -> EntityWrapper[T]: ...
 
     def add_entity[T: b.BaseEntityType](
-        self, locator: Locator | str, /, content: dict[str, Any] | T
+        self,
+        locator: Locator | str,
+        /,
+        content: dict[str, Any] | T,
+        *,
+        source_file: str | Path | None = None,
     ) -> EntityWrapper[T]:
         _locator = _ensure_locator(locator)
         _type = b.EntityType(_locator.entityType)
@@ -443,6 +453,8 @@ class Model:
         )
         base_file_path = self.get_base_path_for_entity_type(_type)
         source_file_path = Path(base_file_path, *_locator.folders, _locator.default_file_name())
+        if source_file is not None:
+            source_file_path = self._existing_base_target(_type, source_file)
 
         match content:
             case dict() as c:
@@ -476,6 +488,47 @@ class Model:
         )
 
         return new_wrapper
+
+    def _existing_base_target(self, _type: b.EntityType, source_file: str | Path) -> Path:
+        """Validate explicit collection placement before mutating model state."""
+        if _type in (b.EntityType.MODEL_ENTITIES, b.EntityType.FOLDERS, b.EntityType.DATA_MODULES):
+            raise errors.Datam8ValidationError(
+                message="sourceFile requires a Base collection type."
+            )
+        relative = Path(source_file)
+        base = self.get_base_path_for_entity_type(_type).resolve()
+        # Select a filesystem-discovered path instead of resolving an untrusted input.
+        target = (
+            next(
+                (
+                    path.resolve()
+                    for path in base.rglob("*")
+                    if path.relative_to(config.solution_folder_path.resolve()) == relative
+                    and path.suffix.lower() == ".json"
+                ),
+                None,
+            )
+            if not relative.is_absolute() and not relative.drive and ".." not in relative.parts
+            else None
+        )
+        if (
+            target is None
+            or not target.is_relative_to(base)
+            or target.suffix.lower() != ".json"
+            or not target.is_file()
+        ):
+            raise errors.Datam8ValidationError(
+                message="sourceFile must select an existing JSON file inside the Base directory."
+            )
+        try:
+            collection = b.BaseEntities.from_json_file(target)
+        except ValueError as exc:
+            raise errors.Datam8ValidationError(
+                message="Invalid sourceFile collection JSON."
+            ) from exc
+        if collection.root.type != _type.value:
+            raise errors.Datam8ValidationError(message="sourceFile has a different entity type.")
+        return target
 
     def clone_entity(
         self,
