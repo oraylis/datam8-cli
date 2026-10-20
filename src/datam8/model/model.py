@@ -134,9 +134,9 @@ class Model:
     attributeTypes: EntityRepository[a.AttributeType]
     folders: EntityRepository[f.Folder]
     modelEntities: EntityRepository[m.ModelEntity]
-    lock = Lock()
 
     def __init__(self, solution: s.Solution, /, **kwargs: EntityRepository[b.BaseEntityType]):
+        self.lock = Lock()
         self.solution = solution
 
         for k, v in kwargs.items():

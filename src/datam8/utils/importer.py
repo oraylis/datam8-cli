@@ -24,6 +24,30 @@ from datam8 import config, errors, logging, utils
 
 logger = logging.getLogger(__name__)
 
+_workspace_module_roots: set[str] = set()
+_modules_before_workspace: dict[str, ModuleType] = {}
+
+
+def _remember_workspace_module(name: str) -> None:
+    global _modules_before_workspace
+    if not _workspace_module_roots:
+        _modules_before_workspace = dict(sys.modules)
+    _workspace_module_roots.add(name)
+
+
+def clear_workspace_modules() -> None:
+    """Unload only loader-owned modules and package children; restore shadows."""
+    for name in sys.modules.keys() | _modules_before_workspace.keys():
+        if any(name == root or name.startswith(root + ".") for root in _workspace_module_roots):
+            if name in _modules_before_workspace:
+                sys.modules[name] = _modules_before_workspace[name]
+            else:
+                sys.modules.pop(name, None)
+    _workspace_module_roots.clear()
+    _modules_before_workspace.clear()
+    TargetModuleFinder._path.clear()
+    machinery.PathFinder.invalidate_caches()
+
 
 def enable_target_modules(module_path: pathlib.Path) -> None:
     """Enable target modules.
@@ -110,6 +134,7 @@ def load_module(path: pathlib.Path, module_name: str) -> ModuleType:
         # TODO: raise a better error
         raise Exception("spec is none")
 
+    _remember_workspace_module(module_name)
     module = util.module_from_spec(spec)
     sys.modules[module_name] = module
     loader = spec.loader
@@ -128,4 +153,7 @@ class TargetModuleFinder(machinery.PathFinder):
 
     @classmethod
     def find_spec(cls, fullname: str, path=None, target=None):
-        return super().find_spec(fullname, cls._path, target)
+        spec = super().find_spec(fullname, cls._path, target)
+        if spec is not None:
+            _remember_workspace_module(fullname)
+        return spec
