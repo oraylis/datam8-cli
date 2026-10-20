@@ -4,6 +4,11 @@ The CLI operates directly on a local solution using the same model operations as
 the [HTTP API](backend-contract.md). It does not require a running server. Each
 command reads persisted state; editor drafts are not part of that state.
 
+For a complete Windows PowerShell example, follow the
+[connected sample workflow](https://github.com/oraylis/datam8/blob/d5452b1fe01baeee67e0c2f988a7d4b6783b6ff9/docs/user-guide/cli-sample-workflow.md)
+in the central handbook. It covers solution selection, plugin setup and a new
+Address pipeline through all sample layers.
+
 Use `--solution PATH` (`-s`) before or after the command. `DATAM8_SOLUTION_PATH`
 and the current directory remain supported. Use `--json` on the selected command.
 `init --json` defaults to an empty solution without prompting.
