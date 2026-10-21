@@ -141,7 +141,8 @@ All commands below support `--solution` and `--json`:
   connector configuration without creating a connection.
 - `secrets check PATH` checks availability. `secrets set PATH --file - [--force]`
   reads the exact secret value from stdin and confirms only the path and stored
-  status. Existing interactive secret commands remain available for people.
+  status. The CLI does not offer a command to display secret values; use `check`
+  for availability or `sources test-connection` to verify a connection.
 
 ## Verification
 

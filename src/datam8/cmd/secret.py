@@ -69,25 +69,6 @@ def add(
 
 
 @app.command()
-def show(
-    path: opts.SecretPath,
-    solution_path: opts.SolutionPath,
-    log_level: opts.LogLevel = opts.LogLevels.WARNING,
-    version: opts.Version = False,
-):
-    "Display a secret value"
-    common.main_callback(solution_path, log_level, version)
-
-    secret = SecretResolver().get_secret(PurePosixPath(path))
-    if secret is None:
-        typer.echo("Requested secret does not exist")
-        raise typer.Exit(1)
-
-    if typer.confirm("Requested secret exists, confirm to view value"):
-        typer.echo(secret)
-
-
-@app.command()
 def unset(
     path: opts.SecretPath,
     solution_path: opts.SolutionPath,

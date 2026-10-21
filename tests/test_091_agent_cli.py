@@ -298,6 +298,25 @@ def test_secret_stdin_batch_and_plugin_json(workspace, monkeypatch):
     )
 
 
+@pytest.mark.parametrize("json_output", [False, True])
+def test_secret_show_is_unavailable_without_accessing_keyring(workspace, monkeypatch, json_output):
+    from datam8.cmd import secret as secret_commands
+
+    def forbidden_resolver():
+        pytest.fail("Removed secret command must not access the keyring")
+
+    monkeypatch.setattr(secret_commands, "SecretResolver", forbidden_resolver)
+    args = ["secrets", "show", "Agent/password", "-s", str(workspace)]
+    result = CliRunner().invoke(app, [*args, "--json"] if json_output else args, input="y\n")
+    assert result.exit_code == 2, result.output
+    if json_output:
+        response = json.loads(result.stdout)
+        assert response["ok"] is False
+        assert "No such command" in response["error"]["message"]
+    else:
+        assert "No such command" in result.stderr
+
+
 def test_ambiguous_selectors_and_shared_function_sources(workspace):
     locator = "modelEntities/Raw/Shared"
     data = entity_data("Shared")
