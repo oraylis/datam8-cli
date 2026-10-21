@@ -334,3 +334,96 @@ def test_ambiguous_selectors_and_shared_function_sources(workspace):
     assert file.read_text() == "# shared"
     run(workspace, "functions", "delete", locator, "--step-no", "2")
     assert not file.exists()
+
+
+@pytest.fixture
+def generation_workspace(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "mode", config.RunMode.CLI)
+    path = tmp_path / "solution/CLI.dm8s"
+    solution.init_solution(path)
+    descriptor = json.loads(path.read_text())
+    descriptor["generatorTargets"] = [
+        {"name": "test", "isDefault": True, "sourcePath": "templates", "outputPath": "output"}
+    ]
+    path.write_text(json.dumps(descriptor), encoding="utf-8")
+    modules = path.parent / "templates/__modules"
+    modules.mkdir(parents=True)
+    (modules / "payload.py").write_text(
+        "from pathlib import Path\n"
+        "from datam8.generate import register_payload, BasePayload\n"
+        "@register_payload('test.j2')\n"
+        "def cli_test_payload(model, cache):\n"
+        "    return [BasePayload({'text': 'generated'}, Path('test.txt'))]\n",
+        encoding="utf-8",
+    )
+    (path.parent / "templates/test.j2").write_text("{{ data.text }}", encoding="utf-8")
+    return path
+
+
+@pytest.mark.parametrize("output", ["output", "../output", "absolute"])
+@pytest.mark.parametrize("mode", ["human", "json", "batch"])
+def test_generate_output_paths(generation_workspace, output, mode):
+    path = generation_workspace
+    if output == "absolute":
+        output = (path.parent.parent / "output").as_posix()
+    descriptor = json.loads(path.read_text())
+    descriptor["generatorTargets"][0]["outputPath"] = output
+    path.write_text(json.dumps(descriptor), encoding="utf-8")
+    if mode == "batch":
+        receipt = run(path, "apply", "--file", "-", stdin='{"operations":[{"op":"generate"}]}')
+        receipt = receipt["results"][0]
+    elif mode == "json":
+        receipt = run(path, "generate")
+    else:
+        result = CliRunner().invoke(app, ["generate", "-s", str(path)])
+        assert result.exit_code == 0, result.output
+        assert result.stdout.strip() == "Generation successful"
+    if mode != "human":
+        assert receipt["target"] == "test"
+        assert receipt["outputPath"] == output
+    assert (path.parent / output / "test.txt").read_text() == "generated"
+
+
+@pytest.mark.parametrize("failure", ["target", "template", "module"])
+@pytest.mark.parametrize("mode", ["human", "json", "batch"])
+def test_generate_errors_keep_cli_output_and_batch_receipts(generation_workspace, failure, mode):
+    path = generation_workspace
+    target = "missing" if failure == "target" else "test"
+    if failure == "template":
+        (path.parent / "templates/test.j2").write_text("{{ data.missing }}", encoding="utf-8")
+    if failure == "module":
+        (path.parent / "templates/__modules/payload.py").write_text(
+            "import datam8_review_missing_module_42\n", encoding="utf-8"
+        )
+    batch = {
+        "operations": [
+            {"op": "update", "locator": "dataTypes/int", "data": {"displayName": "Before"}},
+            {"op": "generate", "target": target},
+            {"op": "update", "locator": "dataTypes/int", "data": {"displayName": "After"}},
+        ]
+    }
+    args = ["apply", "--file", "-", "--json"] if mode == "batch" else ["generate", target]
+    if mode == "json":
+        args.append("--json")
+    result = subprocess.run(
+        [sys.executable, "-m", "datam8", *args, "-s", str(path)],
+        input=json.dumps(batch) if mode == "batch" else None,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env={**os.environ, "PYTHONPATH": str(Path(__file__).parents[1] / "src")},
+    )
+    assert result.returncode == 1, result.stderr
+    assert result.stderr
+    if mode == "human":
+        assert not result.stdout.strip()
+        return
+    response = json.loads(result.stdout)
+    assert len(result.stdout.splitlines()) == 1
+    assert response["ok"] is False
+    assert response["error"]["code"] == "execution_error"
+    if mode == "batch":
+        assert response["failedIndex"] == 1
+        assert len(response["results"]) == 1
+        assert response["results"][0]["op"] == "update"
+        assert run(path, "show", "dataTypes/int")["item"]["data"]["displayName"] == "Before"

@@ -313,14 +313,20 @@ class ModelSession:
                 self.model.resolve()
             generate.payload_functions.clear()
             target = op.target or self.model.get_generator_default_target().name
-            path = generate.generate_output(
-                self.model,
-                target=target or opts.default_target,
-                payloads=op.payloads,
-                clean_output=op.clean_output,
-                generate_all=False,
-            )
-            return {"target": target, "outputPath": relative_file(path)}
+            try:
+                generate.generate_output(
+                    self.model,
+                    target=target or opts.default_target,
+                    payloads=op.payloads,
+                    clean_output=op.clean_output,
+                    generate_all=False,
+                )
+            except SystemExit as exc:
+                raise RuntimeError("Generation failed; see stderr") from exc
+            return {
+                "target": target,
+                "outputPath": self.model.get_generator_target(target).outputPath.as_posix(),
+            }
         elif op.at:
             wrapper = self.model.get_entity_by_locator(locator)
             original = wrapper.entity.model_dump(mode="json", by_alias=True, exclude_unset=True)
