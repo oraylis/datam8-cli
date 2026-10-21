@@ -127,6 +127,7 @@ def serve(
     port: opts.ApiPort = 0,
     openapi: opts.OpenApi = False,
     export_openapi: opts.ExportOpenApi = False,
+    workspace_switch: bool = False,
     log_level: opts.LogLevel = opts.LogLevels.INFO,
     version: opts.Version = False,
 ):
@@ -135,11 +136,14 @@ def serve(
     from datam8.api import app as api_app  # for performance only import when needed
 
     config.mode = config.RunMode.API
+    if workspace_switch and (host not in {"127.0.0.1", "localhost"} or not token or not token.strip()):
+        raise typer.BadParameter("--workspace-switch requires a loopback host and a non-empty token")
     common.main_callback(solution_path, log_level, version)
 
     datam8_app = api_app.create_app(
         token=token.strip() if token is not None else token,
         enable_openapi=openapi,
+        workspace_switch=workspace_switch,
     )
 
     if export_openapi:

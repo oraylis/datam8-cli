@@ -20,7 +20,8 @@ preview behavior. New tests must not depend on customer solutions or live servic
 
 Model-dependent tests use `config`, `model_lazy` and `model` fixtures. Provide a
 **disposable copy** of a compatible solution, because model/CLI tests can write files.
-The existing CI uses `oraylis/datam8-sample-solution` at `v2.0.0-beta.3`; new focused
+The existing CI uses the `oraylis/datam8-sample-solution` commit behind
+`v2.0.0-beta.3` (`68001a2dcaa0b2931ee341f3527b96266a6e46da`); new focused
 regressions should continue to use self-contained fixtures instead of extending that
 dependency.
 
@@ -59,9 +60,11 @@ uvx --from ty==0.0.60 ty check src --exit-zero-on-warning
 uv build
 ```
 
-The canonical workflow is `.github/workflows/reusable-lint-build-test.yml`.
-The `linting` job runs Ruff and then ty. The full CI test run writes JUnit results;
-inspect pytest output and the report, including skip reasons (`pytest -rs`). A green
+The [CI and release entry points](../docs/ci.md) call
+`.github/workflows/reusable-lint-build-test.yml` for code changes and explicit runs.
+The `linting` job runs Ruff and then ty. Pytest's exit code fails the job directly;
+JUnit results are uploaded even after a failure. Inspect pytest output and the
+report, including skip reasons (`pytest -rs`). A green
 build alone is not evidence that source behavior or external plugins work.
 
 Builds regenerate `src/datam8_model/` from the pinned submodule. Review generated

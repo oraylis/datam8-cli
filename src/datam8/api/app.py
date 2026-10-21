@@ -42,6 +42,7 @@ from datam8 import config, logging
 from datam8.errors import Datam8Error, Datam8ValidationError
 
 from .routes import router
+from .workspace import WorkspaceManager, WorkspaceMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +80,9 @@ def _bind(host: str, port: int) -> tuple[socket.socket, int]:
     return sock, actual_port
 
 
-def create_app(*, token: str | None = None, enable_openapi: bool = False) -> FastAPI:
+def create_app(
+    *, token: str | None = None, enable_openapi: bool = False, workspace_switch: bool = False
+) -> FastAPI:
     """Create and configure the HTTP API application."""
 
     @asynccontextmanager
@@ -104,6 +107,11 @@ def create_app(*, token: str | None = None, enable_openapi: bool = False) -> Fas
             openapi_url=None,
             lifespan=lifespan,
         )
+
+    if workspace_switch and not token:
+        raise ValueError("Workspace switching requires a bearer token.")
+    app.state.workspace = WorkspaceManager(workspace_switch)
+    app.add_middleware(WorkspaceMiddleware, manager=app.state.workspace)
 
     @app.middleware("http")
     async def trace_middleware(request: Request, call_next):

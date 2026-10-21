@@ -67,8 +67,9 @@ class PluginManager:
         self.__solution_plugins[name] = plugin
 
     def reload(self, solution: Solution) -> list[PluginManifest]:
-        self.reset_plugins()
         self.load_plugins_from_solution(solution)
+        importer.clear_workspace_modules()
+        self.reset_plugins()
 
         return self.get_plugins()
 
@@ -150,13 +151,14 @@ class PluginManager:
         Load plugins from a solution's plugin directory into this PluginManager.
         """
         plugins_path = config.solution_folder_path / solution.pluginsPath
-        self.__plugins_dir_path = plugins_path
-
         logger.debug("Plugins directory: %s", plugins_path.as_posix())
-
+        manifests: dict[str, PluginManifest] = {}
         for file in plugins_path.glob("**/*.json"):
             logger.debug("Register plugin from %s", file.as_posix())
             manifest = PluginManifest.from_json_file(file)
-            self.register_plugin(manifest.id, manifest)
+            manifests[manifest.id] = manifest
+
+        self.__solution_plugins = manifests
+        self.__plugins_dir_path = plugins_path
 
         logger.info("Currently loaded %s plugins from solution", len(self.__solution_plugins))

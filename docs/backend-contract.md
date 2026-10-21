@@ -57,7 +57,36 @@ The current `create_app().openapi()` exposes these domains (no `/api` prefix):
 
 The implemented route surface is authoritative. Workspace selection in browser
 mode reads the solution bound at server startup; entering another path does not
-switch workspaces. Coordinate any additional route with consumers before shipping.
+switch workspaces.
+
+## Desktop workspace switching
+
+`serve --workspace-switch` opts a token-authenticated, loopback server into desktop
+workspace switching. Without this flag, workspace management returns 403 and the
+startup-bound browser behavior remains unchanged. The initial solution is still
+loaded at server startup; switching does not start a second interpreter.
+
+- `GET /workspace` returns `{ "workspaceId": "...", "path": "..." }`.
+- `POST /workspace/open` accepts `{ "path": "absolute/path/to/solution.dm8s" }`
+  and returns the same envelope after successful activation. Opening the active
+  path is idempotent. Non-absolute paths and non-`.dm8s` files return 400.
+- Requests in this mode, except health, version and `GET /workspace`, must supply
+  `X-DataM8-Workspace` with the workspace ID they were created for. A missing or
+  stale ID returns 409 before accessing workspace state. The open request carries
+  the old ID; a successful switch returns a new ID.
+- Workspace operations are serialized through response completion, including
+  save, import, generation and switching. A switch with unsaved model changes
+  returns 409. Consumers must flush editor autosaves before opening another path.
+- Candidate model and plugin manifests are loaded before activation. Load failure
+  restores the prior model, paths, plugins and secret scope and keeps its ID.
+  A successful switch releases references to old model/plugin state and clears
+  modules owned by the plugin/target loader and generation registrations.
+  Existing process modules shadowed by a local module are restored. Plugin reload
+  validates all manifests before replacing the registry and reloads local code.
+
+Electron updates its active path and renderer workspace ID only after success.
+Requests and responses belonging to an earlier workspace must not update the new
+editor. Runtime configuration changes and process failure may require a restart.
 
 ## Entity and function invariants
 

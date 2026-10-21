@@ -32,6 +32,7 @@ from .responses import Response204NoContent
 from .secrets import secrets_router
 from .solution import solution_router
 from .sources import sources_router
+from .workspace import workspace_router
 
 router = APIRouter()
 
@@ -86,3 +87,4 @@ router.include_router(sources_router)
 router.include_router(plugins_router)
 router.include_router(secrets_router)
 router.include_router(functions_router)
+router.include_router(workspace_router)

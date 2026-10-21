@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      upload_artifacts:
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' && !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  scope:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      docs_only: ${{ steps.scope.outputs.docs_only }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+      - run: node --test scripts/ci-scope.test.mjs scripts/check-docs.test.mjs
+      - run: node scripts/check-docs.mjs
+      - id: scope
+        run: node scripts/ci-scope.mjs
+
+  checks:
+    needs: scope
+    if: needs.scope.outputs.docs_only != 'true'
+    uses: ./.github/workflows/reusable-lint-build-test.yml
+    with:
+      upload_artifacts: ${{ inputs.upload_artifacts || false }}
+
+  result:
+    name: CI result
+    if: always()
+    needs: [scope, checks]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+      - run: node scripts/ci-scope.mjs result
+        env:
+          NEEDS: ${{ toJSON(needs) }}
