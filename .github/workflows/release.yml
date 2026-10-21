@@ -1,0 +1,74 @@
+name: Release
+on:
+  push:
+    tags: ['v*.*.*']
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install packaging==25.0
+      - name: Require a protected version tag from main
+        env:
+          REF_PROTECTED: ${{ github.ref_protected }}
+        run: |
+          test "$REF_PROTECTED" = true
+          git merge-base --is-ancestor HEAD origin/main
+      - id: version
+        name: Match the tag and Python package version
+        run: |
+          python - <<'PY'
+          import os
+          import tomllib
+          from pathlib import Path
+          from packaging.version import Version
+          version = tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"]
+          if os.environ["GITHUB_REF_NAME"] != "v" + version:
+              raise SystemExit("Release tag must match the project version")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"prerelease={str(Version(version).is_prerelease).lower()}\n")
+          PY
+  verified:
+    needs: validate
+    uses: ./.github/workflows/ci.yml
+    with:
+      upload_artifacts: true
+  publish:
+    needs: [validate, verified]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: dist-artifacts
+          path: dist
+      - name: Publish the tested wheel and source archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ needs.validate.outputs.prerelease }}
+        run: |
+          test "$(find dist -maxdepth 1 -name '*.whl' | wc -l)" -eq 1
+          test "$(find dist -maxdepth 1 -name '*.tar.gz' | wc -l)" -eq 1
+          if [[ "$PRERELEASE" == true ]]; then
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --draft --prerelease --generate-notes dist/*.whl dist/*.tar.gz
+            gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --latest=false
+          else
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --draft --generate-notes dist/*.whl dist/*.tar.gz
+            gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+          fi

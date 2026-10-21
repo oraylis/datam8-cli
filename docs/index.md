@@ -9,6 +9,7 @@
 - [ODCS and Unity Catalog builtin configuration](builtin-sources.md)
 - [Frontend integration](neon-cli-mapping.md)
 - [Test fixtures and commands](../tests/README.md)
+- [CI and package releases](ci.md)
 - [Local SQL fixture](../tests/db/README.md)
 - [Central user handbook](https://github.com/oraylis/datam8/blob/codex/documentation-v2/docs/user-guide/README.md)
 - [Documentation handoff](documentation-handoff.md)
