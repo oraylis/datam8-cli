@@ -113,3 +113,5 @@ modify files and use an unpinned type checker.
 uv run python scripts/add_license_headers.py --dry-run
 uv run python scripts/add_license_headers.py
 ```
+
+<!-- Temporary documentation-only CI acceptance reference. -->
