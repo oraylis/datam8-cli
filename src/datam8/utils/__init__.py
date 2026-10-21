@@ -40,6 +40,7 @@ import functools
 import os
 import platform
 from collections.abc import Callable
+from contextvars import ContextVar
 from logging import FileHandler, StreamHandler
 from pathlib import Path
 from typing import Any
@@ -52,6 +53,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from datam8 import config, logging, opts
 
 logger = logging.getLogger(__name__)
+capture_cli_errors: ContextVar[bool] = ContextVar("capture_cli_errors", default=False)
 
 
 def create_error(err: Exception | str, /, status_code: int = 500, exit_code: int = 1) -> Exception:
@@ -61,7 +63,10 @@ def create_error(err: Exception | str, /, status_code: int = 500, exit_code: int
         return fastapi.HTTPException(status_code=status_code, detail=str(err).splitlines())
 
     if isinstance(err, str):
-        err = Exception(err)
+        err = ValueError(err) if capture_cli_errors.get() else Exception(err)
+
+    if capture_cli_errors.get():
+        return err
 
     if logger.getEffectiveLevel() <= logging.DEBUG or config.mode == config.RunMode.TEST:
         return err

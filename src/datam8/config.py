@@ -60,6 +60,11 @@ def set_solution(path: str | Path) -> None:
     """
     global solution_path, solution_folder_path
     search_path = Path(path).expanduser()
+    if not search_path.exists():
+        raise errors.Datam8NotFoundError(
+            message="Solution path does not exist.",
+            details={"path": search_path.as_posix()},
+        )
 
     if search_path.is_file():
         solution_path = search_path.resolve(strict=True)
@@ -81,8 +86,8 @@ def set_solution(path: str | Path) -> None:
                 raise errors.Datam8ValidationError(
                     message="Multiple .dm8s files found; provide an explicit .dm8s path.",
                     details={
-                        "dir": {search_path.as_posix()},
-                        "candidates": map(str, dm8s_files),
+                        "dir": search_path.as_posix(),
+                        "candidates": [str(candidate) for candidate in sorted(dm8s_files)],
                     },
                 )
 

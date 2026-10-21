@@ -30,7 +30,7 @@ to those imports are executed. This reduces startup time.
 
 import json
 import pathlib
-import sys
+from typing import Annotated
 
 import typer
 
@@ -38,9 +38,7 @@ from datam8 import (
     config,
     errors,
     logging,
-    model,
     opts,
-    utils,
 )
 
 from . import common
@@ -48,6 +46,7 @@ from . import common
 logger = logging.getLogger(__name__)
 
 app = typer.Typer(
+    cls=common.CliGroup,
     name="datam8",
     add_completion=False,
     no_args_is_help=True,
@@ -59,21 +58,6 @@ app = typer.Typer(
     },
 )
 "App to interact with the model - used as the default/root app"
-
-
-def __setup_model_for_cli(
-    solution_path: opts.SolutionPath,
-    log_level: opts.LogLevel,
-    version: opts.Version,
-    *,
-    lazy: bool = True,
-) -> model.Model:
-    config.lazy = lazy
-    common.main_callback(solution_path, log_level, version)
-
-    from datam8 import factory
-
-    return factory.create_model_or_exit()
 
 
 @app.callback(invoke_without_command=True)
@@ -88,179 +72,51 @@ def _callback(
 
 
 @app.command()
-def list(
-    solution_path: opts.SolutionPath,
-    locator: opts.Locator = "modelEntities",
-    log_level: opts.LogLevel = opts.LogLevels.WARNING,
-    version: opts.Version = False,
-    json_output: opts.JsonOutput = False,
-) -> None:
-    """List model entities"""
-    common.main_callback(solution_path, log_level, version)
-
-    model = __setup_model_for_cli(solution_path, log_level, version)
-    wrappers = model.get_entities(locator)
-
-    if len(wrappers) == 0:
-        utils.emit_result("No entities found for search locator")
-        raise typer.Exit(1)
-
-    utils.emit_result(
-        f"{len(wrappers)} entities in total",
-        *[str(wrapper.locator) for wrapper in wrappers],
-        models=[wrapper.entity for wrapper in wrappers],
-        json=json_output,
-    )
-
-
-@app.command()
-def list_by_property(
-    locator: opts.Locator,
-    solution_path: opts.SolutionPath,
-    model_locator: opts.LocatorOpt = "modelEntities",
-    log_level: opts.LogLevel = opts.LogLevels.WARNING,
-    version: opts.Version = False,
-    json_output: opts.JsonOutput = False,
-) -> None:
-    "List Entities that have a specific property assigned. Searches for model entities by default."
-    common.main_callback(solution_path, log_level, version)
-
-    model = __setup_model_for_cli(solution_path, log_level, version)
-    wrappers = model.get_entities_by_property(locator, model_locator)
-
-    if len(wrappers) == 0:
-        utils.emit_result("No entities found for search locator")
-        raise typer.Exit(1)
-
-    utils.emit_result(
-        f"{len(wrappers)} entities in total",
-        *[str(wrapper.locator) for wrapper in wrappers],
-        models=[wrapper.entity for wrapper in wrappers],
-        json=json_output,
-    )
-
-
-@app.command()
-def show(
-    selector: opts.Selector,
-    solution_path: opts.SolutionPath,
-    by: opts.SelectBy = opts.Selectors.LOCATOR,
-    json_output: opts.JsonOutput = False,
-    version: opts.Version = False,
-    log_level: opts.LogLevel = opts.LogLevels.WARNING,
-) -> None:
-    """Get and display a model entity"""
-    _model = __setup_model_for_cli(solution_path, log_level, version)
-    entity_wrapper = None
-
-    try:
-        entity_wrapper = _model.get_entity_by_selector(selector, by=by)
-    except errors.EntityNotFoundError as err:
-        typer.echo(err)
-        suggestions = []
-
-        if by == opts.Selectors.LOCATOR:
-            parent_locator = model.Locator.from_path(selector).parent
-            typer.echo(parent_locator)
-            suggestions = _model.get_entities(parent_locator) if parent_locator is not None else []
-
-        if len(suggestions) > 0:
-            typer.echo(f"Did you mean one of these?: {[str(w.locator) for w in suggestions]}")
-        sys.exit(1)
-    except ValueError as err:
-        typer.echo(err)
-        sys.exit(1)
-
-    utils.emit_result(
-        f"File: {entity_wrapper.source_file}",
-        "\nProperties:",
-        *entity_wrapper.properties.values(),
-        "\nRaw Data:",
-        entity_wrapper.entity,
-        models=[entity_wrapper.entity],
-        json=json_output,
-        pretty=True,
-    )
-
-
-@app.command()
-def validate(
-    solution_path: opts.SolutionPath,
-    log_level: opts.LogLevel = opts.LogLevels.WARNING,
-    version: opts.Version = False,
-):
-    """Validate solution model"""
-    _model = __setup_model_for_cli(solution_path, log_level, version, lazy=False)
-
-    typer.echo("Validation successful")
-
-
-@app.command(name="generate")
-def generate_cmd(
-    solution_path: opts.SolutionPath,
-    target: opts.GeneratorTarget = opts.default_target,
-    log_level: opts.LogLevel = opts.LogLevels.WARNING,
-    clean_output: opts.CleanOutput = False,
-    payloads: opts.Payload = [],
-    generate_all: opts.AllTargets = False,
-    lazy: opts.Lazy = False,
-    version: opts.Version = False,
-):
-    """Generate a jinja2 template configured in the solution file"""
-
-    if generate_all:
-        logger.warning("The --all option is set, but is currently ignored.")
-
-    model = __setup_model_for_cli(solution_path, log_level, version, lazy=lazy)
-
-    from datam8 import generate
-
-    _ = generate.generate_output(
-        model,
-        target=target,
-        payloads=payloads,
-        generate_all=generate_all,
-        clean_output=clean_output,
-    )
-
-    typer.echo("Generation successful")
-
-
-@app.command()
+@common.output
 def init(
     name: opts.SolutionName,
-    type_: opts.SolutionType,
     solution_path: opts.SolutionPath,
+    type_: Annotated[opts.SolutionTypes | None, typer.Option("--type", "-t")] = None,
     log_level: opts.LogLevel = opts.LogLevels.INFO,
     version: opts.Version = False,
+    json_output: opts.JsonOutput = False,
 ):
     """
     Initialise a new empty DataM8 solution with default base entities.
     """
     config.log_level = log_level
     common.version_callback(version)
+    if type_ is None:
+        type_ = (
+            opts.SolutionTypes.EMPTY
+            if json_output
+            else opts.SolutionTypes(typer.prompt("Solution Type to initialize?", default="empty"))
+        )
 
     new_solution_path = solution_path.resolve()
     if solution_path.suffix != ".dm8s":
         new_solution_path = new_solution_path / f"{name}.dm8s"
 
     if new_solution_path.exists():
-        typer.echo(f"Solution file already exists at {new_solution_path}")
-        raise typer.Exit(1)
+        raise errors.Datam8ValidationError(
+            message=f"Solution file already exists at {new_solution_path}"
+        )
 
     if new_solution_path.parent.exists() and any(new_solution_path.parent.iterdir()):
-        typer.echo("Init needs to be run in an empty directory")
-        raise typer.Exit(1)
+        raise errors.Datam8ValidationError(message="Init needs to be run in an empty directory")
 
     from datam8 import solution
 
     if type_ == opts.SolutionTypes.EMPTY:
         solution.init_solution(new_solution_path)
-        typer.echo(f"Blank solution created at {new_solution_path}")
+        if not json_output:
+            typer.echo(f"Blank solution created at {new_solution_path}")
 
     if type_ == opts.SolutionTypes.SAMPLE:
         created_version = solution.init_solution_from_sample(new_solution_path)
-        typer.echo(f"Sample Solution in version {created_version} created")
+        if not json_output:
+            typer.echo(f"Sample Solution in version {created_version} created")
+    return {"item": {"solutionFile": new_solution_path.as_posix(), "type": type_.value}}
 
 
 @app.command()
@@ -304,52 +160,3 @@ def serve(
         app=datam8_app,
     )
     server.run(sockets=[sock])
-
-
-@app.command()
-def move(
-    solution_path: opts.SolutionPath,
-    src: opts.Locator,
-    dst: opts.Locator,
-    log_level: opts.LogLevel = opts.LogLevels.WARNING,
-    version: opts.Version = False,
-    force: bool = False,
-    json_output: opts.JsonOutput = False,
-):
-    """
-    Move entities into a target location. This a single or multiple entities at once.
-    """
-    model = __setup_model_for_cli(solution_path, log_level, version)
-
-    try:
-        moved_entities = model.move_entities(src, dst)
-    except Exception as err:
-        typer.echo(str(err))
-        raise typer.Exit(1) from err
-
-    if len(moved_entities) == 0:
-        typer.echo("No entities were moved")
-    else:
-        model.save()
-
-        typer.echo("The following entities were moved:")
-        for w in moved_entities:
-            typer.echo(f" - {w.locator}")
-
-
-@app.command()
-def rename(
-    solution_path: opts.SolutionPath,
-    locator: opts.Locator,
-    new_name: str,
-    log_level: opts.LogLevel = opts.LogLevels.WARNING,
-    version: opts.Version = False,
-    json_output: opts.JsonOutput = False,
-):
-    """Rename an entity"""
-    model = __setup_model_for_cli(solution_path, log_level, version)
-    _ = model.rename_entity(locator, new_name)
-
-    model.save()
-
-    typer.echo(f"Renamed '{locator}' to '{new_name}'")
