@@ -47,3 +47,10 @@ test("target reference detects stale output paths and omitted targets", () => {
   assert.equal(checkTargetDocumentation("| docs | `Generate/docs` | `Output/old` |\n", solution).length, 1);
   assert.equal(checkTargetDocumentation("No target rows\n", solution).length, 2);
 });
+
+test("heading anchors remove nested tags to a fixed point and handle incomplete tags", () => {
+  assert.ok(headingAnchors("# <scr<script>ipt>Save</script>\n").has("save"));
+  assert.ok(headingAnchors("# <<b>em>Save</em>\n").has("save"));
+  assert.ok(headingAnchors("# <script Save\n").has("script-save"));
+  assert.ok(headingAnchors("# Save\n\n## Save\n").has("save-1"));
+});

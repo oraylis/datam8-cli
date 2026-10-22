@@ -67,6 +67,28 @@ def test_secret_route_upserts_without_duplicate_registry_entries(fake_secret_bac
     assert SecretResolver().list_secrets() == [PurePosixPath(path)]
 
 
+def test_secret_operations_do_not_log_values_or_registry_metadata(fake_secret_backend, caplog) -> None:
+    caplog.set_level("DEBUG", logger="datam8.secrets")
+    resolver = SecretResolver()
+    secret_path = "datasources/private_customer/password"
+    resolver.set_secret(secret_path, "sensitive-first-value")
+    resolver.set_secret(secret_path, "sensitive-replacement-value", force=True)
+    assert resolver.get_secret(secret_path) == "sensitive-replacement-value"
+    assert resolver.list_secrets() == [PurePosixPath(secret_path)]
+    resolver.unset_secret(secret_path)
+    assert resolver.get_secret(secret_path) is None
+    assert resolver.list_secrets() == []
+    resolver.set_secret(secret_path, "sensitive-clean-value")
+    resolver.clean()
+    assert resolver.list_secrets() == []
+    records = [record for record in caplog.records if record.name == "datam8.secrets"]
+    assert records, "DEBUG logging must be exercised"
+    for record in records:
+        assert not record.args
+        for private in [secret_path, "private_customer", "test-solution", "sensitive-"]:
+            assert private not in record.getMessage()
+
+
 def _make_sql_plugin() -> SqlServer:
     plugin = SqlServer.__new__(SqlServer)
     plugin._data_source = SimpleNamespace(name="AdventureWorks")  # type: ignore[ty:invalid-assignment]

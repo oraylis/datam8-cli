@@ -91,15 +91,15 @@ class SecretResolver:
     #
 
     def __set_password(self, service: str, value: str, /) -> None:
-        logger.debug("Setting '%s'", service)
+        logger.debug("Setting secret")
         keyring.set_password(service, self.__username, value)
 
     def __get_password(self, service: str, /) -> str | None:
-        logger.debug("Getting '%s'", service)
+        logger.debug("Getting secret")
         return keyring.get_password(service, self.__username)
 
     def __unset_password(self, service: str, /) -> None:
-        logger.debug("Unsetting '%s'", service)
+        logger.debug("Unsetting secret")
         keyring.delete_password(service, self.__username)
 
     def __register_secret(self, path: PurePosixPath, /) -> None:
@@ -107,7 +107,7 @@ class SecretResolver:
         secrets = self.__get_password(service_name)
         posix_path = path.as_posix()
 
-        logger.debug(f"Before register: {secrets}")
+        logger.debug("Registering secret")
 
         if secrets is None or secrets == "":
             secrets = posix_path
@@ -118,7 +118,7 @@ class SecretResolver:
             secrets = f"{secrets},{path.as_posix()}"
 
         self.__set_password(service_name, secrets)
-        logger.debug(f"After register: {secrets}")
+        logger.debug("Secret registered")
 
     def __unregister_secret(self, path: PurePosixPath, /) -> None:
         service_name = self.__create_service_name()
@@ -126,7 +126,7 @@ class SecretResolver:
         current_secrets = [] if current_secrets is None else current_secrets.split(",")
         posix_path = path.as_posix()
 
-        logger.debug(f"Before unregister: {current_secrets}")
+        logger.debug("Unregistering secret")
 
         if posix_path not in current_secrets:
             logger.warning("Trying to unregister non existing secret")
@@ -135,7 +135,7 @@ class SecretResolver:
         path_index = current_secrets.index(posix_path)
         current_secrets.pop(path_index)
 
-        logger.debug(f"After unregister: {current_secrets}")
+        logger.debug("Secret unregistered")
 
         self.__set_password(service_name, ",".join(current_secrets))
 
@@ -191,7 +191,7 @@ class SecretResolver:
 
         secret_list = secrets.split(",")
 
-        logger.debug("Secret registry: '%s' [%s]", secrets, len(secret_list))
+        logger.debug("Listed secrets")
 
         return [PurePosixPath(p) for p in secret_list]
 
