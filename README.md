@@ -11,6 +11,95 @@ validates models, generates output, and serves the desktop/web editor over HTTP.
 [releases]: https://github.com/oraylis/datam8-cli/releases
 [version tags]: https://github.com/oraylis/datam8-cli/tags
 
+## Install the CLI
+
+To use DataM8, install a prebuilt wheel from [GitHub Releases][releases]. A repository checkout,
+Git submodules, and the development tools below are only needed when working on the CLI itself.
+
+### Install with uv (recommended)
+
+1. Install [uv](https://docs.astral.sh/uv/getting-started/installation/).
+2. Open the [releases page][releases], choose a version compatible with your solution, and download
+   the `datam8-<version>-py3-none-any.whl` file under **Assets**. For a v2 solution, select a v2
+   release, including a prerelease if necessary.
+3. In the directory containing the downloaded wheel, run the following commands. Replace
+   `<version>` with the version in the downloaded filename.
+
+```sh
+uv tool install --python 3.12 "./datam8-<version>-py3-none-any.whl"
+uv tool update-shell
+```
+
+uv installs the CLI and its dependencies in an isolated environment and downloads Python 3.12 if
+needed. Open a new terminal after updating `PATH`, then verify the installation:
+
+```sh
+datam8 --version
+datam8 --help
+```
+
+See the [uv tools guide](https://docs.astral.sh/uv/guides/tools/) for details.
+
+### Alternative: pipx
+
+If you already use [pipx](https://pipx.pypa.io/stable/installation/) and have Python 3.12 or newer
+installed, install the same downloaded wheel with:
+
+```sh
+pipx install "./datam8-<version>-py3-none-any.whl"
+pipx ensurepath
+```
+
+Open a new terminal, then run `datam8 --help`.
+
+### Optional features
+
+The base installation provides the CLI. Install extras when you need these features:
+
+| Extra | Feature |
+| --- | --- |
+| `api` | REST server via `datam8 serve` |
+| `azure` | Azure authentication and storage dependencies |
+| `sql` | SQL connectivity via ConnectorX |
+
+For example, install the API extra with uv, or replace an existing base installation:
+
+```sh
+uv tool install --force --python 3.12 "./datam8-<version>-py3-none-any.whl[api]"
+```
+
+Combine extras as `[api,azure,sql]` when needed. With pipx, use the same wheel path with extras
+in `pipx install --force`.
+
+### First steps
+
+For an existing solution:
+
+```sh
+datam8 validate --solution "path/to/MySolution.dm8s"
+datam8 generate --help
+```
+
+With a version that supports blank solution initialization (`datam8 init --help` lists
+`--type empty`), create a blank solution in a new directory:
+
+```sh
+mkdir MySolution
+cd MySolution
+datam8 init MySolution --type empty
+```
+
+The directory must be empty. The command creates `MySolution.dm8s` and the default base entities.
+Use `datam8 <command> --help` to see the options for each command.
+
+### Update or uninstall
+
+To update an installation made with uv, download the wheel from the desired release and install it
+with `uv tool install --force --python 3.12 "./datam8-<version>-py3-none-any.whl"`. Include the same
+extras you used before. To uninstall, run `uv tool uninstall datam8`.
+
+For pipx installations, use `pipx install --force` with the new wheel, or `pipx uninstall datam8`.
+
 ## Issues
 
 Issues are tracked centrally in the DataM8 repository:
