@@ -32,6 +32,12 @@ test("heading anchors remove inline and reintroduced HTML tags", () => {
   ]);
 });
 
+test("heading anchors handle exposed and incomplete tags", () => {
+  assert.ok(headingAnchors("# <scr<script>ipt>Save</script>\n").has("save"));
+  assert.ok(headingAnchors("# <<b>em>Save</em>\n").has("save"));
+  assert.ok(headingAnchors("# <script Save\n").has("script-save"));
+});
+
 test("capture evidence rejects incomplete exports, missing images and failed acceptance", () => {
   const manifest = {
     frontendCommit: "a".repeat(40), backendCommit: "b".repeat(40),

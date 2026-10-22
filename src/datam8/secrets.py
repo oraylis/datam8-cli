@@ -91,15 +91,15 @@ class SecretResolver:
     #
 
     def __set_password(self, service: str, value: str, /) -> None:
-        logger.debug("Setting '%s'", service)
+        logger.debug("Setting secret")
         keyring.set_password(service, self.__username, value)
 
     def __get_password(self, service: str, /) -> str | None:
-        logger.debug("Getting '%s'", service)
+        logger.debug("Getting secret")
         return keyring.get_password(service, self.__username)
 
     def __unset_password(self, service: str, /) -> None:
-        logger.debug("Unsetting '%s'", service)
+        logger.debug("Unsetting secret")
         keyring.delete_password(service, self.__username)
 
     def __register_secret(self, path: PurePosixPath, /) -> None:

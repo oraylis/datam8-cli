@@ -68,7 +68,7 @@ def test_secret_route_upserts_without_duplicate_registry_entries(fake_secret_bac
     assert SecretResolver().list_secrets() == [PurePosixPath(path)]
 
 
-def test_secret_operations_do_not_log_values_or_registry(
+def test_secret_operations_do_not_log_values_or_registry_metadata(
     fake_secret_backend, caplog: pytest.LogCaptureFixture
 ) -> None:
     resolver = SecretResolver()
@@ -76,8 +76,8 @@ def test_secret_operations_do_not_log_values_or_registry(
     first_value = "initial-password-sentinel"
     updated_value = "updated-password-sentinel"
     registry_marker = "registry-only-sentinel"
-    # Register a distinct marker before capture so it only appears in registry
-    # contents, rather than the service paths logged by subsequent operations.
+    # Register a distinct marker before capture to exercise registry contents
+    # independently of the path used for subsequent operations.
     resolver.set_secret(registry_marker, "unused-registry-password")
 
     with caplog.at_level(logging.DEBUG, logger="datam8.secrets"):
@@ -89,10 +89,17 @@ def test_secret_operations_do_not_log_values_or_registry(
         resolver.unset_secret(path)
         assert resolver.get_secret(path) is None
         assert resolver.list_secrets() == [PurePosixPath(registry_marker)]
+        resolver.set_secret(path, first_value)
+        resolver.clean()
+        assert resolver.list_secrets() == []
+        assert not fake_secret_backend
 
-    assert caplog.records
-    for sensitive in (first_value, updated_value, registry_marker):
-        assert sensitive not in caplog.text
+    records = [record for record in caplog.records if record.name == "datam8.secrets"]
+    assert records, "DEBUG logging must be exercised"
+    for record in records:
+        assert not record.args
+        for sensitive in (first_value, updated_value, registry_marker, path, "test-solution"):
+            assert sensitive not in record.getMessage()
 
 
 def _make_sql_plugin() -> SqlServer:
