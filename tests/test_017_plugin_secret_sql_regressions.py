@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from pathlib import PurePosixPath
 from types import SimpleNamespace
 
@@ -65,6 +66,33 @@ def test_secret_route_upserts_without_duplicate_registry_entries(fake_secret_bac
     assert SecretResolver().get_secret(f"ref://{path}") == "v2"
     assert SecretResolver().get_secret(f"secretRef://{path}") is None
     assert SecretResolver().list_secrets() == [PurePosixPath(path)]
+
+
+def test_secret_operations_do_not_log_values_or_registry(
+    fake_secret_backend, caplog: pytest.LogCaptureFixture
+) -> None:
+    resolver = SecretResolver()
+    path = "datasources/security-regression/password"
+    first_value = "initial-password-sentinel"
+    updated_value = "updated-password-sentinel"
+    registry_marker = "registry-only-sentinel"
+    # Register a distinct marker before capture so it only appears in registry
+    # contents, rather than the service paths logged by subsequent operations.
+    resolver.set_secret(registry_marker, "unused-registry-password")
+
+    with caplog.at_level(logging.DEBUG, logger="datam8.secrets"):
+        resolver.set_secret(path, first_value)
+        assert resolver.get_secret(path) == first_value
+        resolver.set_secret(path, updated_value, force=True)
+        assert resolver.get_secret(path) == updated_value
+        assert resolver.list_secrets() == [PurePosixPath(registry_marker), PurePosixPath(path)]
+        resolver.unset_secret(path)
+        assert resolver.get_secret(path) is None
+        assert resolver.list_secrets() == [PurePosixPath(registry_marker)]
+
+    assert caplog.records
+    for sensitive in (first_value, updated_value, registry_marker):
+        assert sensitive not in caplog.text
 
 
 def _make_sql_plugin() -> SqlServer:

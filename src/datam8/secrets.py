@@ -107,8 +107,6 @@ class SecretResolver:
         secrets = self.__get_password(service_name)
         posix_path = path.as_posix()
 
-        logger.debug(f"Before register: {secrets}")
-
         if secrets is None or secrets == "":
             secrets = posix_path
         elif f",{path.as_posix()}," in f",{secrets},":
@@ -118,7 +116,6 @@ class SecretResolver:
             secrets = f"{secrets},{path.as_posix()}"
 
         self.__set_password(service_name, secrets)
-        logger.debug(f"After register: {secrets}")
 
     def __unregister_secret(self, path: PurePosixPath, /) -> None:
         service_name = self.__create_service_name()
@@ -126,16 +123,12 @@ class SecretResolver:
         current_secrets = [] if current_secrets is None else current_secrets.split(",")
         posix_path = path.as_posix()
 
-        logger.debug(f"Before unregister: {current_secrets}")
-
         if posix_path not in current_secrets:
             logger.warning("Trying to unregister non existing secret")
             return
 
         path_index = current_secrets.index(posix_path)
         current_secrets.pop(path_index)
-
-        logger.debug(f"After unregister: {current_secrets}")
 
         self.__set_password(service_name, ",".join(current_secrets))
 
@@ -190,8 +183,6 @@ class SecretResolver:
             return []
 
         secret_list = secrets.split(",")
-
-        logger.debug("Secret registry: '%s' [%s]", secrets, len(secret_list))
 
         return [PurePosixPath(p) for p in secret_list]
 

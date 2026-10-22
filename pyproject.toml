@@ -47,8 +47,8 @@ Issues = "https://github.com/oraylis/datam8/issues"
 
 [dependency-groups]
 dev = [
-  "pytest~=8.3.0", # TODO: upgrade to 9.x.x
-  "pytest-cases~=3.8.0",
+  "pytest~=9.0.3",
+  "pytest-cases~=3.10.1",
   "coverage~=7.13.5",
   "hatchling~=1.27.0",
   "httpx~=0.25.0",
@@ -61,6 +61,8 @@ build-backend = "hatchling.build"
 
 [tool.uv]
 exclude-newer = "1 weeks"
+# Allow critical CA trust-store fixes without waiting for the global cooldown (GHSA-6q48-6c7w-9gw2).
+exclude-newer-package = { certifi = false }
 
 #############
 # tool.ruff #
