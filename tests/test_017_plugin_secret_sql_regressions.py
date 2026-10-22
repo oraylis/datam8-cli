@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from pathlib import PurePosixPath
 from types import SimpleNamespace
 
@@ -65,6 +66,40 @@ def test_secret_route_upserts_without_duplicate_registry_entries(fake_secret_bac
     assert SecretResolver().get_secret(f"ref://{path}") == "v2"
     assert SecretResolver().get_secret(f"secretRef://{path}") is None
     assert SecretResolver().list_secrets() == [PurePosixPath(path)]
+
+
+def test_secret_operations_do_not_log_values_or_registry_metadata(
+    fake_secret_backend, caplog: pytest.LogCaptureFixture
+) -> None:
+    resolver = SecretResolver()
+    path = "datasources/security-regression/password"
+    first_value = "initial-password-sentinel"
+    updated_value = "updated-password-sentinel"
+    registry_marker = "registry-only-sentinel"
+    # Register a distinct marker before capture to exercise registry contents
+    # independently of the path used for subsequent operations.
+    resolver.set_secret(registry_marker, "unused-registry-password")
+
+    with caplog.at_level(logging.DEBUG, logger="datam8.secrets"):
+        resolver.set_secret(path, first_value)
+        assert resolver.get_secret(path) == first_value
+        resolver.set_secret(path, updated_value, force=True)
+        assert resolver.get_secret(path) == updated_value
+        assert resolver.list_secrets() == [PurePosixPath(registry_marker), PurePosixPath(path)]
+        resolver.unset_secret(path)
+        assert resolver.get_secret(path) is None
+        assert resolver.list_secrets() == [PurePosixPath(registry_marker)]
+        resolver.set_secret(path, first_value)
+        resolver.clean()
+        assert resolver.list_secrets() == []
+        assert not fake_secret_backend
+
+    records = [record for record in caplog.records if record.name == "datam8.secrets"]
+    assert records, "DEBUG logging must be exercised"
+    for record in records:
+        assert not record.args
+        for sensitive in (first_value, updated_value, registry_marker, path, "test-solution"):
+            assert sensitive not in record.getMessage()
 
 
 def _make_sql_plugin() -> SqlServer:

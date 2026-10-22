@@ -25,6 +25,19 @@ test("reports empty alt text and heading spacing", () => {
   assert.equal(errors.length, 2);
 });
 
+test("heading anchors remove inline and reintroduced HTML tags", () => {
+  const source = "# Guide\n\n## <em>Überblick</em> 中文\n\n## Save\n\n## Save\n\n## <scrip<script>t>Read</script>\n\n## <scrip<script>is removed</script>t>alert(123)</script>\n";
+  assert.deepEqual([...headingAnchors(source)], [
+    "guide", "überblick-中文", "save", "save-1", "read", "alert123",
+  ]);
+});
+
+test("heading anchors handle exposed and incomplete tags", () => {
+  assert.ok(headingAnchors("# <scr<script>ipt>Save</script>\n").has("save"));
+  assert.ok(headingAnchors("# <<b>em>Save</em>\n").has("save"));
+  assert.ok(headingAnchors("# <script Save\n").has("script-save"));
+});
+
 test("capture evidence rejects incomplete exports, missing images and failed acceptance", () => {
   const manifest = {
     frontendCommit: "a".repeat(40), backendCommit: "b".repeat(40),
