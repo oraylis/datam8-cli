@@ -1,7 +1,8 @@
 # Build an Offline Connector
 
-This example targets the current development backend and its pinned schema, not
-the recorded desktop beta.6 runtime. Read [the plugin reference](connectors.md)
+This example targets the backend in this checkout and its pinned schema. For an
+installed release, use the example and references at its matching version tag.
+Read [the plugin reference](connectors.md)
 for interface details. It needs Python 3.12+ and a prepared backend checkout;
 follow [installation](../README.md) and [testing setup](../tests/README.md).
 

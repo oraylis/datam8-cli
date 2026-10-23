@@ -79,7 +79,7 @@ For source import/refresh endpoints and property ownership, see the
 
 Generation is synchronous:
 
-- See [the current route surface](backend-contract.md#current-v2-beta-route-surface)
+- See [the current route surface](backend-contract.md#current-v2-route-surface)
   for the implemented `/model/generate` body and response.
 
 ## Error envelope

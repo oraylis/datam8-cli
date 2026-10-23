@@ -1,8 +1,9 @@
 # Connector Plugins
 
-This reference describes the current development Python backend and its pinned
-schema. It does not establish compatibility with the recorded desktop beta.6
-runtime. See [the backend contract](backend-contract.md#source-import-and-refresh)
+This reference describes the Python backend in this checkout and its pinned
+schema. For an installed release, read it at the matching version tag and check
+the app's build manifest for its bundled backend.
+See [the backend contract](backend-contract.md#source-import-and-refresh)
 for HTTP and refresh semantics and [the offline example](plugin-example.md) for a
 complete runnable connector.
 
@@ -257,6 +258,6 @@ Legacy plugins using only `list_schemas()`, `list_tables()` or
 methods and `TableMetadata` wrapper. Adding abstract methods alone is insufficient.
 A dataframe-like object with only `to_dicts()` is not a `TableMetadata` result.
 
-The [frontend consumer notes](https://github.com/oraylis/datam8-frontend/blob/feature/external_refresh/docs/connectors_dev.md)
+The [frontend consumer notes](https://github.com/oraylis/datam8-frontend/blob/main/docs/connectors_dev.md)
 explain how the UI uses these results. User workflows belong in the
-[central handbook](https://github.com/oraylis/datam8/blob/codex/documentation-v2/docs/user-guide/sources.md).
+[central handbook](https://github.com/oraylis/datam8/blob/main/docs/user-guide/sources.md).
