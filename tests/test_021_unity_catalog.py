@@ -95,10 +95,10 @@ def test_locations_round_trip(location, make_plugin):
     "location",
     ["main.sales.Customers", "[main.sales].[Customers]", "`main`.`sales`.`Customers`"],
 )
-def test_source_definitions_separate_metadata_handle_and_sql_location(location, make_plugin):
+def test_source_definitions_use_one_location_for_metadata_and_data(location, make_plugin):
     definitions = make_plugin().get_sources(location)
 
-    assert {row["metadataLocation"] for row in definitions} == {location}
+    assert {row["metadataLocation"] for row in definitions} == {None}
     assert {row["sourceLocation"] for row in definitions} == {"`main`.`sales`.`Customers`"}
     assert [(row["sourceName"], row["targetName"]) for row in definitions] == [
         (name, name) for name in ("id", "name", "amount", "active", "details")

@@ -648,13 +648,13 @@ class DatabricksUnityCatalog(Plugin):
         )
 
     def get_sources(self, source_location: str, /) -> list[dict[str, Any]]:
-        """Keep the metadata handle separate from the quoted SQL read location."""
+        """Use the quoted table location for both metadata and data reads."""
         physical_location = _quoted_name(self._location(source_location, table=True))
         metadata = self.get_table_metadata(source_location)
         return [
             {
                 "sourceLocation": physical_location,
-                "metadataLocation": source_location,
+                "metadataLocation": None,
                 "sourceName": field.name,
                 "targetName": field.name,
                 "sourceDataType": {

@@ -231,7 +231,7 @@ def test_uc_builtin_api_import_save_reload_refresh(
         described = description.json()["entity"]
         assert described["name"] == "Customers"
         assert described["sources"][0]["sourceLocation"] == "`main`.`sales`.`Customers`"
-        assert described["sources"][0]["metadataLocation"] == "[main.sales].[Customers]"
+        assert described["sources"][0]["metadataLocation"] is None
         response = client.put(
             "/sources/UC/import",
             json={
@@ -242,7 +242,7 @@ def test_uc_builtin_api_import_save_reload_refresh(
         assert response.status_code == 200, response.text
         saved = json.loads((tmp_path / "Model/Stage/Customers.json").read_text())
         assert saved["sources"][0]["sourceLocation"] == "`main`.`sales`.`Customers`"
-        assert saved["sources"][0]["metadataLocation"] == "[main.sales].[Customers]"
+        assert "metadataLocation" not in saved["sources"][0]
         assert [a["dataType"]["type"] for a in saved["attributes"]] == [
             "long",
             "string",
@@ -262,7 +262,7 @@ def test_uc_builtin_api_import_save_reload_refresh(
             assert not unchanged.json()["has_changes"]
             refreshed_source = unchanged.json()["wrapper"]["entity"]["sources"][0]
             assert refreshed_source["sourceLocation"] == "`main`.`sales`.`Customers`"
-            assert refreshed_source["metadataLocation"] == "[main.sales].[Customers]"
+            assert refreshed_source["metadataLocation"] is None
         assert (
             client.get(
                 "/sources/UC/locations/preview",
@@ -311,7 +311,7 @@ def test_cli_navigation_and_import(cls, tmp_path, builtin_plugin, make_plugin):
     saved = json.loads((tmp_path / "Model/Stage/Imported.json").read_text())
     if cls is DatabricksUnityCatalog:
         assert saved["sources"][0]["sourceLocation"] == "`main`.`sales`.`Customers`"
-        assert saved["sources"][0]["metadataLocation"] == location
+        assert "metadataLocation" not in saved["sources"][0]
 
 
 def test_optional_metadata_preserves_existing_plugin_imports(
