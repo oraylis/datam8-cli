@@ -223,6 +223,15 @@ def test_uc_builtin_api_import_save_reload_refresh(
     factory._model = factory.create_model()
     with TestClient(create_app()) as client:
         assert client.get("/sources/UC/test").status_code == 200
+        description = client.get(
+            "/sources/UC/locations/import-description",
+            params={"source_location": "[main.sales].[Customers]"},
+        )
+        assert description.status_code == 200, description.text
+        described = description.json()["entity"]
+        assert described["name"] == "Customers"
+        assert described["sources"][0]["sourceLocation"] == "`main`.`sales`.`Customers`"
+        assert described["sources"][0]["metadataLocation"] == "[main.sales].[Customers]"
         response = client.put(
             "/sources/UC/import",
             json={
@@ -232,6 +241,8 @@ def test_uc_builtin_api_import_save_reload_refresh(
         )
         assert response.status_code == 200, response.text
         saved = json.loads((tmp_path / "Model/Stage/Customers.json").read_text())
+        assert saved["sources"][0]["sourceLocation"] == "`main`.`sales`.`Customers`"
+        assert saved["sources"][0]["metadataLocation"] == "[main.sales].[Customers]"
         assert [a["dataType"]["type"] for a in saved["attributes"]] == [
             "long",
             "string",
@@ -242,6 +253,16 @@ def test_uc_builtin_api_import_save_reload_refresh(
         assert saved["attributes"][2]["dataType"]["scale"] == 0
         assert saved["sources"][0]["mapping"][4]["sourceDataType"]["type"] == "struct<city:string>"
         assert client.post("/model/reload", params={"force": True}).status_code == 200
+        for refresh_mode in ("complete", "sources-only"):
+            unchanged = client.get(
+                "/sources/compare",
+                params={"locator": "modelEntities/Stage/Customers", "mode": refresh_mode},
+            )
+            assert unchanged.status_code == 200, unchanged.text
+            assert not unchanged.json()["has_changes"]
+            refreshed_source = unchanged.json()["wrapper"]["entity"]["sources"][0]
+            assert refreshed_source["sourceLocation"] == "`main`.`sales`.`Customers`"
+            assert refreshed_source["metadataLocation"] == "[main.sales].[Customers]"
         assert (
             client.get(
                 "/sources/UC/locations/preview",
@@ -287,7 +308,10 @@ def test_cli_navigation_and_import(cls, tmp_path, builtin_plugin, make_plugin):
     ):
         result = runner.invoke(app, [*args, "-s", str(path)])
         assert result.exit_code == 0, f"{result.output}\n{result.exception}"
-    assert (tmp_path / "Model/Stage/Imported.json").exists()
+    saved = json.loads((tmp_path / "Model/Stage/Imported.json").read_text())
+    if cls is DatabricksUnityCatalog:
+        assert saved["sources"][0]["sourceLocation"] == "`main`.`sales`.`Customers`"
+        assert saved["sources"][0]["metadataLocation"] == location
 
 
 def test_optional_metadata_preserves_existing_plugin_imports(

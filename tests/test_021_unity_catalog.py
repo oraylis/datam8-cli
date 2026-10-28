@@ -93,6 +93,24 @@ def test_locations_round_trip(location, make_plugin):
 
 @pytest.mark.parametrize(
     "location",
+    ["main.sales.Customers", "[main.sales].[Customers]", "`main`.`sales`.`Customers`"],
+)
+def test_source_definitions_separate_metadata_handle_and_sql_location(location, make_plugin):
+    definitions = make_plugin().get_sources(location)
+
+    assert {row["metadataLocation"] for row in definitions} == {location}
+    assert {row["sourceLocation"] for row in definitions} == {"`main`.`sales`.`Customers`"}
+    assert [(row["sourceName"], row["targetName"]) for row in definitions] == [
+        (name, name) for name in ("id", "name", "amount", "active", "details")
+    ]
+    assert definitions[1]["sourceDataType"]["charLen"] == 80
+    assert definitions[2]["sourceDataType"]["precision"] == 10
+    assert definitions[2]["sourceDataType"]["scale"] == 0
+    assert definitions[4]["sourceDataType"]["type"] == "struct<city:string>"
+
+
+@pytest.mark.parametrize(
+    "location",
     [
         "",
         "Customers",

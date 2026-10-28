@@ -137,6 +137,9 @@ row order rather than sorting it.
 `SourceObject` supplies `name`, `type`, optional `schema`, `description` and
 `properties`. Its existing `sourceOverride` is exposed in metadata responses for
 compatible clients; it is not a replacement for `get_sources()` in backend imports.
+New plugins should use `get_sources()` for physical locations and mappings rather
+than introduce another `sourceOverride` path. No `sourceOverride` is needed to
+separate metadata and data read locations.
 
 Use the dataframe spelling `numericScale`. The generated `SourceField` and
 metadata API currently use the legacy spelling `numbericScale`; `TableMetadata`
@@ -191,6 +194,7 @@ def get_sources(self, source_location):
     return [
         {
             "sourceLocation": "raw.customers",
+            "metadataLocation": "contracts/customers#Customers",
             "sourceName": "customer_id",
             "targetName": "id",
             "sourceAlias": "crm",
@@ -211,6 +215,9 @@ dictionary, including both `type` and `nullable`; use the physical source type.
 `metadataLocation` is the handle to describe on subsequent refreshes;
 `sourceLocation` is the physical read location. A per-row override can point to
 another metadata object, and an explicit null opts out of a separate handle.
+Omitting `metadataLocation` retains the selected import handle automatically, even
+when it differs from the physical `sourceLocation`. `SourceObject.name` remains
+the suggested entity name and does not determine either location.
 
 | Result | Meaning |
 | --- | --- |

@@ -163,6 +163,11 @@ editor. Runtime configuration changes and process failure may require a restart.
   types, business names and the technical object name as a suggested entity name.
   The selected target locator still determines the imported entity name. Plugins
   inheriting `get_sources() -> None` keep their existing import path.
+- Unity Catalog also supplies `get_sources()`: physical `sourceLocation` uses quoted
+  SQL identifiers (for example, `` `main`.`sales`.`Customers` ``), while
+  `metadataLocation` retains the selected connector handle. Import descriptions,
+  CLI/API imports and refresh use these definitions; `sourceOverride` remains a
+  compatibility hint for older clients.
 - Source metadata retains its existing schema: `dataType` is the source type.
   ODCS uses `physicalType`, or the declared `logicalType` when no physical type exists.
   Business names enrich existing model fields; no metadata hook overrides target types.
