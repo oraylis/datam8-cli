@@ -647,27 +647,6 @@ class DatabricksUnityCatalog(Plugin):
             ),
         )
 
-    def get_sources(self, source_location: str, /) -> list[dict[str, Any]]:
-        """Use the quoted table location for both metadata and data reads."""
-        physical_location = _quoted_name(self._location(source_location, table=True))
-        metadata = self.get_table_metadata(source_location)
-        return [
-            {
-                "sourceLocation": physical_location,
-                "metadataLocation": None,
-                "sourceName": field.name,
-                "targetName": field.name,
-                "sourceDataType": {
-                    "type": field.dataType,
-                    "nullable": field.isNullable,
-                    "charLen": field.maxLength,
-                    "precision": field.numericPrecision,
-                    "scale": field.numbericScale,
-                },
-            }
-            for field in metadata.iter_source_fields()
-        ]
-
     def get_source_capabilities(self) -> dict[str, bool]:
         capabilities = super().get_source_capabilities()
         capabilities["previewData"] = bool(_warehouse_id(self.extended_properties))

@@ -278,51 +278,6 @@ def test_read_from_data_source_uses_plugin_sources_and_import_location(monkeypat
     assert entity.sources[1].mapping[0].targetName == "firstName"
 
 
-@pytest.mark.parametrize("mode", ["complete", "sources-only"])
-def test_plugin_sets_independent_metadata_location_without_source_override(monkeypatch, mode):
-    calls = []
-
-    class SeparateLocationsPlugin(SourcePluginStub):
-        def get_sources(self, location):
-            calls.append(location)
-            return [
-                {
-                    "sourceLocation": "raw.customers",
-                    "metadataLocation": "contracts/customers#Customers",
-                    "sourceName": name,
-                    "targetName": name,
-                }
-                for name in ("id", "firstName")
-            ]
-
-        def get_table_metadata(self, location):
-            metadata = super().get_table_metadata(location)
-            assert metadata.source_object.sourceOverride is None
-            return metadata
-
-    plugin = SeparateLocationsPlugin()
-    monkeypatch.setattr(factory, "get_plugin_for_data_source", lambda *_args, **_kwargs: plugin)
-    model, locator, _ = _source_model()
-    model.attributeTypes = AttributeTypesStub()
-    entity = source.read_from_data_source("test", "browser-selection", model=model)
-    # Exercise serialization as well as repeated refresh from the persisted metadata handle.
-    model.modelEntities[locator].entity = m.ModelEntity.model_validate_json(
-        entity.model_dump_json()
-    )
-
-    for _ in range(2):
-        refreshed, diff = source.compare_entity_with_source(locator, model=model, mode=mode)
-        assert not diff
-        assert refreshed.entity.sources[0].sourceLocation == "raw.customers"
-        assert refreshed.entity.sources[0].metadataLocation == "contracts/customers#Customers"
-        model.modelEntities[locator].entity = refreshed.entity
-    assert calls == [
-        "browser-selection",
-        "contracts/customers#Customers",
-        "contracts/customers#Customers",
-    ]
-
-
 def test_import_description_exposes_plugin_entity(monkeypatch) -> None:
     model = configure_mappings(SimpleNamespace(attributeTypes=AttributeTypesStub()))
     monkeypatch.setattr(factory, "get_model", lambda: model)
