@@ -415,6 +415,7 @@ def _refreshed_sources() -> list[m.ExternalModelSource]:
 
 def test_source_only_refresh_preserves_entity_attributes_and_properties(monkeypatch) -> None:
     model, locator, original = _source_model()
+    model.modelEntities[locator].entity.description = "Local description"
     monkeypatch.setattr(
         source, "read_external_sources", lambda *_args, **_kwargs: _refreshed_sources()
     )
@@ -427,6 +428,41 @@ def test_source_only_refresh_preserves_entity_attributes_and_properties(monkeypa
         attribute.name for attribute in original.attributes
     ]
     assert wrapper.entity.properties[0].value == "old"
+    assert wrapper.entity.description == "Local description"
+
+
+@pytest.mark.parametrize("description", ["Updated description", "", None])
+def test_complete_refresh_updates_entity_description_without_mutating_model(
+    monkeypatch, description
+) -> None:
+    model, locator, original = _source_model()
+    original.description = "Old description"
+    model.modelEntities[locator].entity = original
+    refreshed = original.model_copy(deep=True)
+    refreshed.description = description
+    monkeypatch.setattr(source, "read_from_data_source", lambda *_args, **_kwargs: refreshed)
+
+    wrapper, diff = source.compare_entity_with_source(locator, model=model)
+
+    assert wrapper.entity.description == description
+    assert wrapper._changed and diff
+    assert model.modelEntities[locator].entity.description == "Old description"
+    model.modelEntities[locator].entity = wrapper.entity
+    repeated, repeated_diff = source.compare_entity_with_source(locator, model=model)
+    assert repeated.entity.description == description
+    assert not repeated._changed and not repeated_diff
+
+
+def test_refresh_without_external_sources_preserves_entity_description() -> None:
+    model, locator, original = _source_model()
+    original.description = "Local description"
+    original.sources = []
+    model.modelEntities[locator].entity = original
+
+    wrapper, diff = source.compare_entity_with_source(locator, model=model)
+
+    assert wrapper.entity.description == "Local description"
+    assert not diff
 
 
 def test_complete_refresh_updates_entity_properties_and_sources(monkeypatch) -> None:
@@ -686,6 +722,53 @@ def test_complete_refresh_merges_multiple_contracts(monkeypatch) -> None:
         "contract_b",
         "domain",
     }
+
+
+@pytest.mark.parametrize(
+    "descriptions,expected",
+    [
+        (("Shared", "Shared"), "Shared"),
+        ((None, "Shared"), "Shared"),
+        (("Shared", None), "Shared"),
+        ((None, None), None),
+    ],
+)
+def test_complete_refresh_combines_entity_descriptions(monkeypatch, descriptions, expected):
+    model, locator = _multi_contract_model()
+    model.modelEntities[locator].entity.description = "Old description"
+    plugin = MultiContractPlugin()
+    get_metadata = plugin.get_table_metadata
+
+    def metadata_with_description(location):
+        metadata = get_metadata(location)
+        metadata.source_object.description = descriptions[location == "contract_b"]
+        return metadata
+
+    monkeypatch.setattr(plugin, "get_table_metadata", metadata_with_description)
+    monkeypatch.setattr(factory, "get_plugin_for_data_source", lambda *_args, **_kwargs: plugin)
+
+    wrapper, _diff = source.compare_entity_with_source(locator, model=model)
+
+    assert wrapper.entity.description == expected
+
+
+def test_complete_refresh_rejects_conflicting_entity_descriptions(monkeypatch) -> None:
+    model, locator = _multi_contract_model()
+    original = model.modelEntities[locator].entity.model_copy(deep=True)
+    plugin = MultiContractPlugin()
+    get_metadata = plugin.get_table_metadata
+
+    def metadata_with_description(location):
+        metadata = get_metadata(location)
+        metadata.source_object.description = location
+        return metadata
+
+    monkeypatch.setattr(plugin, "get_table_metadata", metadata_with_description)
+    monkeypatch.setattr(factory, "get_plugin_for_data_source", lambda *_args, **_kwargs: plugin)
+
+    with pytest.raises(ValueError, match="Conflicting entity descriptions"):
+        source.compare_entity_with_source(locator, model=model)
+    assert model.modelEntities[locator].entity == original
 
 
 def test_complete_refresh_rejects_conflicting_entity_properties(monkeypatch) -> None:
