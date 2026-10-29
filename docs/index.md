@@ -1,5 +1,7 @@
 # Backend Documentation
 
+- [CLI 2.1.1 release notes](releases/2.1.1.md)
+- [CLI 2.1.0 release notes](releases/2.1.0.md)
 - [Generator 2.0.1 release notes](releases/2.0.1.md)
 - [CLI usage and output checks](cli.md)
 - [Canonical HTTP contract](backend-contract.md)
