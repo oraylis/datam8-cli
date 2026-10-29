@@ -205,6 +205,11 @@ editor. Runtime configuration changes and process failure may require a restart.
   before the model is changed. Source-only refresh does not read attribute metadata.
 - Returning `None` keeps the default one-source, one-column mapping derived from
   `get_table_metadata()`.
+- Complete refresh adopts the entity description from source metadata. Identical
+  descriptions from multiple sources are accepted; missing descriptions are ignored
+  when another source supplies one. Conflicting descriptions are rejected. If all
+  external sources have no description, the existing description is cleared.
+  Entities without external sources and source-only refresh retain their description.
 - Complete refresh updates source-owned attribute metadata (data type, description,
   business-key flag and supplied properties), while preserving local expressions,
   display names, history, units, refactor names and deletion markers. Existing
