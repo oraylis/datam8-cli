@@ -1,7 +1,8 @@
 # ODCS and Unity Catalog Builtins
 
-This page describes the current development backend and its pinned schema, not
-the recorded desktop beta.6 runtime. The plugins `builtin:OdcsFile` and
+This page describes the backend in this checkout and its pinned schema. For an
+installed release, read it at the matching version tag and check the app's build
+manifest for its bundled backend. The plugins `builtin:OdcsFile` and
 `builtin:DatabricksUnityCatalog` require no external plugin files in the solution
 and no additional cloud SDKs. Their short IDs `OdcsFile` and
 `DatabricksUnityCatalog` are also accepted.

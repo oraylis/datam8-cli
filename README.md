@@ -19,9 +19,11 @@ Git submodules, and the development tools below are only needed when working on 
 ### Install with uv (recommended)
 
 1. Install [uv](https://docs.astral.sh/uv/getting-started/installation/).
-2. Open the [releases page][releases], choose a version compatible with your solution, and download
-   the `datam8-<version>-py3-none-any.whl` file under **Assets**. For a v2 solution, select a v2
-   release, including a prerelease if necessary.
+2. Open the [current stable release](https://github.com/oraylis/datam8-cli/releases/latest),
+   check compatibility with your solution, and download the
+   `datam8-<version>-py3-none-any.whl` file under **Assets**. Use the [release history][releases]
+   when you need an older compatible version. Choose a prerelease only when deliberately
+   testing that version.
 3. In the directory containing the downloaded wheel, run the following commands. Replace
    `<version>` with the version in the downloaded filename.
 
@@ -108,7 +110,7 @@ Issues are tracked centrally in the DataM8 repository:
 
 ## Key docs
 
-- [Central DataM8 handbook](https://github.com/oraylis/datam8/blob/codex/documentation-v2/docs/index.md)
+- [Central DataM8 handbook](https://github.com/oraylis/datam8/blob/main/docs/index.md)
 - [Backend documentation index](docs/index.md)
 - [CLI examples and exit/output checks](docs/cli.md)
 - [Agent skill for model maintenance](skills/datam8-cli/SKILL.md)
