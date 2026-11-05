@@ -37,6 +37,7 @@ from datam8_model import model as m
 from datam8_model import property as p
 from datam8_model import zone as z
 
+from .ids import validate_model_entity_id
 from .locator import Locator, LocatorOrString, _ensure_locator
 
 logger = logging.getLogger(__name__)
@@ -458,6 +459,13 @@ class EntityWrapper[T: b.BaseEntityType](BaseModel):
         return False
 
     def update(self, **kwargs: Any) -> None:
+        if isinstance(self.entity, m.ModelEntity) and "id" in kwargs:
+            validate_model_entity_id(kwargs["id"], locator=str(self.locator))
+            if kwargs["id"] != self.entity.id:
+                raise errors.Datam8ValidationError(
+                    message=f"Model entity ID cannot be changed at {self.locator}",
+                    details={"id": self.entity.id, "requestedId": kwargs["id"]},
+                )
         new_entity = self.entity.model_copy(update=kwargs, deep=True)
 
         try:

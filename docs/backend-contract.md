@@ -91,6 +91,20 @@ editor. Runtime configuration changes and process failure may require a restart.
 
 ## Entity and function invariants
 
+- Model entity IDs are assigned by the backend on create, clone and source import,
+  uniformly in `1..9007199254740991`, independently of the solution's highest ID.
+  Create ignores a supplied ID; the returned wrapper's `entity.id` is authoritative.
+  Updates may include the unchanged ID but cannot change it. Rename/move preserve it.
+  Loading (including lazy load/reload) and saving reject duplicate IDs among live
+  model entities and IDs outside that range. Duplicate errors identify the ID and
+  affected locators. Existing valid IDs are retained. Solution repositories must
+  run `datam8 validate --solution <solution.dm8s> --json` as a required merge check
+  on their merged solution state; independent branches cannot reserve each other's IDs.
+- Wizard imports create without saving, collect the assigned IDs, resolve internal
+  relationships, then patch and save. On failure, consumers delete only entities
+  successfully created by that attempt and save those deletions by locator. An
+  unsaved deletion is discarded without creating a file. This uses the existing
+  persistence model; saves across multiple files are not a filesystem transaction.
 - `PUT /entities/{locator}` accepts an optional `sourceFile` query parameter for
   Attribute Types, Data Types, Data Sources, Data Source Types, Data Products,
   Zones, Properties and Property Values. It selects the existing collection JSON

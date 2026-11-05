@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+import secrets
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 from threading import Lock
@@ -39,6 +40,7 @@ from datam8_model import zone as z
 
 from . import entity_wrapper as ew
 from .entity_wrapper import EntityRepository, EntityWrapper, EntityWrapperVariant
+from .ids import MAX_MODEL_ENTITY_ID, validate_model_entity_id
 from .locator import ROOT_LOCATOR, Locator, LocatorOrString, _ensure_locator
 
 logger = logging.getLogger(__name__)
@@ -146,21 +148,37 @@ class Model:
         self._model_files: dict[Path, EntityFileRef] = {}
         """Internal dictionary to allow easy mapping of files and their entities"""
 
-        if len(self.modelEntities) == 0:
-            self.__next_model_id = 1
-        else:
-            self.__next_model_id = (
-                max(wrapper.entity.id for wrapper in self.modelEntities.values()) + 1
-            )
+        self.validate_model_entity_ids()
+        self._used_model_ids = {wrapper.entity.id for wrapper in self.modelEntities.values()}
 
     def __getitem__(self, type_: str) -> EntityRepository[b.BaseEntityType]:
         return getattr(self, type_)
 
     def get_next_model_id(self) -> int:
         with self.lock:
-            next = self.__next_model_id
-            self.__next_model_id += 1
-        return next
+            while True:
+                entity_id = secrets.randbelow(MAX_MODEL_ENTITY_ID) + 1
+                if entity_id not in self._used_model_ids:
+                    self._used_model_ids.add(entity_id)
+                    return entity_id
+
+    def validate_model_entity_ids(self) -> None:
+        locators_by_id: dict[int, list[str]] = {}
+        for wrapper in self.modelEntities.values():
+            if wrapper.is_deleted:
+                continue
+            entity_id = wrapper.entity.id
+            locator = str(wrapper.locator)
+            validate_model_entity_id(entity_id, locator=locator)
+            locators_by_id.setdefault(entity_id, []).append(locator)
+
+        duplicates = {key: value for key, value in locators_by_id.items() if len(value) > 1}
+        if duplicates:
+            raise errors.Datam8ValidationError(
+                message="Duplicate model entity IDs: "
+                + "; ".join(f"{key}: {', '.join(value)}" for key, value in duplicates.items()),
+                details={"duplicates": duplicates},
+            )
 
     def init_file_references(self) -> None:
         self._model_files = {}
@@ -897,6 +915,7 @@ class Model:
         """
         Saves the current state of the model or a specific entity to the corresponding json file.
         """
+        self.validate_model_entity_ids()
         changed_wrappers = [
             w
             for w in self.get_entities(locator or ROOT_LOCATOR)
@@ -977,6 +996,9 @@ class Model:
 
             for wrapper in file_to_wrappers[_file]["deleted"]:
                 del self[wrapper.locator.entityType][wrapper.locator]
+                file_ref = self._model_files[_file]
+                if wrapper.locator in file_ref.locators:
+                    file_ref.locators.remove(wrapper.locator)
 
         # remove file refs if there are no more locators associated with them
         self.cleanup_entity_file_references()
