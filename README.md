@@ -1,7 +1,22 @@
 # ORAYLIS DataM8 CLI
 
-DataM8's Python backend opens `.dm8s` solutions, imports and refreshes source metadata,
-validates models, generates output, and serves the desktop/web editor over HTTP.
+DataM8's Python CLI maintains local metadata models and generates target artifacts
+from templates. Use it to inspect and edit `.dm8s` solutions, validate changes,
+import source metadata or automate generation. The same package provides the
+HTTP backend used by the visual editor.
+
+## Start with your task
+
+| I want to… | Begin here | First result |
+| --- | --- | --- |
+| Use the CLI on a local solution | [Install the CLI](#install-the-cli), then [first steps](#first-steps) | Initialize or validate a solution without cloning the backend sources |
+| Script model edits or agent workflows | [Model-maintenance contract](docs/cli-agent-contract.md) | Discover schemas, inspect entities and apply explicit local changes with JSON results |
+| Validate and generate target files | [CLI usage](docs/cli.md) | Run a named target and inspect its new output; generation does not deploy it |
+| Develop a source connector | [Offline connector example](docs/plugin-example.md) and [plugin reference](docs/connectors.md) | Import static metadata into a disposable solution without a cloud account |
+| Change the CLI or HTTP backend | [Local development](#local-development) and [backend contract](docs/backend-contract.md) | Run the matching checkout and a focused regression test |
+
+For visual modeling, use the
+[DataM8 app and handbook](https://github.com/oraylis/datam8/blob/main/docs/installation.md).
 
 > [!IMPORTANT]
 > The main branch may contain active development, which could contain a broken solution.
@@ -42,6 +57,31 @@ datam8 --help
 
 See the [uv tools guide](https://docs.astral.sh/uv/guides/tools/) for details.
 
+### First steps
+
+For an existing solution:
+
+```sh
+datam8 validate --solution "path/to/MySolution.dm8s"
+datam8 generate --help
+```
+
+With a version that supports blank solution initialization (`datam8 init --help` lists
+`--type empty`), create a blank solution in a new directory:
+
+```sh
+mkdir MySolution
+cd MySolution
+datam8 init MySolution --type empty
+```
+
+The directory must be empty. The command creates `MySolution.dm8s` and default
+Base definitions. Run `datam8 validate --solution ./MySolution.dm8s` to check the
+new local solution. Add your own targets or use the
+[public sample](https://github.com/oraylis/datam8-sample-solution) before trying
+generation; blank initialization does not supply platform templates.
+Use `datam8 <command> --help` to see the options for each command.
+
 ### Alternative: pipx
 
 If you already use [pipx](https://pipx.pypa.io/stable/installation/) and have Python 3.12 or newer
@@ -72,27 +112,6 @@ uv tool install --force --python 3.12 "./datam8-<version>-py3-none-any.whl[api]"
 
 Combine extras as `[api,azure,sql]` when needed. With pipx, use the same wheel path with extras
 in `pipx install --force`.
-
-### First steps
-
-For an existing solution:
-
-```sh
-datam8 validate --solution "path/to/MySolution.dm8s"
-datam8 generate --help
-```
-
-With a version that supports blank solution initialization (`datam8 init --help` lists
-`--type empty`), create a blank solution in a new directory:
-
-```sh
-mkdir MySolution
-cd MySolution
-datam8 init MySolution --type empty
-```
-
-The directory must be empty. The command creates `MySolution.dm8s` and the default base entities.
-Use `datam8 <command> --help` to see the options for each command.
 
 ### Update or uninstall
 
