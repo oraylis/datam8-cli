@@ -143,7 +143,7 @@ datam8 sources import Contracts "sales/customers.yaml#customers" modelEntities/S
 
 ## Databricks Unity Catalog
 
-The builtin was adapted from `datam8-plugins/plugins/databricks_uc` version 1.1.0.
+The builtin supplies Unity Catalog metadata and SQL preview as part of the backend.
 Metadata uses the Unity Catalog REST API; preview uses the SQL Statement Execution
 API. No workspace runtime extension is installed.
 

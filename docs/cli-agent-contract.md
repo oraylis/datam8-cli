@@ -4,10 +4,9 @@ The CLI operates directly on a local solution using the same model operations as
 the [HTTP API](backend-contract.md). It does not require a running server. Each
 command reads persisted state; editor drafts are not part of that state.
 
-For a complete Windows PowerShell example, follow the
-[connected sample workflow](https://github.com/oraylis/datam8/blob/main/docs/user-guide/cli-sample-workflow.md)
-in the central handbook. It covers solution selection, plugin setup and a new
-Address pipeline through all sample layers.
+For a complete model and a first local validation/generation exercise, follow
+[the public sample guide](https://github.com/oraylis/datam8-sample-solution/blob/main/docs/getting-started.md).
+Use the commands below for model maintenance and automation on a disposable copy.
 
 Use `--solution PATH` (`-s`) before or after the command. `DATAM8_SOLUTION_PATH`
 and the current directory remain supported. Use `--json` on the selected command.

@@ -12,7 +12,7 @@ releases; exact versions remain in release notes and recorded evidence.
 - [Python connector development](connectors.md)
 - [Runnable offline connector example](plugin-example.md)
 - [ODCS and Unity Catalog builtin configuration](builtin-sources.md)
-- [Frontend integration](neon-cli-mapping.md)
+- [Frontend integration](frontend-cli-mapping.md)
 - [Test fixtures and commands](../tests/README.md)
 - [CI and package releases](ci.md)
 - [Local SQL fixture](../tests/db/README.md)

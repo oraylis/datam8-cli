@@ -1,6 +1,6 @@
 """Builtin Unity Catalog metadata and SQL preview connector.
 
-Adapted from ORAYLIS datam8-plugins/plugins/databricks_uc (1.1.0).
+Adapted from the ORAYLIS Unity Catalog connector (1.1.0).
 """
 
 from __future__ import annotations
