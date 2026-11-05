@@ -17,4 +17,3 @@ releases; exact versions remain in release notes and recorded evidence.
 - [CI and package releases](ci.md)
 - [Local SQL fixture](../tests/db/README.md)
 - [Central user handbook](https://github.com/oraylis/datam8/blob/main/docs/user-guide/README.md)
-- [Documentation handoff](documentation-handoff.md)
