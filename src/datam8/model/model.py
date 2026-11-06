@@ -18,9 +18,7 @@
 
 from __future__ import annotations
 
-import secrets
 from collections.abc import Iterator, Sequence
-from copy import deepcopy
 from pathlib import Path
 from threading import Lock
 from typing import Annotated, Any, overload
@@ -28,6 +26,7 @@ from typing import Annotated, Any, overload
 from pydantic import ConfigDict, Field, ValidationError
 
 from datam8 import config, errors, functions, logging, opts, utils
+from datam8.utils.ids import generate_entity_id, validate_entity_id
 from datam8_model import attribute as a
 from datam8_model import base as b
 from datam8_model import data_product as dp
@@ -41,7 +40,6 @@ from datam8_model import zone as z
 
 from . import entity_wrapper as ew
 from .entity_wrapper import EntityRepository, EntityWrapper, EntityWrapperVariant
-from .ids import MAX_MODEL_ENTITY_ID, validate_model_entity_id
 from .locator import ROOT_LOCATOR, Locator, LocatorOrString, _ensure_locator
 
 logger = logging.getLogger(__name__)
@@ -149,37 +147,42 @@ class Model:
         self._model_files: dict[Path, EntityFileRef] = {}
         """Internal dictionary to allow easy mapping of files and their entities"""
 
-        self.validate_model_entity_ids()
-        self._used_model_ids = {wrapper.entity.id for wrapper in self.modelEntities.values()}
+        self.validate_entity_ids()
+        self._used_entity_ids = {
+            wrapper.entity.id
+            for repo in (self.modelEntities, self.folders)
+            for wrapper in repo.values()
+        }
 
     def __getitem__(self, type_: str) -> EntityRepository[b.BaseEntityType]:
         return getattr(self, type_)
 
-    def get_next_model_id(self) -> int:
-        with self.lock:
-            while True:
-                entity_id = secrets.randbelow(MAX_MODEL_ENTITY_ID) + 1
-                if entity_id not in self._used_model_ids:
-                    self._used_model_ids.add(entity_id)
-                    return entity_id
+    def get_next_entity_id(self) -> int:
+        return generate_entity_id(self._used_entity_ids)
 
-    def validate_model_entity_ids(self) -> None:
-        locators_by_id: dict[int, list[str]] = {}
-        for wrapper in self.modelEntities.values():
-            if wrapper.is_deleted:
-                continue
-            entity_id = wrapper.entity.id
-            locator = str(wrapper.locator)
-            validate_model_entity_id(entity_id, locator=locator)
-            locators_by_id.setdefault(entity_id, []).append(locator)
+    get_next_model_id = get_next_entity_id
 
-        duplicates = {key: value for key, value in locators_by_id.items() if len(value) > 1}
-        if duplicates:
-            raise errors.Datam8ValidationError(
-                message="Duplicate model entity IDs: "
-                + "; ".join(f"{key}: {', '.join(value)}" for key, value in duplicates.items()),
-                details={"duplicates": duplicates},
-            )
+    def validate_entity_ids(self) -> None:
+        for entity_type, repo in (
+            (b.EntityType.MODEL_ENTITIES, self.modelEntities),
+            (b.EntityType.FOLDERS, self.folders),
+        ):
+            locators_by_id: dict[int, list[str]] = {}
+            for wrapper in repo.values():
+                if wrapper.is_deleted:
+                    continue
+                entity_id = wrapper.entity.id
+                locator = str(wrapper.locator)
+                validate_entity_id(entity_id, locator=locator)
+                locators_by_id.setdefault(entity_id, []).append(locator)
+
+            duplicates = {key: value for key, value in locators_by_id.items() if len(value) > 1}
+            if duplicates:
+                raise errors.Datam8ValidationError(
+                    message=f"Duplicate IDs in {entity_type.value}: "
+                    + "; ".join(f"{key}: {', '.join(value)}" for key, value in duplicates.items()),
+                    details={"entityType": entity_type.value, "duplicates": duplicates},
+                )
 
     def init_file_references(self) -> None:
         self._model_files = {}
@@ -480,15 +483,17 @@ class Model:
         match content:
             case dict() as c:
                 c["name"] = _locator.entityName
-                if _type == b.EntityType.MODEL_ENTITIES:
-                    c["id"] = self.get_next_model_id()
+                if _type in (b.EntityType.MODEL_ENTITIES, b.EntityType.FOLDERS):
+                    c["id"] = self.get_next_entity_id()
                 if _type == b.EntityType.FOLDERS:
                     c["path"] = "/".join([*_locator.folders, _locator.entityName])
                 new_entity = class_from_type(_type).from_dict(content)
-            case m.ModelEntity() as me:
-                new_entity = me
-                new_entity.id = self.get_next_model_id()
+            case (m.ModelEntity() | f.Folder()) as identified:
+                new_entity = identified.model_copy(deep=True)
+                new_entity.id = self.get_next_entity_id()
                 new_entity.name = _locator.entityName
+                if isinstance(new_entity, f.Folder):
+                    new_entity.path = "/".join([*_locator.folders, _locator.entityName])
             case _ as rest:
                 new_entity = rest
 
@@ -509,68 +514,6 @@ class Model:
         )
 
         return new_wrapper
-
-    def add_model_entities(
-        self, items: Sequence[tuple[str, dict[str, Any]]]
-    ) -> list[EntityWrapper[b.BaseEntityType]]:
-        """Create a complete batch, retaining existing files and unrelated drafts on failure."""
-        created: list[EntityWrapper[b.BaseEntityType]] = []
-        paths: set[Path] = set()
-        root = self.get_base_path_for_entity_type(b.EntityType.MODEL_ENTITIES).resolve()
-        try:
-            for locator, content in items:
-                loc = _ensure_locator(locator)
-                path = (root / Path(*loc.folders) / f"{loc.entityName}.json").resolve()
-                if (
-                    loc.entityType != b.EntityType.MODEL_ENTITIES.value
-                    or loc.entityName is None
-                    or not path.is_relative_to(root)
-                    or loc in self.modelEntities
-                    or path in paths
-                    or path.exists()
-                ):
-                    raise errors.Datam8ValidationError(
-                        message=f"Invalid or existing batch target: {loc}"
-                    )
-                created.append(
-                    self.add_entity(loc, {**content, "sources": [], "relationships": []})
-                )
-                paths.add(path)
-
-            references = {
-                str(w.locator): w.entity.id for w in self.modelEntities.values() if not w.is_deleted
-            }
-            live_ids = set(references.values())
-            for wrapper, (_, content) in zip(created, items, strict=True):
-                updates = {}
-                for field, location in (
-                    ("sources", "sourceLocation"),
-                    ("relationships", "targetLocation"),
-                ):
-                    rows = deepcopy(content.get(field, []))
-                    for row in rows if isinstance(rows, list) else []:
-                        if isinstance(row, dict) and not row.get("dataSource"):
-                            value = row.get(location)
-                            if isinstance(value, str):
-                                value = references.get(value.lstrip("/"))
-                            if type(value) is not int or value not in live_ids:
-                                raise errors.Datam8ValidationError(
-                                    message=f"Unknown model reference: {row.get(location)}"
-                                )
-                            row[location] = value
-                    updates[field] = rows
-                wrapper.entity = m.ModelEntity.from_dict({**wrapper.entity.model_dump(), **updates})
-            self.save(locators=[str(wrapper.locator) for wrapper in created])
-        except Exception as exc:
-            for wrapper in created:
-                self.modelEntities.remove(wrapper.locator)
-                self._model_files.pop(wrapper.source_file, None)
-            for path in paths:
-                path.unlink(missing_ok=True)
-            if isinstance(exc, ValidationError):
-                raise errors.Datam8ValidationError(message=str(exc)) from exc
-            raise
-        return created
 
     def _existing_base_target(self, _type: b.EntityType, source_file: str | Path) -> Path:
         """Validate explicit collection placement before mutating model state."""
@@ -974,18 +917,17 @@ class Model:
 
         return found_locators
 
-    def save(self, locator: str | None = None, /, *, locators: Sequence[str] | None = None) -> None:
+    def save(self, locator: str | None = None, /) -> None:
         """
         Saves the current state of the model or a specific entity to the corresponding json file.
         """
-        self.validate_model_entity_ids()
-        selected = (
-            self.get_entities(locator or ROOT_LOCATOR)
-            if locators is None
-            else [self.get_entity_by_locator(loc) for loc in locators]
-        )
-        changed_wrappers = [w for w in selected if w.has_changed and not w.is_deleted]
-        deleted_wrappers = [w for w in selected if w.is_deleted]
+        self.validate_entity_ids()
+        changed_wrappers = [
+            w
+            for w in self.get_entities(locator or ROOT_LOCATOR)
+            if w.has_changed and not w.is_deleted
+        ]
+        deleted_wrappers = [w for w in self.get_entities(locator or ROOT_LOCATOR) if w.is_deleted]
 
         no_of_changes = len(changed_wrappers)
         no_of_deletions = len(deleted_wrappers)

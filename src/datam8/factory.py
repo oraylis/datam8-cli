@@ -221,7 +221,7 @@ def create_undefined_folders(_model: model.Model, /):
     Goes through all model entities and adds folder wrappers for every parent locator
     of an entity that does not exist yet.
 
-    Folder IDs are simply sequential increased during runtime.
+    Folder IDs use the model's central ID allocator.
 
     Parameters
     ----------
@@ -230,15 +230,12 @@ def create_undefined_folders(_model: model.Model, /):
     """
     logger.debug("Create undefined folders")
 
-    existing_folder_ids = [w.entity.id for w in _model.folders.values()]
-    next_id = (max(existing_folder_ids) if len(existing_folder_ids) != 0 else 0) + 1
-
     undefined_folders: model.EntityDict[f.Folder] = {}
 
     for wrapper in _model.get_entity_iterator():
         loc = wrapper.locator
         for ploc in loc.parents:
-            if ploc in _model.folders or ploc.entityName is None:
+            if ploc in _model.folders or ploc in undefined_folders or ploc.entityName is None:
                 continue
 
             source_file_path = pathlib.Path(
@@ -254,12 +251,10 @@ def create_undefined_folders(_model: model.Model, /):
                 source_file=source_file_path.absolute(),
                 locator=ploc,
                 entity=f.Folder(
-                    id=next_id,
+                    id=_model.get_next_entity_id(),
                     name=ploc.entityName,
                 ),
             )
-
-            next_id += 1
 
     for loc in undefined_folders:
         if loc not in _model.folders:

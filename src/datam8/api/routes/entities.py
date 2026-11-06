@@ -72,25 +72,6 @@ async def clone_entity(
     return MultiItemResponse.from_list([entity])
 
 
-class BatchEntityBody(BaseModel):
-    locator: str
-    content: dict[str, Any]
-
-
-class BatchCreateBody(BaseModel):
-    items: Annotated[list[BatchEntityBody], Field(min_length=1)]
-
-
-@entities_router.put("/batch")
-async def create_model_entities(
-    body: BatchCreateBody,
-) -> MultiItemResponse[model.EntityWrapper[b.BaseEntityType]]:
-    created = factory.get_model().add_model_entities(
-        [(item.locator, item.content) for item in body.items]
-    )
-    return MultiItemResponse.from_list(created)
-
-
 @entities_router.put("/{locator:path}")
 async def create_entity(
     body: dict[str, Any],

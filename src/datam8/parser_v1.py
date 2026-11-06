@@ -2,6 +2,7 @@ import dataclasses
 import json
 import pathlib
 
+from datam8.utils.ids import generate_entity_id
 from datam8_model.v1 import (
     CoreModelEntry,
     CuratedModelEntry,
@@ -24,7 +25,7 @@ def parse_solution_file(
     index = Index.Model.from_json_file(solution_file_path.parent / "index.json")
     indeces: list[IndexEntry] = []
     mapping_file_id: dict[str, ModelFileReference] = {}
-    next_id = 1
+    used_ids: set[int] = set()
 
     if index.rawIndex is not None and index.rawIndex.entry is not None:
         indeces.extend(index.rawIndex.entry)
@@ -40,9 +41,8 @@ def parse_solution_file(
 
     for idx in indeces:
         mapping_file_id[idx.locator.lower()] = ModelFileReference(
-            id=next_id, path=pathlib.Path(idx.absPath)
+            id=generate_entity_id(used_ids), path=pathlib.Path(idx.absPath)
         )
-        next_id += 1
 
     return solution, mapping_file_id
 

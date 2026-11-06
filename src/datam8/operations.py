@@ -32,6 +32,7 @@ from datam8.model import EntityWrapper
 from datam8.model.model import class_from_type
 from datam8.plugins.navigation import normalize_source_item
 from datam8_model import base as b
+from datam8_model import folder as f
 from datam8_model import model as m
 
 
@@ -380,7 +381,7 @@ class ModelSession:
             assert op.new_locator is not None
             self.model.move_entities(locator, op.new_locator, force=op.force)
         result = self.persist()
-        if created is not None and isinstance(created.entity, m.ModelEntity):
+        if created is not None and isinstance(created.entity, (m.ModelEntity, f.Folder)):
             result["item"] = {"locator": str(created.locator), "id": created.entity.id}
         return result
 
