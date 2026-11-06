@@ -43,7 +43,7 @@ The current `create_app().openapi()` exposes these domains (no `/api` prefix):
 
 - `GET /health` (204), `GET /version` (`schemaVersion`, `appVersion`), `GET /config`.
 - `GET /solution`, `GET /solution/full`.
-- `GET /entities`, `GET|PUT|PATCH|DELETE /entities/{locator}`, `PUT /entities/clone`,
+- `GET /entities`, `GET|PUT|PATCH|DELETE /entities/{locator}`, `PUT /entities/clone`, `PUT /entities/batch`,
   `POST /entities/rename`, `POST /entities/move`, `POST /entities/move-single`.
 - `POST /model/save`, `POST /model/reload`, `GET /model/unsaved`.
 - `POST /model/generate`: optional body `{ "target": "...", "cleanOutput": true,
@@ -100,11 +100,16 @@ editor. Runtime configuration changes and process failure may require a restart.
   affected locators. Existing valid IDs are retained. Solution repositories must
   run `datam8 validate --solution <solution.dm8s> --json` as a required merge check
   on their merged solution state; independent branches cannot reserve each other's IDs.
-- Wizard imports create without saving, collect the assigned IDs, resolve internal
-  relationships, then patch and save. On failure, consumers delete only entities
-  successfully created by that attempt and save those deletions by locator. An
-  unsaved deletion is discarded without creating a file. This uses the existing
-  persistence model; saves across multiple files are not a filesystem transaction.
+- `PUT /entities/batch` creates and saves model entities in one request:
+  `{ "items": [{ "locator": "modelEntities/Raw/Customer", "content": { ... } }] }`.
+  Internal `sourceLocation` and `targetLocation` may contain model entity locators,
+  including forward/self references within the batch. The backend assigns IDs,
+  resolves these references and validates all items before saving only this batch.
+  Existing locators/files are rejected. The response's `items` contains the created
+  wrappers in request order. Failure removes this attempt's entities and new JSON
+  files; existing files, function sources and unrelated drafts are retained. A lost
+  success response leaves a complete saved batch; reload before retrying. This is
+  not a transaction against process crashes or persistent filesystem failures.
 - `PUT /entities/{locator}` accepts an optional `sourceFile` query parameter for
   Attribute Types, Data Types, Data Sources, Data Source Types, Data Products,
   Zones, Properties and Property Values. It selects the existing collection JSON

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import secrets
 from collections.abc import Iterator, Sequence
+from copy import deepcopy
 from pathlib import Path
 from threading import Lock
 from typing import Annotated, Any, overload
@@ -509,6 +510,68 @@ class Model:
 
         return new_wrapper
 
+    def add_model_entities(
+        self, items: Sequence[tuple[str, dict[str, Any]]]
+    ) -> list[EntityWrapper[b.BaseEntityType]]:
+        """Create a complete batch, retaining existing files and unrelated drafts on failure."""
+        created: list[EntityWrapper[b.BaseEntityType]] = []
+        paths: set[Path] = set()
+        root = self.get_base_path_for_entity_type(b.EntityType.MODEL_ENTITIES).resolve()
+        try:
+            for locator, content in items:
+                loc = _ensure_locator(locator)
+                path = (root / Path(*loc.folders) / f"{loc.entityName}.json").resolve()
+                if (
+                    loc.entityType != b.EntityType.MODEL_ENTITIES.value
+                    or loc.entityName is None
+                    or not path.is_relative_to(root)
+                    or loc in self.modelEntities
+                    or path in paths
+                    or path.exists()
+                ):
+                    raise errors.Datam8ValidationError(
+                        message=f"Invalid or existing batch target: {loc}"
+                    )
+                created.append(
+                    self.add_entity(loc, {**content, "sources": [], "relationships": []})
+                )
+                paths.add(path)
+
+            references = {
+                str(w.locator): w.entity.id for w in self.modelEntities.values() if not w.is_deleted
+            }
+            live_ids = set(references.values())
+            for wrapper, (_, content) in zip(created, items, strict=True):
+                updates = {}
+                for field, location in (
+                    ("sources", "sourceLocation"),
+                    ("relationships", "targetLocation"),
+                ):
+                    rows = deepcopy(content.get(field, []))
+                    for row in rows if isinstance(rows, list) else []:
+                        if isinstance(row, dict) and not row.get("dataSource"):
+                            value = row.get(location)
+                            if isinstance(value, str):
+                                value = references.get(value.lstrip("/"))
+                            if type(value) is not int or value not in live_ids:
+                                raise errors.Datam8ValidationError(
+                                    message=f"Unknown model reference: {row.get(location)}"
+                                )
+                            row[location] = value
+                    updates[field] = rows
+                wrapper.entity = m.ModelEntity.from_dict({**wrapper.entity.model_dump(), **updates})
+            self.save(locators=[str(wrapper.locator) for wrapper in created])
+        except Exception as exc:
+            for wrapper in created:
+                self.modelEntities.remove(wrapper.locator)
+                self._model_files.pop(wrapper.source_file, None)
+            for path in paths:
+                path.unlink(missing_ok=True)
+            if isinstance(exc, ValidationError):
+                raise errors.Datam8ValidationError(message=str(exc)) from exc
+            raise
+        return created
+
     def _existing_base_target(self, _type: b.EntityType, source_file: str | Path) -> Path:
         """Validate explicit collection placement before mutating model state."""
         if _type in (b.EntityType.MODEL_ENTITIES, b.EntityType.FOLDERS, b.EntityType.DATA_MODULES):
@@ -911,17 +974,18 @@ class Model:
 
         return found_locators
 
-    def save(self, locator: str | None = None, /) -> None:
+    def save(self, locator: str | None = None, /, *, locators: Sequence[str] | None = None) -> None:
         """
         Saves the current state of the model or a specific entity to the corresponding json file.
         """
         self.validate_model_entity_ids()
-        changed_wrappers = [
-            w
-            for w in self.get_entities(locator or ROOT_LOCATOR)
-            if w.has_changed and not w.is_deleted
-        ]
-        deleted_wrappers = [w for w in self.get_entities(locator or ROOT_LOCATOR) if w.is_deleted]
+        selected = (
+            self.get_entities(locator or ROOT_LOCATOR)
+            if locators is None
+            else [self.get_entity_by_locator(loc) for loc in locators]
+        )
+        changed_wrappers = [w for w in selected if w.has_changed and not w.is_deleted]
+        deleted_wrappers = [w for w in selected if w.is_deleted]
 
         no_of_changes = len(changed_wrappers)
         no_of_deletions = len(deleted_wrappers)
@@ -996,9 +1060,6 @@ class Model:
 
             for wrapper in file_to_wrappers[_file]["deleted"]:
                 del self[wrapper.locator.entityType][wrapper.locator]
-                file_ref = self._model_files[_file]
-                if wrapper.locator in file_ref.locators:
-                    file_ref.locators.remove(wrapper.locator)
 
         # remove file refs if there are no more locators associated with them
         self.cleanup_entity_file_references()

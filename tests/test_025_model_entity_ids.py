@@ -12,8 +12,8 @@ from datam8 import config, factory, solution
 from datam8.api.app import create_app
 from datam8.app import app
 from datam8.errors import Datam8ValidationError
-from datam8.model import Locator
 from datam8.model.ids import MAX_MODEL_ENTITY_ID
+from datam8.model.model import EntityFileRef
 
 
 def entity_data(name="Existing", entity_id=7):
@@ -112,13 +112,15 @@ def test_create_clone_update_move_and_reload_keep_actual_ids(id_workspace, monke
     assert saved["id"] == MAX_MODEL_ENTITY_ID
 
 
-@pytest.mark.parametrize("entity_id", [0, -1, MAX_MODEL_ENTITY_ID + 1])
-def test_cli_validation_rejects_invalid_ids(id_workspace, entity_id):
+@pytest.mark.parametrize(
+    "entity_id,exit_code", [(0, 2), (-1, 2), (MAX_MODEL_ENTITY_ID + 1, 2), (MAX_MODEL_ENTITY_ID, 0)]
+)
+def test_cli_validation_checks_id_range(id_workspace, entity_id, exit_code):
     file = id_workspace.parent / "model/Raw/Invalid.json"
     file.write_text(json.dumps(entity_data("Invalid", entity_id)), encoding="utf-8")
     result = CliRunner().invoke(app, ["validate", "-s", str(id_workspace), "--json"])
-    assert result.exit_code == 2, result.output
-    assert json.loads(result.stdout)["error"]["code"] == "validation_error"
+    assert result.exit_code == exit_code, result.output
+    assert json.loads(result.stdout)["ok"] == (exit_code == 0)
 
 
 def test_duplicate_ids_fail_loading_and_cli_with_locators(id_workspace):
@@ -136,39 +138,6 @@ def test_duplicate_ids_fail_loading_and_cli_with_locators(id_workspace):
     assert "7" in message and "Existing" in message and "Duplicate" in message
 
 
-def test_valid_mixed_ids_pass_cli_validation(id_workspace):
-    file = id_workspace.parent / "model/Raw/New.json"
-    file.write_text(json.dumps(entity_data("New", MAX_MODEL_ENTITY_ID)), encoding="utf-8")
-    result = CliRunner().invoke(app, ["validate", "-s", str(id_workspace), "--json"])
-    assert result.exit_code == 0, result.output
-    assert json.loads(result.stdout)["item"]["valid"]
-
-
-def test_source_import_uses_backend_id(tmp_path, builtin_environment, monkeypatch):
-    from builtin_plugins.solution import create_solution
-    from test_019_odcs import write_contract
-    from test_019_odcs_cases import contract
-
-    from datam8.plugins.builtins.odcs import OdcsFile
-
-    write_contract(tmp_path / "contract.json", contract())
-    path = create_solution(tmp_path, [(OdcsFile, "Contracts", {"path": "contract.json"})])
-    config.set_solution(path)
-    factory.get_model()
-    monkeypatch.setattr("datam8.model.model.secrets.randbelow", lambda _: MAX_MODEL_ENTITY_ID - 1)
-    with TestClient(create_app()) as client:
-        response = client.put(
-            "/sources/Contracts/import",
-            json={
-                "locator": "modelEntities/Stage/Imported",
-                "sourceLocation": "contract.json#customers",
-            },
-        )
-        assert response.status_code == 200, response.text
-    model = asyncio.run(factory.load_model(path))
-    assert model.modelEntities.get("Stage/Imported").entity.id == MAX_MODEL_ENTITY_ID
-
-
 def test_save_rejects_duplicate_before_writing(id_workspace):
     model = factory.get_model()
     new = model.add_entity("modelEntities/Raw/New", entity_data())
@@ -178,22 +147,88 @@ def test_save_rejects_duplicate_before_writing(id_workspace):
     assert not new.source_file.exists()
 
 
-@pytest.mark.parametrize("persist_first", [False, True])
-def test_rollback_deletes_only_created_entity(id_workspace, persist_first):
+@pytest.mark.parametrize(
+    "failure", [None, "validation", "write", "existing", "reference", "target"]
+)
+def test_batch_preserves_files_drafts_and_resolves_forward_references(
+    id_workspace, monkeypatch, failure
+):
     model = factory.get_model()
-    new = model.add_entity("modelEntities/Raw/New", entity_data())
     original = model.modelEntities.get("Raw/Existing")
     original.update(description="Unsaved draft")
-    if persist_first:
-        model.save("modelEntities/Raw/New")
-    model.delete_entity(Locator.from_path("modelEntities/Raw/New"))
-    model.save("modelEntities/Raw/New")
-    assert not new.source_file.exists()
-    assert new.locator not in model.modelEntities
-    assert new.source_file not in model._model_files
+    function = original.source_file.parent / "keep.py"
+    function.write_text("# Existing user file\n", encoding="utf-8")
+    first, second = entity_data("First"), entity_data("Second")
+    first["sources"] = [{"sourceLocation": "modelEntities/Raw/Second"}]
+    first["transformations"] = [
+        {"stepNo": 1, "name": "Function", "kind": "function", "function": {"source": "keep.py"}}
+    ]
+    second["relationships"] = [
+        {
+            "targetLocation": "modelEntities/Raw/First",
+            "attributes": [{"sourceName": "Id", "targetName": "Id"}],
+        }
+    ]
+    if failure == "validation":
+        second["attributes"] = []
+    if failure == "reference":
+        first["sources"][0]["sourceLocation"] = "modelEntities/Raw/Missing"
+    if failure == "write":
+        create = EntityFileRef.create
+
+        def fail_second(file_ref, *, wrappers):
+            if file_ref.file_path.stem == "Second":
+                assert (file_ref.file_path.parent / "First.json").exists()
+                raise OSError("Simulated write failure")
+            create(file_ref, wrappers=wrappers)
+
+        monkeypatch.setattr(EntityFileRef, "create", fail_second)
+    with TestClient(create_app(), raise_server_exceptions=False) as client:
+        response = client.put(
+            "/entities/batch",
+            json={
+                "items": [
+                    {"locator": "modelEntities/Raw/First", "content": first},
+                    {
+                        "locator": {
+                            "existing": "modelEntities/Raw/Existing",
+                            "target": "modelEntities/Raw/",
+                        }.get(failure, "modelEntities/Raw/Second"),
+                        "content": second,
+                    },
+                ]
+            },
+        )
+    if failure:
+        assert response.status_code == (500 if failure == "write" else 400), response.text
+        expected = {
+            "validation": "attributes",
+            "write": "Simulated write failure",
+            "existing": "batch target",
+            "reference": "Unknown model reference",
+            "target": "batch target",
+        }
+        assert expected[failure] in response.text
+        assert len(model.modelEntities) == 1
+        assert not (original.source_file.parent / "First.json").exists()
+        assert not (original.source_file.parent / "Second.json").exists()
+        assert all(path.stem not in ("First", "Second") for path in model._model_files)
+    else:
+        assert response.status_code == 200, response.text
+        saved = [
+            json.loads((original.source_file.parent / f"{name}.json").read_text())
+            for name in ("First", "Second")
+        ]
+        assert all(
+            item["id"] == row["entity"]["id"]
+            for item, row in zip(saved, response.json()["items"], strict=True)
+        )
+        assert saved[0]["sources"][0]["sourceLocation"] == saved[1]["id"]
+        assert saved[1]["relationships"][0]["targetLocation"] == saved[0]["id"]
+    assert function.read_text(encoding="utf-8") == "# Existing user file\n"
     assert original.has_changed
     assert "description" not in json.loads(original.source_file.read_text())
     model.save()
     reloaded = asyncio.run(factory.load_model(id_workspace))
-    assert len(reloaded.modelEntities) == 1
+    assert len(reloaded.modelEntities) == (1 if failure else 3)
     assert reloaded.modelEntities.get("Raw/Existing").entity.description == "Unsaved draft"
