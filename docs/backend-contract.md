@@ -1,8 +1,9 @@
 # Backend Contract (Canonical)
 
 This document is the canonical HTTP contract between the DataM8 Python backend (`datam8-cli`) and the v2 frontend.
-It describes this development checkout and its pinned schema, not every published
-beta runtime. See [connector development](connectors.md) for the Python interface.
+It describes this checkout and its pinned schema. For an installed release, read
+this document at the matching version tag; the app's build manifest identifies its
+bundled backend. See [connector development](connectors.md) for the Python interface.
 
 ## Startup and readiness
 
@@ -27,7 +28,7 @@ All non-readiness logs are written to stderr.
 - Implementation note: the CLI currently also accepts an omitted token, which disables
   authentication. Desktop launchers must always provide a non-empty token.
 
-## Current v2 beta route surface
+## Current v2 route surface
 
 Solution, Base and Model JSON files are read and written as UTF-8; generated text
 output and v1 migration output are also written as UTF-8 without a BOM. Before

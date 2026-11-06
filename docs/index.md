@@ -1,17 +1,19 @@
 # Backend Documentation
 
-- [CLI 2.1.1 release notes](releases/2.1.1.md)
-- [CLI 2.1.0 release notes](releases/2.1.0.md)
-- [Generator 2.0.1 release notes](releases/2.0.1.md)
+Technical references describe this checkout. For an installed release, select the
+same document at its version tag. General installation guidance follows stable
+releases; exact versions remain in release notes and recorded evidence.
+
+- [Current stable CLI release](https://github.com/oraylis/datam8-cli/releases/latest)
+- [Version-specific release notes](releases/)
 - [CLI usage and output checks](cli.md)
 - [Canonical HTTP contract](backend-contract.md)
 - [Server startup/authentication/CORS](server.md)
 - [Python connector development](connectors.md)
 - [Runnable offline connector example](plugin-example.md)
 - [ODCS and Unity Catalog builtin configuration](builtin-sources.md)
-- [Frontend integration](neon-cli-mapping.md)
+- [Frontend integration](frontend-cli-mapping.md)
 - [Test fixtures and commands](../tests/README.md)
 - [CI and package releases](ci.md)
 - [Local SQL fixture](../tests/db/README.md)
-- [Central user handbook](https://github.com/oraylis/datam8/blob/codex/documentation-v2/docs/user-guide/README.md)
-- [Documentation handoff](documentation-handoff.md)
+- [Central user handbook](https://github.com/oraylis/datam8/blob/main/docs/user-guide/README.md)

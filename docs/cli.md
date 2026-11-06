@@ -50,10 +50,10 @@ Read the readiness JSON for the actual port. Desktop passes a nonempty token;
 browser development requires compatible frontend URL/auth configuration. See
 [server](server.md) and [the HTTP contract](backend-contract.md).
 
-## Evidence and boundaries
+## Verification boundaries
 
-On 2026-10-01, CLI validate and docs generation ran successfully against a disposable
-archive of sample main `68001a2dcaa0b2931ee341f3527b96266a6e46da` with backend
-`85683fcaeaf13c4573bee3de9c4668b1ba3ab3b9`. This is CLI evidence, not packaged desktop
-or live-source acceptance. See [central compatibility](https://github.com/oraylis/datam8/blob/codex/documentation-v2/docs/compatibility.md)
-and [handoff](documentation-handoff.md).
+Run validation and generation on a disposable solution and inspect newly written
+output. These local checks do not establish installed-desktop, live-source or
+deployment acceptance. See [test setup](../tests/README.md) for fixtures and
+[release compatibility](https://github.com/oraylis/datam8/blob/main/docs/compatibility.md)
+for supported evidence boundaries.

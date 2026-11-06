@@ -1,7 +1,8 @@
 # ODCS and Unity Catalog Builtins
 
-This page describes the current development backend and its pinned schema, not
-the recorded desktop beta.6 runtime. The plugins `builtin:OdcsFile` and
+This page describes the backend in this checkout and its pinned schema. For an
+installed release, read it at the matching version tag and check the app's build
+manifest for its bundled backend. The plugins `builtin:OdcsFile` and
 `builtin:DatabricksUnityCatalog` require no external plugin files in the solution
 and no additional cloud SDKs. Their short IDs `OdcsFile` and
 `DatabricksUnityCatalog` are also accepted.
@@ -142,7 +143,7 @@ datam8 sources import Contracts "sales/customers.yaml#customers" modelEntities/S
 
 ## Databricks Unity Catalog
 
-The builtin was adapted from `datam8-plugins/plugins/databricks_uc` version 1.1.0.
+The builtin supplies Unity Catalog metadata and SQL preview as part of the backend.
 Metadata uses the Unity Catalog REST API; preview uses the SQL Statement Execution
 API. No workspace runtime extension is installed.
 
