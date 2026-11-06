@@ -91,6 +91,19 @@ editor. Runtime configuration changes and process failure may require a restart.
 
 ## Entity and function invariants
 
+- Model and folder entity IDs are assigned centrally by the backend on create,
+  clone, source import and migration, uniformly in `1..9007199254740991`,
+  independently of the solution's highest ID. Implicit folders use the same
+  allocator. New IDs avoid IDs already used by either entity type.
+  Create ignores a supplied ID; the returned wrapper's `entity.id` is authoritative.
+  Updates may include the unchanged ID but cannot change it. Rename/move preserve it.
+  Loading (including lazy load/reload) and saving reject duplicate IDs within each
+  entity type and IDs outside that range. Duplicate errors identify the ID and
+  affected locators. Existing valid IDs are retained, including historical overlap
+  between model and folder IDs. Solution repositories must run
+  `datam8 validate --solution <solution.dm8s> --json` as a required merge check on
+  their merged solution state; independent branches cannot reserve each other's IDs.
+  Multiple creates use the regular entity endpoint followed by `/model/save`.
 - `PUT /entities/{locator}` accepts an optional `sourceFile` query parameter for
   Attribute Types, Data Types, Data Sources, Data Source Types, Data Products,
   Zones, Properties and Property Values. It selects the existing collection JSON
