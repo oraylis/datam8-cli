@@ -27,6 +27,7 @@ from typing import Any, Protocol
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from datam8 import errors, logging, utils
+from datam8.utils.ids import validate_entity_id
 from datam8_model import attribute as a
 from datam8_model import base as b
 from datam8_model import data_product as dp
@@ -458,6 +459,13 @@ class EntityWrapper[T: b.BaseEntityType](BaseModel):
         return False
 
     def update(self, **kwargs: Any) -> None:
+        if isinstance(self.entity, (m.ModelEntity, f.Folder)) and "id" in kwargs:
+            validate_entity_id(kwargs["id"], locator=str(self.locator))
+            if kwargs["id"] != self.entity.id:
+                raise errors.Datam8ValidationError(
+                    message=f"Entity ID cannot be changed at {self.locator}",
+                    details={"id": self.entity.id, "requestedId": kwargs["id"]},
+                )
         new_entity = self.entity.model_copy(update=kwargs, deep=True)
 
         try:

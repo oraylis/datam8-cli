@@ -26,6 +26,7 @@ from typing import Annotated, Any, overload
 from pydantic import ConfigDict, Field, ValidationError
 
 from datam8 import config, errors, functions, logging, opts, utils
+from datam8.utils.ids import generate_entity_id, validate_entity_id
 from datam8_model import attribute as a
 from datam8_model import base as b
 from datam8_model import data_product as dp
@@ -146,21 +147,42 @@ class Model:
         self._model_files: dict[Path, EntityFileRef] = {}
         """Internal dictionary to allow easy mapping of files and their entities"""
 
-        if len(self.modelEntities) == 0:
-            self.__next_model_id = 1
-        else:
-            self.__next_model_id = (
-                max(wrapper.entity.id for wrapper in self.modelEntities.values()) + 1
-            )
+        self.validate_entity_ids()
+        self._used_entity_ids = {
+            wrapper.entity.id
+            for repo in (self.modelEntities, self.folders)
+            for wrapper in repo.values()
+        }
 
     def __getitem__(self, type_: str) -> EntityRepository[b.BaseEntityType]:
         return getattr(self, type_)
 
-    def get_next_model_id(self) -> int:
-        with self.lock:
-            next = self.__next_model_id
-            self.__next_model_id += 1
-        return next
+    def get_next_entity_id(self) -> int:
+        return generate_entity_id(self._used_entity_ids)
+
+    get_next_model_id = get_next_entity_id
+
+    def validate_entity_ids(self) -> None:
+        for entity_type, repo in (
+            (b.EntityType.MODEL_ENTITIES, self.modelEntities),
+            (b.EntityType.FOLDERS, self.folders),
+        ):
+            locators_by_id: dict[int, list[str]] = {}
+            for wrapper in repo.values():
+                if wrapper.is_deleted:
+                    continue
+                entity_id = wrapper.entity.id
+                locator = str(wrapper.locator)
+                validate_entity_id(entity_id, locator=locator)
+                locators_by_id.setdefault(entity_id, []).append(locator)
+
+            duplicates = {key: value for key, value in locators_by_id.items() if len(value) > 1}
+            if duplicates:
+                raise errors.Datam8ValidationError(
+                    message=f"Duplicate IDs in {entity_type.value}: "
+                    + "; ".join(f"{key}: {', '.join(value)}" for key, value in duplicates.items()),
+                    details={"entityType": entity_type.value, "duplicates": duplicates},
+                )
 
     def init_file_references(self) -> None:
         self._model_files = {}
@@ -461,15 +483,17 @@ class Model:
         match content:
             case dict() as c:
                 c["name"] = _locator.entityName
-                if _type == b.EntityType.MODEL_ENTITIES:
-                    c["id"] = self.get_next_model_id()
+                if _type in (b.EntityType.MODEL_ENTITIES, b.EntityType.FOLDERS):
+                    c["id"] = self.get_next_entity_id()
                 if _type == b.EntityType.FOLDERS:
                     c["path"] = "/".join([*_locator.folders, _locator.entityName])
                 new_entity = class_from_type(_type).from_dict(content)
-            case m.ModelEntity() as me:
-                new_entity = me
-                new_entity.id = self.get_next_model_id()
+            case (m.ModelEntity() | f.Folder()) as identified:
+                new_entity = identified.model_copy(deep=True)
+                new_entity.id = self.get_next_entity_id()
                 new_entity.name = _locator.entityName
+                if isinstance(new_entity, f.Folder):
+                    new_entity.path = "/".join([*_locator.folders, _locator.entityName])
             case _ as rest:
                 new_entity = rest
 
@@ -897,6 +921,7 @@ class Model:
         """
         Saves the current state of the model or a specific entity to the corresponding json file.
         """
+        self.validate_entity_ids()
         changed_wrappers = [
             w
             for w in self.get_entities(locator or ROOT_LOCATOR)

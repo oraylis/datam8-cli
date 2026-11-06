@@ -57,7 +57,7 @@ def test_move_folder_rebases_complete_subtree_and_metadata(model: Model) -> None
 
 def test_add_model_entity_ignores_client_id_and_uses_dedicated_file(model: Model) -> None:
     existing = next(iter(model.modelEntities.values()))
-    existing_max = max(wrapper.entity.id for wrapper in model.modelEntities.values())
+    existing_ids = {wrapper.entity.id for wrapper in model.modelEntities.values()}
     payload = existing.entity.model_copy().model_dump(mode="json")
     payload["id"] = 1
     payload["name"] = "ClientProvidedName"
@@ -68,7 +68,8 @@ def test_add_model_entity_ignores_client_id_and_uses_dedicated_file(model: Model
         payload,
     )
 
-    assert created.entity.id == existing_max + 1
+    assert 1 <= created.entity.id <= (1 << 53) - 1
+    assert created.entity.id not in existing_ids
     assert created.entity.name == "CreatedEntity"
     assert created.source_file == (
         model.get_base_path_for_entity_type(EntityType.MODEL_ENTITIES)

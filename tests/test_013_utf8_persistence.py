@@ -98,6 +98,8 @@ def test_import_refresh_reload_and_output_preserve_utf8(tmp_path, builtin_enviro
             assert response.status_code == 200, response.text
             response = client.post("/model/save")
         assert response.status_code in (200, 204), response.text
+        saved_id = json.loads(entity_path.read_text(encoding="utf-8"))["id"]
+        assert 1 <= saved_id <= (1 << 53) - 1
         assert (
             json.loads(entity_path.read_bytes().decode("utf-8"))["attributes"][0]["description"]
             == DESCRIPTION

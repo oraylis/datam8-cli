@@ -121,11 +121,13 @@ def test_odcs_api_import_save_reload_and_refresh(tmp_path, builtin_environment):
         data["schema"][0]["properties"].append(
             {"name": "added", "businessName": "Neu", "logicalType": "string"}
         )
+        data["schema"][0]["description"] = "Updated customer master"
         write_contract(tmp_path / "contract.yaml", data)
         refreshed = client.get(
             "/sources/compare", params={"locator": "modelEntities/Stage/Customers"}
         )
         assert refreshed.status_code == 200, refreshed.text
+        assert refreshed.json()["wrapper"]["entity"]["description"] == "Updated customer master"
         assert refreshed.json()["wrapper"]["entity"]["attributes"][-1]["displayName"] == "Neu"
         sources_config["dataSources"][0]["dataTypeMapping"][0]["targetType"] = "int"
         sources_file.write_text(json.dumps(sources_config), encoding="utf-8")
@@ -142,6 +144,7 @@ def test_odcs_api_import_save_reload_and_refresh(tmp_path, builtin_environment):
             params={"locator": "modelEntities/Stage/Customers", "mode": "sources-only"},
         )
         assert sources_only.status_code == 200, sources_only.text
+        assert sources_only.json()["wrapper"]["entity"]["description"] == "Customer master"
         assert (
             sources_only.json()["wrapper"]["entity"]["attributes"][0]["dataType"]["type"] == "long"
         )
@@ -159,6 +162,16 @@ def test_odcs_api_import_save_reload_and_refresh(tmp_path, builtin_environment):
             "/sources/compare", params={"locator": "modelEntities/Stage/Customers"}
         )
         assert unchanged.status_code == 200 and not unchanged.json()["has_changes"]
+        saved = json.loads((tmp_path / "Model/Stage/Customers.json").read_text())
+        assert saved["description"] == "Updated customer master"
+        del data["schema"][0]["description"]
+        write_contract(tmp_path / "contract.yaml", data)
+        cleared = client.get(
+            "/sources/compare", params={"locator": "modelEntities/Stage/Customers"}
+        )
+        assert cleared.status_code == 200, cleared.text
+        assert cleared.json()["has_changes"]
+        assert cleared.json()["wrapper"]["entity"]["description"] is None
 
 
 def test_odcs_directory_api_navigation_and_legacy_csv_description(tmp_path, builtin_environment):

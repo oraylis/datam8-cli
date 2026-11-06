@@ -229,6 +229,7 @@ def compare_entity_with_source(
     refreshed_by_index: dict[int, list[m.ExternalModelSource]] = {}
     described_attributes: dict[str, at.Attribute] = {}
     described_properties: dict[str, p.PropertyReference] = {}
+    described_descriptions: set[str] = set()
     for existing, location, index in groups:
         if mode == "sources-only":
             refreshed = read_external_sources(
@@ -249,6 +250,8 @@ def compare_entity_with_source(
             refreshed = [
                 item for item in described.sources if isinstance(item, m.ExternalModelSource)
             ]
+            if described.description is not None:
+                described_descriptions.add(described.description)
             for attr in described.attributes:
                 previous = described_attributes.get(attr.name)
                 comparable = {"ordinalNumber", "dateAdded", "dateModified"}
@@ -295,6 +298,10 @@ def compare_entity_with_source(
             threshold_to_diff_deeper=0,
         )
 
+    if len(described_descriptions) > 1:
+        raise utils.create_error(ValueError("Conflicting entity descriptions"))
+    if groups:
+        wrapper.entity.description = next(iter(described_descriptions), None)
     if described_properties:
         entity_properties = {prop.property: prop for prop in wrapper.entity.properties or []}
         entity_properties.update(described_properties)

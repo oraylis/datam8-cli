@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from typing import Any, overload
 
 from datam8 import parser_v1, utils
+from datam8.utils.ids import generate_entity_id
 from datam8_model import attribute as a
 from datam8_model import base as b
 from datam8_model import data_product as dp
@@ -780,14 +781,14 @@ class MigrationV1:
         with open(output_path / "property_values.json", "w", encoding="utf-8") as file:
             file.write(new_property_values.model_dump_json(**MODEL_DUMP_OPTIONS))
 
-    @staticmethod
     def create_properties_for_folders(
+        self,
         zones: Sequence[z.Zone],
         data_products: Sequence[dp.DataProduct],
         output_path: pathlib.Path,
     ) -> None:
         """Should only be called AFTER other models have been migrated. No new folders will be created."""
-        next_id = 1
+        used_ids = {ref.id for ref in self.model_file_references.values()}
 
         for zone in zones:
             zone_path = output_path / zone.name
@@ -801,9 +802,14 @@ class MigrationV1:
 
                 product_folder = b.Folders(
                     type="folders",
-                    folders=[f.Folder(id=next_id, name=product.name, dataProduct=product.name)],
+                    folders=[
+                        f.Folder(
+                            id=generate_entity_id(used_ids),
+                            name=product.name,
+                            dataProduct=product.name,
+                        )
+                    ],
                 )
-                next_id += 1
 
                 with open(product_path / ".properties.json", "w", encoding="utf-8") as _file:
                     _file.write(product_folder.model_dump_json(**MODEL_DUMP_OPTIONS))
@@ -817,14 +823,13 @@ class MigrationV1:
                         type="folders",
                         folders=[
                             f.Folder(
-                                id=next_id,
+                                id=generate_entity_id(used_ids),
                                 name=module.name,
                                 dataProduct=product.name,
                                 dataModule=module.name,
                             )
                         ],
                     )
-                    next_id += 1
 
                     with open(module_path / ".properties.json", "w", encoding="utf-8") as _file:
                         _file.write(module_folder.model_dump_json(**MODEL_DUMP_OPTIONS))
