@@ -16,10 +16,13 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-from fastapi import APIRouter
+from typing import Any
+
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from datam8 import factory, model
+from datam8 import config, factory, model
+from datam8.operations import update_solution_file
 from datam8_model import base as b
 from datam8_model import solution as s
 
@@ -28,6 +31,19 @@ solution_router = APIRouter(prefix="/solution")
 
 @solution_router.get("")
 async def get_solution() -> s.Solution:
+    return factory.get_model().solution
+
+
+@solution_router.patch("")
+async def update_solution(body: dict[str, Any]) -> s.Solution:
+    model_ = factory.get_model()
+    changed, deleted = model_.get_unsaved_entities()
+    if changed or deleted:
+        raise HTTPException(status_code=409, detail="Save or discard pending model changes first")
+
+    update_solution_file(config.solution_path, body)
+    factory._model = await factory.load_model(config.solution_path)
+    factory._plugin_manager = None
     return factory.get_model().solution
 
 

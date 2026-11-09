@@ -136,6 +136,8 @@ All commands below support `--solution` and `--json`:
   Update uses the same code input and a step/name selector. Move takes a relative
   destination. Delete removes the transformation and only its unshared local file.
   Generic metadata editing does not imply function file creation/deletion.
+- `solution update --data JSON` (or `--file FILE`, with `-` for stdin) applies a partial
+  solution settings update and writes the `.dm8s` file.
 - `plugins list`, `plugins show ID`, `plugins ui-schema ID`,
   `plugins data-type-mappings ID` and `plugins connection-properties ID` inspect
   connector configuration without creating a connection.

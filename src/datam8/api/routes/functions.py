@@ -27,6 +27,7 @@ from starlette.responses import Response
 
 from datam8 import factory, functions
 from datam8.model import EntityWrapper
+from datam8.operations import ModelSession, Operation
 from datam8_model.model import ModelEntity
 
 from .responses import (
@@ -101,6 +102,50 @@ async def get_function_for_entity_with_name(
 
 class UpdateFunctionBody(BaseModel):
     source_code: Annotated[str, Field(alias="sourceCode")]
+
+
+class CreateFunctionBody(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    step_no: Annotated[int, Field(alias="stepNo", ge=1)]
+    name: str
+    source: str
+    source_code: Annotated[str, Field(alias="sourceCode")]
+
+
+@functions_router.post("/{modelEntityId:int}")
+async def create_function(modelEntityId: int, body: CreateFunctionBody) -> Response:
+    wrapper = _get_wrapper_by_id(modelEntityId)
+    operation = Operation(
+        op="functions.create",
+        locator=str(wrapper.locator),
+        data={
+            "stepNo": body.step_no,
+            "name": body.name,
+            "kind": "function",
+            "function": {"source": body.source},
+        },
+        source_code=body.source_code,
+    )
+    ModelSession(model=factory.get_model()).execute(operation)
+    return Response204NoContent()
+
+
+@functions_router.delete("/{modelEntityId:int}/{stepNo:int}")
+async def delete_function_with_step_no(modelEntityId: int, stepNo: int) -> Response:
+    wrapper = _get_wrapper_by_id(modelEntityId)
+    ModelSession(model=factory.get_model()).execute(
+        Operation(op="functions.delete", locator=str(wrapper.locator), step_no=stepNo)
+    )
+    return Response204NoContent()
+
+
+@functions_router.delete("/{modelEntityId:int}/{name:str}")
+async def delete_function_with_name(modelEntityId: int, name: str) -> Response:
+    wrapper = _get_wrapper_by_id(modelEntityId)
+    ModelSession(model=factory.get_model()).execute(
+        Operation(op="functions.delete", locator=str(wrapper.locator), name=name)
+    )
+    return Response204NoContent()
 
 
 def _update_function(id: int, step_no_or_name: str | int, source_code: str) -> None:

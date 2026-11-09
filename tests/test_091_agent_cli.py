@@ -258,6 +258,49 @@ def test_noninteractive_init_root_options_and_missing_solution(tmp_path, monkeyp
     run(path, "init", "CLI", code=2)
 
 
+def test_solution_update_cli_and_api_share_validation(workspace, monkeypatch):
+    patch = {
+        "generatorTargets": [
+            {"name": "secondary", "sourcePath": "Generate2", "outputPath": "Output2"}
+        ]
+    }
+    cli_result = run(workspace, "solution", "update", "--data", json.dumps(patch))
+    assert cli_result["item"]["generatorTargets"][0]["name"] == "secondary"
+    original = workspace.read_text(encoding="utf-8")
+    invalid = run(
+        workspace,
+        "solution",
+        "update",
+        "--data",
+        '{"schemaVersion":"invalid"}',
+        code=2,
+    )
+    assert invalid["error"]["code"] == "validation_error"
+    assert workspace.read_text(encoding="utf-8") == original
+
+    config.set_solution(workspace)
+    config.lazy = True
+    monkeypatch.setattr(factory, "_model", None)
+    factory.create_model()
+    client = TestClient(create_app())
+    response = client.patch("/solution", json={"schemaVersion": "invalid"})
+    assert response.status_code == 400
+    assert workspace.read_text(encoding="utf-8") == original
+
+    response = client.patch(
+        "/solution",
+        json={
+            "generatorTargets": [
+                {"name": "api", "sourcePath": "GenerateApi", "outputPath": "OutputApi"}
+            ]
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["generatorTargets"][0]["name"] == "api"
+    assert factory.get_model().solution.generatorTargets[0].name == "api"
+    assert json.loads(workspace.read_text(encoding="utf-8"))["generatorTargets"][0]["name"] == "api"
+
+
 def test_secret_stdin_batch_and_plugin_json(workspace, monkeypatch):
     from datam8 import secrets
     from datam8.cmd import secret as secret_commands
