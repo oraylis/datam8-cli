@@ -241,3 +241,42 @@ def test_move_does_not_delete_unreferenced_legacy_fallback(function_solution):
     assert client.post("/model/save").status_code == 204
     assert legacy.read_text() == "# unreferenced fallback"
     assert (root / "Model/Core/Archive/clean.py").exists()
+
+
+def test_api_function_create_and_delete_use_cli_operations(function_solution):
+    client, root, _ = function_solution("clean.py", missing=True)
+    response = client.post(
+        "/functions/1",
+        json={
+            "stepNo": 4,
+            "name": "Created",
+            "source": "created.py",
+            "sourceCode": "def transform(df):\n    return df\n",
+        },
+    )
+    assert response.status_code == 204, response.text
+    source = root / "Model/Core/created.py"
+    assert source.read_text(encoding="utf-8").startswith("def transform")
+    assert client.get("/functions/1/4").json()["item"]["source_code"] == source.read_text()
+    saved = json.loads((root / "Model/Core/Customer.json").read_text())
+    assert any(item["name"] == "Created" for item in saved["transformations"])
+
+    response = client.delete("/functions/1/Created")
+    assert response.status_code == 204, response.text
+    assert not source.exists()
+    saved = json.loads((root / "Model/Core/Customer.json").read_text())
+    assert not any(item["name"] == "Created" for item in saved["transformations"])
+
+
+def test_api_function_create_rejects_collision_and_non_python_source(function_solution):
+    client, root, _ = function_solution("clean.py", missing=True)
+    source = root / "Model/Core/created.py"
+    source.write_text("# preserve", encoding="utf-8")
+    body = {"stepNo": 4, "name": "Created", "source": "created.py", "sourceCode": "new"}
+    response = client.post("/functions/1", json=body)
+    assert response.status_code == 409
+    assert source.read_text(encoding="utf-8") == "# preserve"
+
+    response = client.post("/functions/1", json={**body, "source": "created.txt"})
+    assert response.status_code == 400
+    assert source.read_text(encoding="utf-8") == "# preserve"
