@@ -129,6 +129,8 @@ editor. Runtime configuration changes and process failure may require a restart.
   unrelated files keep their source directories in place.
   Function-directory moves are preflighted and rolled back if
   the model move fails. Saving a deleted folder also removes child functions.
+  Empty directory cleanup checks each directory after removing its children, so
+  a deleted folder does not remain solely because it contained empty subdirectories.
 - Function source paths are relative to their model entity. Absolute/drive-qualified
   paths, traversal, empty segments and symlink escapes are rejected.
 - A bare function filename first resolves beside the entity JSON, then in its
