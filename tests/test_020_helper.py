@@ -24,7 +24,34 @@ from test_020_helper_cases import (
     UuidCases,
 )
 
+from datam8.utils import cleanup_directory
 from datam8.utils import hasher as hashutils
+
+
+@pytest.mark.parametrize("folder", ["Root", "Core/Nested"])
+def test_cleanup_removes_parent_after_empty_descendants(tmp_path, folder):
+    target = tmp_path / "Model" / folder
+    (target / "Empty" / "Nested").mkdir(parents=True)
+    retained = tmp_path / "Model" / "Neighbour" / "keep.txt"
+    retained.parent.mkdir(parents=True)
+    retained.write_text("keep", encoding="utf-8")
+
+    cleanup_directory(target, tmp_path)
+
+    assert not target.exists()
+    assert retained.read_text(encoding="utf-8") == "keep"
+
+
+def test_cleanup_preserves_directories_with_remaining_files(tmp_path):
+    target = tmp_path / "Model" / "Root"
+    (target / "Empty" / "Nested").mkdir(parents=True)
+    retained = target / "keep.txt"
+    retained.write_text("keep", encoding="utf-8")
+
+    cleanup_directory(target, tmp_path)
+
+    assert not (target / "Empty").exists()
+    assert retained.read_text(encoding="utf-8") == "keep"
 
 
 @parametrize_with_cases("algorithm", cases=AlgorithmCases, glob="*_valid")

@@ -139,8 +139,8 @@ def cleanup_directory(path: Path, up_to: Path) -> None:
     """
 
     # remove children
-    for dir_path, dir_names, file_names in path.walk(top_down=False):
-        if len(dir_names) == 0 and len(file_names) == 0:
+    for dir_path, _, _ in path.walk(top_down=False):
+        if not any(dir_path.iterdir()):
             delete_path(dir_path)
 
     # remove empty parents
