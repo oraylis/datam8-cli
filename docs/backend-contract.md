@@ -42,14 +42,14 @@ Conversion failures identify the affected path and stop loading.
 The current `create_app().openapi()` exposes these domains (no `/api` prefix):
 
 - `GET /health` (204), `GET /version` (`schemaVersion`, `appVersion`), `GET /config`.
-- `GET /solution`, `GET /solution/full`.
+- `GET|PATCH /solution`, `GET /solution/full`.
 - `GET /entities`, `GET|PUT|PATCH|DELETE /entities/{locator}`, `PUT /entities/clone`,
   `POST /entities/rename`, `POST /entities/move`, `POST /entities/move-single`.
 - `POST /model/save`, `POST /model/reload`, `GET /model/unsaved`.
 - `POST /model/generate`: optional body `{ "target": "...", "cleanOutput": true,
   "payloads": [] }`; synchronous response `{ "target": "...", "outputPath": "...",
   "message": null }`. Uses the currently loaded solution.
-- `/functions/*` for function retrieval, updates and moves.
+- `/functions/*` for function retrieval, creation, updates, deletion and moves.
 - `GET /plugins`, `POST /plugins/reload`, `GET /plugins/{plugin_id}` and its
   `/ui-schema`, `/data-type-mappings`, `/connection-properties` subpaths.
 - `POST /secrets/check`, `PUT /secrets/set`.
@@ -131,6 +131,16 @@ editor. Runtime configuration changes and process failure may require a restart.
   the model move fails. Saving a deleted folder also removes child functions.
 - Function source paths are relative to their model entity. Absolute/drive-qualified
   paths, traversal, empty segments and symlink escapes are rejected.
+- `POST /functions/{modelEntityId}` accepts `{ "stepNo": 1, "name": "Clean",
+  "source": "clean.py", "sourceCode": "..." }`; it creates the transformation and
+  source file and persists the model. Sources must be relative `.py` paths inside the
+  entity directory, and an existing file is never overwritten.
+- `DELETE /functions/{modelEntityId}/{stepNo|name}` removes the selected transformation,
+  persists the model and deletes its local source file only when no remaining function
+  references it.
+- `PATCH /solution` accepts a partial solution object and writes the validated settings
+  to the `.dm8s` file. `schemaVersion` is managed by migrations. The API reloads the
+  active solution after a successful update and returns 409 when model changes are pending.
 - A bare function filename first resolves beside the entity JSON, then in its
   same-named subdirectory for older solutions. Renaming an entity keeps function
   files in place and persists an explicit relative path when that fallback was used.

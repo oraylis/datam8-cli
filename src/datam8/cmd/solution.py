@@ -21,9 +21,10 @@
 import typer
 
 from datam8 import config, opts, parser
+from datam8.operations import update_solution_file
 
 from . import common
-from .entities import Fields
+from .entities import Data, Fields, File
 
 app = typer.Typer(name="solution", help="Read the solution descriptor", no_args_is_help=True)
 
@@ -49,3 +50,23 @@ def show(
 
         rich.print(data)
     return {"item": data}
+
+
+@app.command()
+@common.output
+def update(
+    solution_path: opts.SolutionPath,
+    data: Data = None,
+    file: File = None,
+    json_output: opts.JsonOutput = False,
+    log_level: opts.LogLevel = opts.LogLevels.WARNING,
+    version: opts.Version = False,
+):
+    """Update solution settings from a partial JSON object."""
+    common.main_callback(solution_path, log_level, version)
+    result = {"item": update_solution_file(config.solution_path, common.input_value(data, file))}
+    if not json_output:
+        import rich
+
+        rich.print(result["item"])
+    return result
