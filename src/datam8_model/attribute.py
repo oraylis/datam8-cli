@@ -142,7 +142,7 @@ class Attribute(BaseModel):
     Defines how an attribute in a slowly changing dimension should behave.
     """
     expression: str | None = None
-    expressionLanguage: ExpressionLanguage | str | None = ExpressionLanguage.SQL
+    expressionLanguage: ExpressionLanguage | str | None = None
     unit: str | None = None
     refactorNames: Sequence[str] | None = None
     dateModified: AwareDatetime | None = None
