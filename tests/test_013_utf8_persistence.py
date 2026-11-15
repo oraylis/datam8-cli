@@ -71,6 +71,57 @@ def test_base_delete_keeps_remaining_text_utf8(tmp_path, builtin_environment):
     assert saved["properties"] == [{"name": "Keep", "displayName": DESCRIPTION}]
 
 
+def test_entity_edit_does_not_materialize_expression_language(tmp_path, builtin_environment):
+    contract_path = tmp_path / "contract.json"
+    write_contract(contract_path, contract())
+    path = create_solution(tmp_path, [(OdcsFile, "Contracts", {"path": "contract.json"})])
+    entity_path = tmp_path / "Model/Stage/Address.json"
+    entity_path.parent.mkdir(parents=True, exist_ok=True)
+    entity_path.write_text(
+        json.dumps(
+            {
+                "id": 1,
+                "name": "Address",
+                "description": "Before edit",
+                "attributes": [
+                    {
+                        "ordinalNumber": 1,
+                        "name": "AddressID",
+                        "attributeType": "Defaultstring",
+                        "dataType": {"type": "string", "nullable": False},
+                        "dateAdded": "2026-01-01T00:00:00Z",
+                    },
+                    {
+                        "ordinalNumber": 2,
+                        "name": "ExplicitSql",
+                        "attributeType": "Defaultstring",
+                        "dataType": {"type": "string", "nullable": False},
+                        "expressionLanguage": "sql",
+                        "dateAdded": "2026-01-01T00:00:00Z",
+                    },
+                ],
+                "sources": [],
+                "transformations": [],
+                "relationships": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    config.set_solution(path)
+    factory._model = factory.create_model()
+    locator = "/entities/modelEntities/Stage/Address"
+
+    with TestClient(create_app()) as client:
+        entity = client.get(locator).json()["items"][0]["entity"]
+        entity["description"] = "After edit"
+        assert client.patch(locator, json=entity).status_code == 200
+        assert client.post("/model/save").status_code == 204
+
+    saved_attributes = json.loads(entity_path.read_text(encoding="utf-8"))["attributes"]
+    assert "expressionLanguage" not in saved_attributes[0]
+    assert saved_attributes[1]["expressionLanguage"] == "sql"
+
+
 @pytest.mark.parametrize("import_path", ["direct", "wizard"])
 def test_import_refresh_reload_and_output_preserve_utf8(tmp_path, builtin_environment, import_path):
     data = contract([{"name": "topic", "logicalType": "string", "description": DESCRIPTION}])
