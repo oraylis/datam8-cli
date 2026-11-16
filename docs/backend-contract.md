@@ -302,3 +302,18 @@ Contract changes must include:
 - updates to this document,
 - coordinated backend + frontend changes,
 - integration tests for affected flows.
+
+## Entity quality requirements
+
+Model entities optionally carry `quality`, defined by the pinned
+[Quality schema](../datam8-model/schema/quality.json). Existing entity create,
+patch, full-load, save and generation routes carry this field without a new
+endpoint. Structural and semantic validation reject invalid checks before changing
+entity state. Errors use `validation_error` (HTTP 400), with entity `locator`,
+`checkId` where applicable, and `field` in details. Validation covers entity-local
+unique check IDs, active attribute references, numeric/timestamp compatibility,
+bounds and supported execution modes. Source refresh preserves local quality.
+
+Generation validates quality before cleaning output. Quality metadata is independent
+of target templates: selected targets decide which executable assets they support.
+Databricks execution is performed by generated assets, not by the HTTP server.

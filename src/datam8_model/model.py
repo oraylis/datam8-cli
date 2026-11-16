@@ -27,6 +27,7 @@ from typing import Annotated, Any
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from . import attribute, data_type, property
+from . import quality as quality_1
 
 
 class Locator(BaseModel):
@@ -567,6 +568,7 @@ class ModelEntity(BaseModel):
     """
     List of entity relationships.
     """
+    quality: quality_1.Quality | None = None
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")

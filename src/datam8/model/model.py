@@ -148,6 +148,7 @@ class Model:
         """Internal dictionary to allow easy mapping of files and their entities"""
 
         self.validate_entity_ids()
+        self.validate_quality()
         self._used_entity_ids = {
             wrapper.entity.id
             for repo in (self.modelEntities, self.folders)
@@ -161,6 +162,11 @@ class Model:
         return generate_entity_id(self._used_entity_ids)
 
     get_next_model_id = get_next_entity_id
+
+    def validate_quality(self) -> None:
+        from datam8.quality import validate_model_quality
+
+        validate_model_quality(self)
 
     def validate_entity_ids(self) -> None:
         for entity_type, repo in (
@@ -255,6 +261,7 @@ class Model:
 
     def resolve(self) -> None:
         "Resolve all entities by iterating over them."
+        self.validate_quality()
         for wrapper in self.get_entity_iterator():
             if not wrapper.resolved:
                 self.resolve_wrapper(wrapper)  # pyright: ignore[reportArgumentType]
@@ -487,7 +494,19 @@ class Model:
                     c["id"] = self.get_next_entity_id()
                 if _type == b.EntityType.FOLDERS:
                     c["path"] = "/".join([*_locator.folders, _locator.entityName])
-                new_entity = class_from_type(_type).from_dict(content)
+                try:
+                    new_entity = class_from_type(_type).from_dict(content)
+                except ValidationError as err:
+                    if _type == b.EntityType.MODEL_ENTITIES and "quality" in content:
+                        raise errors.Datam8ValidationError(
+                            message="Invalid entity quality configuration",
+                            details={
+                                "locator": str(_locator),
+                                "field": "quality",
+                                "errors": err.errors(include_context=False),
+                            },
+                        ) from err
+                    raise
             case (m.ModelEntity() | f.Folder()) as identified:
                 new_entity = identified.model_copy(deep=True)
                 new_entity.id = self.get_next_entity_id()
@@ -922,6 +941,7 @@ class Model:
         Saves the current state of the model or a specific entity to the corresponding json file.
         """
         self.validate_entity_ids()
+        self.validate_quality()
         changed_wrappers = [
             w
             for w in self.get_entities(locator or ROOT_LOCATOR)

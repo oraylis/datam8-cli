@@ -84,6 +84,7 @@ def __generate_output_unsafe(
     /,
     _config: GeneratorConfig,
 ) -> Path:
+    model.validate_quality()
     payload_cache = cache.Cache()
 
     importer.enable_target_modules(_config.module_path)

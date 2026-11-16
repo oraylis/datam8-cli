@@ -393,6 +393,11 @@ class EntityWrapper[T: b.BaseEntityType](BaseModel):
     _deleted: bool = False
     "Flag to track if the wrapped entity has been deleted"
 
+    def model_post_init(self, __context: Any) -> None:
+        from datam8.quality import validate_quality
+
+        validate_quality(self.entity, str(self.locator))
+
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, EntityWrapper):
             return False
@@ -466,13 +471,25 @@ class EntityWrapper[T: b.BaseEntityType](BaseModel):
                     message=f"Entity ID cannot be changed at {self.locator}",
                     details={"id": self.entity.id, "requestedId": kwargs["id"]},
                 )
-        new_entity = self.entity.model_copy(update=kwargs, deep=True)
-
         try:
-            new_entity = type(new_entity).model_validate(new_entity)
+            new_entity = type(self.entity).model_validate(self.entity.model_dump() | kwargs)
         except ValidationError as err:
+            if isinstance(self.entity, m.ModelEntity) and (
+                "quality" in kwargs or self.entity.quality
+            ):
+                raise errors.Datam8ValidationError(
+                    message="Invalid entity quality configuration",
+                    details={
+                        "locator": str(self.locator),
+                        "field": "quality",
+                        "errors": err.errors(include_context=False),
+                    },
+                ) from err
             raise utils.create_error(err, status_code=520)
 
+        from datam8.quality import validate_quality
+
+        validate_quality(new_entity, str(self.locator))
         self.entity = new_entity
         self._changed = True
 
