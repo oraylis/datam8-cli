@@ -314,6 +314,17 @@ entity state. Errors use `validation_error` (HTTP 400), with entity `locator`,
 unique check IDs, active attribute references, numeric/timestamp compatibility,
 bounds and supported execution modes. Source refresh preserves local quality.
 
+The `dqx` check type carries a native declarative DQX `definition` and an
+`execution` mode. Function names and arbitrary JSON arguments pass through without
+a backend function allow-list; the deployed DQX version validates their signatures.
+Native names, filters, per-column expansion, messages and user metadata are retained.
+The generated metadata key `datam8_check_id` is reserved for stable audit attribution.
+`quality.referenceDatasets` binds named reference DataFrames to an active `entityId`
+or a table name; an optional `execution` limits the binding to that mode. Model-wide
+validation rejects unresolved entity bindings. `quality.settings.dependencies`
+declares additional PyPI requirements for executing quality tasks. These fields
+round-trip through the existing entity routes, save and generation contracts.
+
 Generation validates quality before cleaning output. Quality metadata is independent
 of target templates: selected targets decide which executable assets they support.
 Databricks execution is performed by generated assets, not by the HTTP server.

@@ -48,12 +48,53 @@ def validate_quality(entity: Any, locator: str | None = None) -> None:
     threshold = value.get("settings", {}).get("maxFailureRatePct")
     if threshold is not None and not math.isfinite(threshold):
         reject("Failure percentage must be finite", "quality.settings.maxFailureRatePct")
+    if any(
+        not requirement.strip() for requirement in value.get("settings", {}).get("dependencies", [])
+    ):
+        reject("Dependencies must not be blank", "quality.settings.dependencies")
+    for alias, reference in value.get("referenceDatasets", {}).items():
+        if not alias.strip() or ("table" in reference and not reference["table"].strip()):
+            reject(
+                "Reference aliases and table names must not be blank",
+                "quality.referenceDatasets." + alias,
+            )
     for check in value["checks"]:
         check_id = check["id"]
         field = f"quality.checks.{check_id}"
         if check_id in seen:
             reject(f"Duplicate quality check ID '{check_id}'", field + ".id", check_id)
         seen.add(check_id)
+        if check["type"] == "dqx":
+            definition = check["definition"]
+            if not definition["check"]["function"].strip():
+                reject(
+                    "DQX function must not be blank", field + ".definition.check.function", check_id
+                )
+            metadata = definition.get("user_metadata") or {}
+            if "datam8_check_id" in metadata and str(metadata["datam8_check_id"]) != check_id:
+                reject(
+                    "datam8_check_id is reserved for the rule ID",
+                    field + ".definition.user_metadata",
+                    check_id,
+                )
+
+            # DQX owns function/argument validity. Do not maintain a DataM8 function allow-list.
+            def finite_json(value: Any) -> bool:
+                if isinstance(value, float):
+                    return math.isfinite(value)
+                if isinstance(value, dict):
+                    return all(finite_json(v) for v in value.values())
+                if isinstance(value, list):
+                    return all(finite_json(v) for v in value)
+                return True
+
+            if not finite_json(definition):
+                reject(
+                    "DQX definition must contain finite JSON values",
+                    field + ".definition",
+                    check_id,
+                )
+            continue
         attribute = check.get("attribute")
         if attribute is not None and attribute not in attributes:
             reject(
@@ -83,6 +124,24 @@ def validate_quality(entity: Any, locator: str | None = None) -> None:
 
 
 def validate_model_quality(model: Any) -> None:
+    active_ids = {w.entity.id for w in model.modelEntities.values() if not w.is_deleted}
     for wrapper in model.modelEntities.values():
         if not wrapper.is_deleted:
             validate_quality(wrapper.entity, str(wrapper.locator))
+            quality = getattr(wrapper.entity, "quality", None)
+            if quality is None:
+                continue
+            references = quality.model_dump(mode="json", exclude_none=True).get(
+                "referenceDatasets", {}
+            )
+            for alias, reference in references.items():
+                if not alias.strip() or (
+                    "entityId" in reference and reference["entityId"] not in active_ids
+                ):
+                    raise Datam8ValidationError(
+                        message=f"{wrapper.locator}: Invalid quality reference '{alias}'",
+                        details={
+                            "locator": str(wrapper.locator),
+                            "field": "quality.referenceDatasets." + alias,
+                        },
+                    )

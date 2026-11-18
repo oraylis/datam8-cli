@@ -19,12 +19,33 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from enum import Enum
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, TypeAlias
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, RootModel
+
+# ruff: disable[UP040]
+# HACK: pydantic is not able to probably validate a PEP 695 type alias declaration, only seems to work with
+# the legacy TypeAlias from typing
+DependencyType: TypeAlias = str
+# ruff: enable[UP040]
+
+
+class Dependency(RootModel[str]):
+    root: Annotated[str, Field(min_length=1)]
+
+    @staticmethod
+    def from_json_file(path: Path) -> Dependency:
+        with open(path, encoding="utf-8") as file:
+            model = Dependency.model_validate_json(file.read())
+
+        return model
+
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode, encoding="utf-8") as file:
+            file.write(self.model_dump_json(**dump_options))
 
 
 class QualitySettings(BaseModel):
@@ -37,6 +58,10 @@ class QualitySettings(BaseModel):
     maxFailureRatePct: Annotated[float | None, Field(ge=0.0, le=100.0)] = None
     """
     Stop dependent processing after writing valid rows when the percentage of distinct error rows exceeds this value. Omit to disable threshold failure.
+    """
+    dependencies: Sequence[Dependency] | None = None
+    """
+    Additional PyPI requirements needed by native DQX checks, installed on the executing classic tasks.
     """
 
     def to_dict(self) -> dict:
@@ -77,6 +102,115 @@ class QualitySettings(BaseModel):
 
 
 class Execution(Enum):
+    """
+    Omit to supply this binding in both execution modes.
+    """
+
+    ENFORCEMENT = "enforcement"
+    MONITORING = "monitoring"
+
+
+class QualityEntityReference(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
+    entityId: Annotated[int, Field(ge=0)]
+    execution: Execution | None = None
+    """
+    Omit to supply this binding in both execution modes.
+    """
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj: Any) -> QualityEntityReference:
+        return QualityEntityReference.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> QualityEntityReference:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        QualityEntityReference
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
+        with open(path, encoding="utf-8") as file:
+            model = QualityEntityReference.model_validate_json(file.read())
+
+        return model
+
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode, encoding="utf-8") as file:
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
+
+
+class QualityTableReference(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
+    table: Annotated[str, Field(min_length=1)]
+    execution: Execution | None = None
+    """
+    Omit to supply this binding in both execution modes.
+    """
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj: Any) -> QualityTableReference:
+        return QualityTableReference.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> QualityTableReference:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        QualityTableReference
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
+        with open(path, encoding="utf-8") as file:
+            model = QualityTableReference.model_validate_json(file.read())
+
+        return model
+
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode, encoding="utf-8") as file:
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
+
+
+class Execution2(Enum):
     ENFORCEMENT = "enforcement"
     MONITORING = "monitoring"
 
@@ -96,7 +230,7 @@ class NotNullCheck(BaseModel):
     id: Annotated[str, Field(pattern="^[A-Za-z][A-Za-z0-9_]*$")]
     description: str | None = None
     type: Literal["not_null"]
-    execution: Execution
+    execution: Execution2
     severity: Severity
     attribute: Annotated[str, Field(min_length=1)]
 
@@ -241,7 +375,7 @@ class RangeCheck(BaseModel):
     id: Annotated[str, Field(pattern="^[A-Za-z][A-Za-z0-9_]*$")]
     description: str | None = None
     type: Literal["range"]
-    execution: Execution
+    execution: Execution2
     severity: Severity
     attribute: Annotated[str, Field(min_length=1)]
     parameters: Parameters | Parameters1
@@ -339,7 +473,7 @@ class SqlExpressionCheck(BaseModel):
     id: Annotated[str, Field(pattern="^[A-Za-z][A-Za-z0-9_]*$")]
     description: str | None = None
     type: Literal["sql_expression"]
-    execution: Execution
+    execution: Execution2
     severity: Severity
     parameters: Parameters2
 
@@ -380,7 +514,7 @@ class SqlExpressionCheck(BaseModel):
             file.write(self.model_dump_json(**dump_options) + "\n")
 
 
-class Execution3(Enum):
+class Execution5(Enum):
     MONITORING = "monitoring"
 
 
@@ -440,7 +574,7 @@ class CompletenessCheck(BaseModel):
     id: Annotated[str, Field(pattern="^[A-Za-z][A-Za-z0-9_]*$")]
     description: str | None = None
     type: Literal["completeness"]
-    execution: Execution3
+    execution: Execution5
     severity: Severity
     attribute: Annotated[str, Field(min_length=1)]
     parameters: Parameters3
@@ -538,7 +672,7 @@ class FreshnessCheck(BaseModel):
     id: Annotated[str, Field(pattern="^[A-Za-z][A-Za-z0-9_]*$")]
     description: str | None = None
     type: Literal["freshness"]
-    execution: Execution3
+    execution: Execution5
     severity: Severity
     attribute: Annotated[str, Field(min_length=1)]
     parameters: Parameters4
@@ -684,7 +818,7 @@ class RowCountCheck(BaseModel):
     id: Annotated[str, Field(pattern="^[A-Za-z][A-Za-z0-9_]*$")]
     description: str | None = None
     type: Literal["row_count"]
-    execution: Execution3
+    execution: Execution5
     severity: Severity
     parameters: Parameters5 | Parameters6
 
@@ -725,9 +859,168 @@ class RowCountCheck(BaseModel):
             file.write(self.model_dump_json(**dump_options) + "\n")
 
 
+class Execution8(Enum):
+    ENFORCEMENT = "enforcement"
+    MONITORING = "monitoring"
+
+
+class Criticality(Enum):
+    ERROR = "error"
+    WARN = "warn"
+
+
+class DqxFunctionDefinition(BaseModel):
+    model_config = ConfigDict(
+        extra="allow",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
+    function: Annotated[str, Field(min_length=1)]
+    arguments: Mapping[str, Any] | None = None
+    for_each_column: Sequence[str] | None = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj: Any) -> DqxFunctionDefinition:
+        return DqxFunctionDefinition.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> DqxFunctionDefinition:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        DqxFunctionDefinition
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
+        with open(path, encoding="utf-8") as file:
+            model = DqxFunctionDefinition.model_validate_json(file.read())
+
+        return model
+
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode, encoding="utf-8") as file:
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
+
+
+class DqxRuleDefinition(BaseModel):
+    model_config = ConfigDict(
+        extra="allow",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
+    name: str | None = None
+    criticality: Criticality | None = None
+    check: Annotated[DqxFunctionDefinition, Field(title="DqxFunctionDefinition")]
+    filter: str | None = None
+    message_expr: str | None = None
+    user_metadata: Mapping[str, Any] | None = None
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj: Any) -> DqxRuleDefinition:
+        return DqxRuleDefinition.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> DqxRuleDefinition:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        DqxRuleDefinition
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
+        with open(path, encoding="utf-8") as file:
+            model = DqxRuleDefinition.model_validate_json(file.read())
+
+        return model
+
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode, encoding="utf-8") as file:
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
+
+
+class DqxCheck(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
+    id: Annotated[str, Field(pattern="^[A-Za-z][A-Za-z0-9_]*$")]
+    description: str | None = None
+    type: Literal["dqx"]
+    execution: Execution8
+    definition: Annotated[DqxRuleDefinition, Field(title="DqxRuleDefinition")]
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj: Any) -> DqxCheck:
+        return DqxCheck.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> DqxCheck:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        DqxCheck
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
+        with open(path, encoding="utf-8") as file:
+            model = DqxCheck.model_validate_json(file.read())
+
+        return model
+
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode, encoding="utf-8") as file:
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
+
+
 class Quality(BaseModel):
     """
-    Platform-neutral entity quality requirements. Enforcement always retains rejected rows in quarantine.
+    Entity quality requirements and declarative native DQX definitions. Enforcement retains rejected rows in quarantine.
     """
 
     model_config = ConfigDict(
@@ -744,7 +1037,12 @@ class Quality(BaseModel):
         | CompletenessCheck
         | FreshnessCheck
         | RowCountCheck
+        | DqxCheck
     ]
+    referenceDatasets: Mapping[str, QualityEntityReference | QualityTableReference] | None = None
+    """
+    Named DataFrames supplied to DQX reference checks. All bindings are declared in the model.
+    """
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")

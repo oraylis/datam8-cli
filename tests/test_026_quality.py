@@ -111,3 +111,70 @@ def test_quality_create_clone_and_deleted_reference(quality_workspace):
         deleted = client.patch("/entities/modelEntities/Raw/New", json={"attributes": attributes})
         assert deleted.status_code == 400, deleted.text
         assert model.modelEntities.get("Raw/New").entity.attributes[0].dateDeleted is None
+
+
+def test_native_quality_crud_roundtrips_full_definition(quality_workspace):
+    import copy
+
+    model = factory.get_model()
+    native = {
+        "id": "native",
+        "type": "dqx",
+        "execution": "enforcement",
+        "definition": {
+            "name": "custom display name",
+            "criticality": "warn",
+            "filter": "Id > 0",
+            "check": {
+                "function": "is_in_list",
+                "arguments": {"column": "Id", "allowed": [1, 2, None]},
+            },
+            "user_metadata": {"owner": "team"},
+            "message_expr": "'outside allowed values'",
+        },
+    }
+    quality = {
+        "checks": [native],
+        "settings": {"maxFailureRatePct": 5, "dependencies": ["scipy==1.15.0"]},
+        "referenceDatasets": {
+            "previous": {
+                "entityId": model.modelEntities.get("Raw/Existing").entity.id,
+                "execution": "monitoring",
+            }
+        },
+    }
+    url = "/entities/modelEntities/Raw/Existing"
+    with TestClient(create_app()) as client:
+        for mode in ("enforcement", "monitoring"):
+            quality["checks"][0]["execution"] = mode
+            # New function names/parameters are not blocked by a DataM8 allow-list.
+            quality["checks"][0]["definition"]["check"]["function"] = "future_native_dqx_function"
+            response = client.patch(url, json={"quality": quality})
+            assert response.status_code == 200, response.text
+            assert client.post("/model/save").status_code == 204
+            assert client.post("/model/reload").status_code == 200
+            persisted = json.loads(
+                (quality_workspace.parent / "model/Raw/Existing.json").read_text()
+            )
+            assert persisted["quality"] == quality
+        previous = copy.deepcopy(quality)
+        for definition in [
+            {"check": {"function": " "}},
+            {"check": {"function": "is_in_list", "arguments": []}},
+            {"check": {"function": "is_not_null"}, "user_metadata": {"datam8_check_id": "wrong"}},
+        ]:
+            invalid = copy.deepcopy(quality)
+            invalid["checks"][0]["definition"] = definition
+            response = client.patch(url, json={"quality": invalid})
+            assert response.status_code == 400, response.text
+            assert (
+                factory.get_model()
+                .modelEntities.get("Raw/Existing")
+                .entity.quality.model_dump(mode="json", exclude_none=True)
+                == previous
+            )
+        quality["checks"] = []
+        assert client.patch(url, json={"quality": quality}).status_code == 200
+        assert client.post("/model/save").status_code == 204
+        assert client.post("/model/reload").status_code == 200
+        assert factory.get_model().modelEntities.get("Raw/Existing").entity.quality.checks == []
