@@ -1,4 +1,4 @@
-"""Quality validation through actual HTTP and persisted disposable models."""
+"""Opaque quality definitions through real HTTP, persistence and target generation."""
 
 import json
 
@@ -20,31 +20,26 @@ def check(**patch):
     return dict(
         {
             "id": "id_required",
-            "type": "not_null",
-            "attribute": "Id",
             "execution": "enforcement",
-            "severity": "error",
+            "definition": {"check": {"function": "is_not_null", "arguments": {"column": "Id"}}},
         },
         **patch,
     )
 
 
-def test_quality_http_roundtrip_and_rejection_are_atomic(quality_workspace):
+def test_common_quality_validation_is_atomic(quality_workspace):
     factory.get_model()
+    quality = {"checks": [check()], "settings": {"maxFailureRatePct": 5}}
+    url = "/entities/modelEntities/Raw/Existing"
     with TestClient(create_app()) as client:
-        quality = {"checks": [check()], "settings": {"maxFailureRatePct": 5}}
-        url = "/entities/modelEntities/Raw/Existing"
         assert client.patch(url, json={"quality": quality}).status_code == 200
         for bad in [
-            {"checks": [check(attribute="Missing")]},
             {"checks": [check(), check()]},
-            {"checks": [check(type="range", parameters={"min": 4, "max": 2})]},
-            {
-                "checks": [
-                    check(type="freshness", execution="monitoring", parameters={"maxAgeSeconds": 1})
-                ]
-            },
-            {"checks": [check(severity="warn")]},
+            {"checks": [check(definition=[])]},
+            {"checks": [check(type="dqx")]},
+            {"checks": [check(execution="unknown")]},
+            {"checks": [check()], "settings": {"maxFailureRatePct": -1}},
+            {"checks": [check()], "referenceDatasets": {"ref": {"entityId": True}}},
         ]:
             response = client.patch(url, json={"quality": bad})
             assert response.status_code == 400, response.text
@@ -57,25 +52,21 @@ def test_quality_http_roundtrip_and_rejection_are_atomic(quality_workspace):
             )
         assert client.post("/model/save").status_code == 204
         assert client.post("/model/reload").status_code == 200
-        assert (
-            factory.get_model().modelEntities.get("Raw/Existing").entity.quality.checks[0].id
-            == "id_required"
-        )
-    saved = json.loads((quality_workspace.parent / "model/Raw/Existing.json").read_text())
-    assert saved["quality"] == quality
+    assert (
+        json.loads((quality_workspace.parent / "model/Raw/Existing.json").read_text())["quality"]
+        == quality
+    )
 
 
 def test_generation_preflight_keeps_previous_output(quality_workspace):
     from datam8 import generate
     from datam8.errors import Datam8ValidationError
+    from datam8_model.solution import GeneratorTarget
 
     model = factory.get_model()
     wrapper = model.modelEntities.get("Raw/Existing")
     wrapper.update(quality={"checks": [check()]})
-    # Nested edits by target/source code must be revalidated before deleting output.
-    wrapper.entity.attributes[0].name = "Changed"
-    from datam8_model.solution import GeneratorTarget
-
+    wrapper.entity.quality.checks = [*wrapper.entity.quality.checks, *wrapper.entity.quality.checks]
     model.solution.generatorTargets.append(
         GeneratorTarget(name="docs", sourcePath="generate/docs", outputPath="output/docs")
     )
@@ -89,92 +80,117 @@ def test_generation_preflight_keeps_previous_output(quality_workspace):
     assert output.read_text() == "existing"
 
 
-def test_quality_create_clone_and_deleted_reference(quality_workspace):
+def test_quality_create_clone_and_attribute_changes_keep_opaque_definitions(quality_workspace):
     model = factory.get_model()
     with TestClient(create_app()) as client:
         payload = _entity_data("New")
-        payload["quality"] = {"checks": [check(severity="warn")]}
-        rejected = client.put("/entities/modelEntities/Raw/New", json=payload)
-        assert rejected.status_code == 400, rejected.text
-        assert not model.has_locator("modelEntities/Raw/New")
         payload["quality"] = {"checks": [check()]}
-        created = client.put("/entities/modelEntities/Raw/New", json=payload)
-        assert created.status_code == 200, created.text
-        cloned = client.put(
-            "/entities/clone",
-            json={"locator": "modelEntities/Raw/New", "newLocator": "modelEntities/Raw/Copy"},
+        assert client.put("/entities/modelEntities/Raw/New", json=payload).status_code == 200
+        assert (
+            client.put(
+                "/entities/clone",
+                json={"locator": "modelEntities/Raw/New", "newLocator": "modelEntities/Raw/Copy"},
+            ).status_code
+            == 200
         )
-        assert cloned.status_code == 200, cloned.text
         assert model.modelEntities.get("Raw/Copy").entity.quality.checks[0].id == "id_required"
         attributes = payload["attributes"]
         attributes[0]["dateDeleted"] = "2026-01-02T00:00:00Z"
-        deleted = client.patch("/entities/modelEntities/Raw/New", json={"attributes": attributes})
-        assert deleted.status_code == 400, deleted.text
-        assert model.modelEntities.get("Raw/New").entity.attributes[0].dateDeleted is None
+        response = client.patch("/entities/modelEntities/Raw/New", json={"attributes": attributes})
+        assert response.status_code == 200, response.text
+        assert (
+            model.modelEntities.get("Raw/New").entity.quality.model_dump(
+                mode="json", exclude_none=True
+            )
+            == payload["quality"]
+        )
 
 
-def test_native_quality_crud_roundtrips_full_definition(quality_workspace):
-    import copy
-
-    model = factory.get_model()
-    native = {
-        "id": "native",
-        "type": "dqx",
-        "execution": "enforcement",
-        "definition": {
-            "name": "custom display name",
-            "criticality": "warn",
-            "filter": "Id > 0",
-            "check": {
-                "function": "is_in_list",
-                "arguments": {"column": "Id", "allowed": [1, 2, None]},
-            },
-            "user_metadata": {"owner": "team"},
-            "message_expr": "'outside allowed values'",
-        },
-    }
-    quality = {
-        "checks": [native],
-        "settings": {"maxFailureRatePct": 5, "dependencies": ["scipy==1.15.0"]},
-        "referenceDatasets": {
-            "previous": {
-                "entityId": model.modelEntities.get("Raw/Existing").entity.id,
-                "execution": "monitoring",
-            }
-        },
-    }
+def test_arbitrary_tool_dialects_and_nulls_roundtrip_and_can_be_deleted(quality_workspace):
+    factory.get_model()
     url = "/entities/modelEntities/Raw/Existing"
     with TestClient(create_app()) as client:
-        for mode in ("enforcement", "monitoring"):
-            quality["checks"][0]["execution"] = mode
-            # New function names/parameters are not blocked by a DataM8 allow-list.
-            quality["checks"][0]["definition"]["check"]["function"] = "future_native_dqx_function"
-            response = client.patch(url, json={"quality": quality})
-            assert response.status_code == 200, response.text
-            assert client.post("/model/save").status_code == 204
-            assert client.post("/model/reload").status_code == 200
-            persisted = json.loads(
-                (quality_workspace.parent / "model/Raw/Existing.json").read_text()
-            )
-            assert persisted["quality"] == quality
-        previous = copy.deepcopy(quality)
         for definition in [
-            {"check": {"function": " "}},
-            {"check": {"function": "is_in_list", "arguments": []}},
-            {"check": {"function": "is_not_null"}, "user_metadata": {"datam8_check_id": "wrong"}},
+            {
+                "check": {"function": "future_function", "arguments": [1, None]},
+                "criticality": "other_engine_value",
+            },
+            {
+                "assertion": "Id IS NOT NULL",
+                "level": "fatal",
+                "options": {"nested": [True, None]},
+                "nullable": None,
+            },
+            {"check": "arbitrary", "user_metadata": {"datam8_check_id": "not a core concern"}},
         ]:
-            invalid = copy.deepcopy(quality)
-            invalid["checks"][0]["definition"] = definition
-            response = client.patch(url, json={"quality": invalid})
-            assert response.status_code == 400, response.text
-            assert (
-                factory.get_model()
-                .modelEntities.get("Raw/Existing")
-                .entity.quality.model_dump(mode="json", exclude_none=True)
-                == previous
-            )
+            quality = {
+                "checks": [check(definition=definition)],
+                "settings": {"engineOptions": None, "dependencies": {"non_python": "fixture"}},
+                "referenceDatasets": {"file": {"uri": "memory://fixture", "option": None}},
+            }
+            for mode in ["enforcement", "monitoring"]:
+                quality["checks"][0]["execution"] = mode
+                response = client.patch(url, json={"quality": quality})
+                assert response.status_code == 200, response.text
+                assert client.post("/model/save").status_code == 204
+                assert client.post("/model/reload").status_code == 200
+                assert (
+                    json.loads((quality_workspace.parent / "model/Raw/Existing.json").read_text())[
+                        "quality"
+                    ]
+                    == quality
+                )
         quality["checks"] = []
         assert client.patch(url, json={"quality": quality}).status_code == 200
         assert client.post("/model/save").status_code == 204
         assert client.post("/model/reload").status_code == 200
         assert factory.get_model().modelEntities.get("Raw/Existing").entity.quality.checks == []
+
+
+def test_two_target_payloads_interpret_different_definitions_without_core_changes(
+    quality_workspace,
+):
+    from datam8_model.solution import GeneratorTarget
+
+    model = factory.get_model()
+    definitions = [
+        (
+            "engine_a",
+            {"check": {"function": "is_not_null"}},
+            "definition['check']['function']",
+            "is_not_null",
+        ),
+        (
+            "engine_b",
+            {"assertion": {"expression": "Id IS NOT NULL"}},
+            "definition['assertion']['expression']",
+            "Id IS NOT NULL",
+        ),
+    ]
+    for name, _, expression, _ in definitions:
+        directory = quality_workspace.parent / "generate" / name
+        (directory / "__modules").mkdir(parents=True)
+        (directory / (name + ".jinja2")).write_text("{{ data }}")
+        (directory / "__modules/payload.py").write_text(
+            "from pathlib import Path\nfrom datam8.generate import BasePayload, register_payload\n"
+            f"@register_payload('{name}.jinja2')\ndef payload(model, cache):\n"
+            " definition = model.modelEntities.get('Raw/Existing').entity.quality.checks[0].definition\n"
+            f" return [BasePayload(data={expression}, output_path=Path('result.txt'))]\n"
+        )
+        model.solution.generatorTargets.append(
+            GeneratorTarget(name=name, sourcePath=f"generate/{name}", outputPath=f"output/{name}")
+        )
+    with TestClient(create_app()) as client:
+        for name, definition, _, expected in definitions:
+            assert (
+                client.patch(
+                    "/entities/modelEntities/Raw/Existing",
+                    json={"quality": {"checks": [check(definition=definition)]}},
+                ).status_code
+                == 200
+            )
+            response = client.post("/model/generate", json={"target": name, "cleanOutput": True})
+            assert response.status_code == 200, response.text
+            assert (
+                quality_workspace.parent / f"output/{name}/result.txt"
+            ).read_text().strip() == expected

@@ -307,24 +307,30 @@ Contract changes must include:
 
 Model entities optionally carry `quality`, defined by the pinned
 [Quality schema](../datam8-model/schema/quality.json). Existing entity create,
-patch, full-load, save and generation routes carry this field without a new
-endpoint. Structural and semantic validation reject invalid checks before changing
-entity state. Errors use `validation_error` (HTTP 400), with entity `locator`,
-`checkId` where applicable, and `field` in details. Validation covers entity-local
-unique check IDs, active attribute references, numeric/timestamp compatibility,
-bounds and supported execution modes. Source refresh preserves local quality.
+patch, full-load, save and synchronous generation routes round-trip this field;
+there is no new endpoint. A check contains `id`, `execution`, an open object
+`definition`, and optional `description`. No check `type`, engine field,
+function list or tool-specific definition keys are required by the core.
 
-The `dqx` check type carries a native declarative DQX `definition` and an
-`execution` mode. Function names and arbitrary JSON arguments pass through without
-a backend function allow-list; the deployed DQX version validates their signatures.
-Native names, filters, per-column expansion, messages and user metadata are retained.
-The generated metadata key `datam8_check_id` is reserved for stable audit attribution.
-`quality.referenceDatasets` binds named reference DataFrames to an active `entityId`
-or a table name; an optional `execution` limits the binding to that mode. Model-wide
-validation rejects unresolved entity bindings. `quality.settings.dependencies`
-declares additional PyPI requirements for executing quality tasks. These fields
-round-trip through the existing entity routes, save and generation contracts.
+Core validation covers structural requirements, entity-local unique IDs, finite
+JSON values, the common `settings.maxFailureRatePct` bound, nonblank reference
+aliases and active `referenceDatasets.*.entityId` bindings. Errors use
+`validation_error` (HTTP 400), with entity `locator`, `checkId` where applicable,
+and `field` in details. Candidate-local validation rejects invalid edits before
+changing entity state; entity bindings are checked by model-wide validation.
+Source refresh preserves local quality. Attribute renames do not rewrite opaque
+rule definitions; callers must flag them for review.
 
-Generation validates quality before cleaning output. Quality metadata is independent
-of target templates: selected targets decide which executable assets they support.
-Databricks execution is performed by generated assets, not by the HTTP server.
+`settings` permits additional target options. `referenceDatasets` has open binding
+objects with optional common `entityId` and `execution`; the target interprets
+other fields. Definitions and target options retain nested values, including nulls.
+The core does not validate function names/signatures, severity dialects, SQL,
+package requirements, table/URI formats or engine-specific audit metadata.
+
+Generation validates common quality requirements before cleaning output. Targets
+own interpretation, capability validation, generated assets and runtime libraries.
+A target must reject unsupported configuration explicitly. The Databricks sample
+uses DQX; this is not an assumption in the schema, HTTP server or generic editor.
+
+The previous specialized types and `type: "dqx"` require explicit metadata
+conversion. Runtime fallback for legacy definitions is not part of this contract.
