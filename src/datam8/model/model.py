@@ -592,7 +592,7 @@ class Model:
             )
 
         cloned_entity: dict[str, Any] = (
-            self.get_entity_by_locator(to_clone).entity.model_copy().model_dump()
+            self.get_entity_by_locator(to_clone).entity.model_copy().model_dump(mode="json", exclude_none=True)
         )
         new_wrapper = self.add_entity(new_locator, cloned_entity)
 

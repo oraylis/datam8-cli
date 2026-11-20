@@ -24,12 +24,76 @@ from enum import Enum
 from pathlib import Path
 from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, model_validator
+
+
+class QualityReference(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
+    entityId: Annotated[int, Field(ge=0)]
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
+
+    @staticmethod
+    def from_dict(obj: Any) -> QualityReference:
+        return QualityReference.model_validate(obj, from_attributes=False)
+
+    @staticmethod
+    def from_json_file(path: Path) -> QualityReference:
+        """Loads ands validates a json file from the given path.
+
+        Parameters
+        ----------
+        path : Path
+          The path to the json to be loaded into the model.
+
+        Returns
+        -------
+        QualityReference
+            Instantiated and validated pydantic model
+
+        Raises
+        ------
+        ValidationError
+            If the data in the json file does not much the model constraints.
+        """
+        with open(path, encoding="utf-8") as file:
+            model = QualityReference.model_validate_json(file.read())
+
+        return model
+
+    def to_json_file(self, path: Path, mode: str, dump_options: dict[str, Any]) -> None:
+        with open(path, mode, encoding="utf-8") as file:
+            # write content to disk including a final new line
+            file.write(self.model_dump_json(**dump_options) + "\n")
 
 
 class Execution(Enum):
     ENFORCEMENT = "enforcement"
     MONITORING = "monitoring"
+
+
+class Severity(Enum):
+    """
+    Defaults to error when omitted.
+    """
+
+    ERROR = "error"
+    WARNING = "warning"
+
+
+class OnEmpty(Enum):
+    """
+    Only with sql. Defaults to evaluate; no_data reports NO_DATA when checked_rows is zero after technical validation.
+    """
+
+    EVALUATE = "evaluate"
+    NO_DATA = "no_data"
 
 
 class QualityCheck(BaseModel):
@@ -41,10 +105,22 @@ class QualityCheck(BaseModel):
     )
     id: Annotated[str, Field(pattern="^[A-Za-z][A-Za-z0-9_]*$")]
     execution: Execution
-    description: str | None = None
-    definition: Mapping[str, Any]
+    expression: Annotated[str, Field(min_length=1, pattern="\\S")]
     """
-    Opaque rule configuration interpreted and validated by the selected generator target. No tool-specific keys or functions are prescribed by this schema.
+    Boolean SQL expression. Only TRUE passes; FALSE and NULL are violations.
+    """
+    severity: Severity | None = None
+    """
+    Defaults to error when omitted.
+    """
+    description: str | None = None
+    sql: Annotated[str | None, Field(min_length=1, pattern="\\S")] = None
+    """
+    Monitoring-only query returning exactly one row with checked_rows and measured_value. Uses {target} and declared {references.alias} relations.
+    """
+    onEmpty: OnEmpty | None = None
+    """
+    Only with sql. Defaults to evaluate; no_data reports NO_DATA when checked_rows is zero after technical validation.
     """
 
     def to_dict(self) -> dict:
@@ -86,24 +162,35 @@ class QualityCheck(BaseModel):
 
 class Quality(BaseModel):
     """
-    Tool-neutral entity quality configuration. Generator targets interpret rule definitions and target options.
+    Fixed SQL quality contract. Solutions translate expressions and queries to their target runtime.
     """
 
     model_config = ConfigDict(
         extra="forbid",
         populate_by_name=True,
         validate_assignment=True,
-        revalidate_instances="always",
+        revalidate_instances="never",
     )
-    settings: Annotated[Mapping[str, Any] | None, Field(title="QualitySettings")] = None
+    maxFailureRatePct: Annotated[float | None, Field(ge=0.0, le=100.0)] = None
     """
-    Common quality settings plus open target-specific options.
+    Fail after valid target and metric writes when the distinct error-row percentage strictly exceeds this value. Omit to disable the gate.
     """
     checks: Sequence[QualityCheck]
-    referenceDatasets: Mapping[str, Mapping[str, Any]] | None = None
+    references: Mapping[str, QualityReference] | None = None
     """
-    Named data references. Targets interpret binding details; entityId and execution are optional shared reference metadata.
+    Named active model entities, used in monitoring SQL as {references.alias}.
     """
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_quality_contract(cls, value: Any, info: ValidationInfo) -> Any:
+        # Validate raw JSON before Pydantic can coerce numbers or discard nulls.
+        from datam8.quality import validate_quality_value
+
+        if isinstance(value, dict) and info.field_name in cls.model_fields:
+            # Assignment includes defaults, whereas raw JSON must reject explicit nulls.
+            value = {key: item for key, item in value.items() if item is not None}
+        return validate_quality_value(value)
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")

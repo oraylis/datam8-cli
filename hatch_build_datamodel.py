@@ -49,6 +49,7 @@ class GenerateDatamodelHook(interface.BuildHookInterface):
             additional_imports=[
                 "pathlib.Path",
                 "pydantic.model_validator",
+                "pydantic.ValidationInfo",
                 "typing.TypeAlias",
                 "typing.Any",
             ],

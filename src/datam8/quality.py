@@ -1,76 +1,103 @@
-"""Tool-neutral quality invariants shared by editing, validation and generation."""
+"""Fixed SQL quality contract; solutions own SQL capabilities and native mapping."""
 
 from __future__ import annotations
 
 import math
+import re
+from collections.abc import Mapping
 from typing import Any
 
 from datam8.errors import Datam8ValidationError
 
-
-def _finite_json(value: Any) -> bool:
-    if isinstance(value, float):
-        return math.isfinite(value)
-    if isinstance(value, dict):
-        return all(_finite_json(item) for item in value.values())
-    if isinstance(value, list):
-        return all(_finite_json(item) for item in value)
-    return True
+_IDENTIFIER = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
 
 
-def validate_quality(entity: Any, locator: str | None = None) -> None:
-    """Validate common invariants without interpreting a target's rule dialect."""
-    quality = getattr(entity, "quality", None)
-    if quality is None:
-        return
-    value = quality.model_dump(mode="json", exclude_none=True)
-    locator = locator or f"modelEntities/{entity.name}"
-    seen: set[str] = set()
+def validate_quality_value(value: Any, locator: str | None = None) -> dict[str, Any]:
+    """Validate raw values before model coercion, without interpreting SQL."""
+    if hasattr(value, "model_dump"):
+        value = value.model_dump(mode="json", exclude_unset=True)
 
     def reject(message: str, field: str, check_id: str | None = None) -> None:
         raise Datam8ValidationError(
-            message=f"{locator}: {message}",
+            message=f"{locator or 'Quality'}: {message}",
             details={"locator": locator, "checkId": check_id, "field": field},
         )
 
-    if not _finite_json(value):
-        reject("Quality configuration must contain finite JSON values", "quality")
-    settings = value.get("settings", {})
-    if "maxFailureRatePct" in settings:
-        threshold = settings["maxFailureRatePct"]
+    if not isinstance(value, Mapping) or "checks" not in value:
+        reject("Quality requires a checks list", "quality")
+    unknown = set(value) - {"checks", "maxFailureRatePct", "references"}
+    if unknown:
+        reject("Unsupported quality fields: " + ", ".join(sorted(unknown)), "quality")
+    if not isinstance(value["checks"], (list, tuple)):
+        reject("Quality checks must be a list", "quality.checks")
+    if "maxFailureRatePct" in value:
+        threshold = value["maxFailureRatePct"]
         if (
             isinstance(threshold, bool)
             or not isinstance(threshold, (int, float))
+            or not math.isfinite(threshold)
             or not 0 <= threshold <= 100
         ):
             reject(
-                "Failure percentage must be between 0 and 100", "quality.settings.maxFailureRatePct"
+                "Failure percentage must be a finite number between 0 and 100",
+                "quality.maxFailureRatePct",
             )
-    for alias, reference in value.get("referenceDatasets", {}).items():
-        if not alias.strip():
-            reject("Reference aliases must not be blank", "quality.referenceDatasets." + alias)
-        entity_id = reference.get("entityId")
-        if "entityId" in reference and (
-            isinstance(entity_id, bool) or not isinstance(entity_id, int) or entity_id < 0
+    if "references" in value:
+        if not isinstance(value["references"], Mapping):
+            reject("References must be named entity bindings", "quality.references")
+        for alias, binding in value["references"].items():
+            if hasattr(binding, "model_dump"):
+                binding = binding.model_dump(mode="json", exclude_unset=True)
+            if not isinstance(alias, str) or not _IDENTIFIER.fullmatch(alias):
+                reject("Invalid reference alias", "quality.references")
+            field = "quality.references." + alias
+            if not isinstance(binding, Mapping) or set(binding) != {"entityId"}:
+                reject("References require exactly entityId", field)
+            entity_id = binding["entityId"]
+            if isinstance(entity_id, bool) or not isinstance(entity_id, int) or entity_id < 0:
+                reject("Reference entityId must be a nonnegative integer", field)
+    seen: set[str] = set()
+    allowed = {"id", "execution", "expression", "severity", "description", "sql", "onEmpty"}
+    for check in value["checks"]:
+        if hasattr(check, "model_dump"):
+            check = check.model_dump(mode="json", exclude_unset=True)
+        if not isinstance(check, Mapping):
+            reject("Each check must be an object", "quality.checks")
+        check_id = check.get("id")
+        if not isinstance(check_id, str) or not _IDENTIFIER.fullmatch(check_id):
+            reject("Invalid check ID", "quality.checks.id")
+        field = "quality.checks." + check_id
+        if check_id in seen:
+            reject("Duplicate quality check ID '" + check_id + "'", field + ".id", check_id)
+        seen.add(check_id)
+        unknown = set(check) - allowed
+        if unknown:
+            reject("Unsupported check fields: " + ", ".join(sorted(unknown)), field, check_id)
+        if check.get("execution") not in ("enforcement", "monitoring"):
+            reject("Execution must be enforcement or monitoring", field + ".execution", check_id)
+        for key in ("expression", "sql"):
+            if key == "expression" or key in check:
+                if not isinstance(check.get(key), str) or not check[key].strip():
+                    reject(key + " must be a nonblank SQL string", field + "." + key, check_id)
+        if "severity" in check and check["severity"] not in ("error", "warning"):
+            reject("Severity must be error or warning", field + ".severity", check_id)
+        if "description" in check and not isinstance(check["description"], str):
+            reject("Description must be a string", field + ".description", check_id)
+        if "sql" in check and check["execution"] != "monitoring":
+            reject("sql is only allowed for monitoring", field + ".sql", check_id)
+        if "onEmpty" in check and (
+            "sql" not in check or check["onEmpty"] not in ("evaluate", "no_data")
         ):
             reject(
-                "Reference entityId must be a nonnegative integer",
-                "quality.referenceDatasets." + alias,
+                "onEmpty requires sql and must be evaluate or no_data", field + ".onEmpty", check_id
             )
-        if "execution" in reference and reference["execution"] not in ("enforcement", "monitoring"):
-            reject(
-                "Reference execution must be enforcement or monitoring",
-                "quality.referenceDatasets." + alias,
-            )
-    for check in value["checks"]:
-        check_id = check["id"]
-        if check_id in seen:
-            reject(
-                f"Duplicate quality check ID '{check_id}'",
-                f"quality.checks.{check_id}.id",
-                check_id,
-            )
-        seen.add(check_id)
+    return dict(value)
+
+
+def validate_quality(entity: Any, locator: str | None = None) -> None:
+    quality = getattr(entity, "quality", None)
+    if quality is not None:
+        validate_quality_value(quality, locator or f"modelEntities/{entity.name}")
 
 
 def validate_model_quality(model: Any) -> None:
@@ -82,13 +109,13 @@ def validate_model_quality(model: Any) -> None:
         quality = getattr(wrapper.entity, "quality", None)
         if quality is None:
             continue
-        references = quality.model_dump(mode="json", exclude_none=True).get("referenceDatasets", {})
+        references = quality.model_dump(mode="json", exclude_none=True).get("references", {})
         for alias, reference in references.items():
-            if "entityId" in reference and reference["entityId"] not in active_ids:
+            if reference["entityId"] not in active_ids:
                 raise Datam8ValidationError(
                     message=f"{wrapper.locator}: Invalid quality reference '{alias}'",
                     details={
                         "locator": str(wrapper.locator),
-                        "field": "quality.referenceDatasets." + alias,
+                        "field": "quality.references." + alias,
                     },
                 )

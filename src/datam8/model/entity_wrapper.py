@@ -472,7 +472,7 @@ class EntityWrapper[T: b.BaseEntityType](BaseModel):
                     details={"id": self.entity.id, "requestedId": kwargs["id"]},
                 )
         try:
-            new_entity = type(self.entity).model_validate(self.entity.model_dump() | kwargs)
+            new_entity = type(self.entity).model_validate(self.entity.model_dump(mode="json", exclude_none=True) | kwargs)
         except ValidationError as err:
             if isinstance(self.entity, m.ModelEntity) and (
                 "quality" in kwargs or self.entity.quality

@@ -306,31 +306,35 @@ Contract changes must include:
 ## Entity quality requirements
 
 Model entities optionally carry `quality`, defined by the pinned
-[Quality schema](../datam8-model/schema/quality.json). Existing entity create,
-patch, full-load, save and synchronous generation routes round-trip this field;
-there is no new endpoint. A check contains `id`, `execution`, an open object
-`definition`, and optional `description`. No check `type`, engine field,
-function list or tool-specific definition keys are required by the core.
+[Quality schema](../datam8-model/schema/quality.json). Existing create, patch,
+full-load, save and synchronous generation routes support it; no endpoint is added.
+The closed quality object contains `checks`, optional `maxFailureRatePct` and
+optional `references`. Checks may be empty. Each reference is exactly
+`alias: {"entityId": integer}` and refers to an active model entity.
 
-Core validation covers structural requirements, entity-local unique IDs, finite
-JSON values, the common `settings.maxFailureRatePct` bound, nonblank reference
-aliases and active `referenceDatasets.*.entityId` bindings. Errors use
-`validation_error` (HTTP 400), with entity `locator`, `checkId` where applicable,
-and `field` in details. Candidate-local validation rejects invalid edits before
-changing entity state; entity bindings are checked by model-wide validation.
-Source refresh preserves local quality. Attribute renames do not rewrite opaque
-rule definitions; callers must flag them for review.
+A check requires `id`, `execution` (`enforcement` or `monitoring`) and a nonblank
+SQL `expression`. Optional fields are `severity` (`error` by default, or `warning`),
+`description`, monitoring-only `sql`, and `onEmpty` (`evaluate` by default, or
+`no_data`, only with `sql`). Unknown fields and old open definition/settings
+formats are rejected. There is no conversion or implicit compatibility.
 
-`settings` permits additional target options. `referenceDatasets` has open binding
-objects with optional common `entityId` and `execution`; the target interprets
-other fields. Definitions and target options retain nested values, including nulls.
-The core does not validate function names/signatures, severity dialects, SQL,
-package requirements, table/URI formats or engine-specific audit metadata.
+Core validation checks structure before coercion, unique entity-local IDs, a finite
+percentage in [0, 100], field combinations and reference metadata. Booleans and
+numeric strings are not accepted as numbers. Errors use `validation_error` (HTTP
+400), with `locator` where available, `checkId` where applicable, and `field`.
+Invalid candidate edits do not change entity state. Model-wide validation checks
+active reference IDs. Source refresh preserves local quality. Attribute renames
+require review of SQL column references; they do not rewrite SQL automatically.
 
-Generation validates common quality requirements before cleaning output. Targets
-own interpretation, capability validation, generated assets and runtime libraries.
-A target must reject unsupported configuration explicitly. The Databricks sample
-uses DQX; this is not an assumption in the schema, HTTP server or generic editor.
+Only TRUE passes an expression; FALSE and NULL violate it. Targets validate the
+original Boolean type, including for empty inputs. A monitoring query returns
+exactly one row with exactly `checked_rows` (nonnegative BIGINT-compatible integer)
+and `measured_value` (finite number or NULL). `onEmpty` tests `checked_rows = 0`;
+empty row checks remain NO_DATA. Its table placeholders are `{target}` and declared
+`{references.alias}` bindings.
 
-The previous specialized types and `type: "dqx"` require explicit metadata
-conversion. Runtime fallback for legacy definitions is not part of this contract.
+Generation validates common requirements before cleaning output. The solution's
+payloads and templates own SQL capabilities, dialect translation, native rule
+metadata and runtime libraries. Unsupported SQL must fail explicitly. The core
+has no DQX mapping, native function catalogue or SQL execution. A second target
+can consume the same fixed SQL contract through its own payloads/templates.

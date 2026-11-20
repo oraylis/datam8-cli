@@ -47,6 +47,18 @@ class {{ class_name }}({{ base_class }}):{% if comment is defined %}  # {{ comme
 {%- endfor -%}
 
  {{ "" | indent(4) }}
+{%- if class_name == "Quality" %}
+    @model_validator(mode="before")
+    @classmethod
+    def validate_quality_contract(cls, value: Any, info: ValidationInfo) -> Any:
+        # Validate raw JSON before Pydantic can coerce numbers or discard nulls.
+        from datam8.quality import validate_quality_value
+
+        if isinstance(value, dict) and info.field_name in cls.model_fields:
+            # Assignment includes defaults, whereas raw JSON must reject explicit nulls.
+            value = {key: item for key, item in value.items() if item is not None}
+        return validate_quality_value(value)
+{%- endif %}
 {%- if class_name == "ModelRelationship" %}
     @model_validator(mode="after")
     def validate_target_location(self) -> "{{ class_name }}":
