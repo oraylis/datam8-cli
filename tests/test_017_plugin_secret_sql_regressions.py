@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from types import SimpleNamespace
 
 import polars as pl
 import pytest
+from typer.testing import CliRunner
 
 import datam8.secrets as secrets_module
 from datam8 import plugins
 from datam8.api.routes.secrets import SetSecretBody, set_secret
+from datam8.app import app
 from datam8.plugins.builtins.sql_server import SqlServer
 from datam8.plugins.manager import PluginManager
 from datam8.secrets import SecretResolver
@@ -53,6 +56,67 @@ def fake_secret_backend(monkeypatch: pytest.MonkeyPatch):
     SecretResolver.reset_singleton()
     yield store
     SecretResolver.reset_singleton()
+
+
+@pytest.fixture
+def secret_cli_args(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    solution = tmp_path / "Test.dm8s"
+    solution.touch()
+    monkeypatch.setattr(secrets_module.config, "solution_path", solution, raising=False)
+    monkeypatch.setattr(secrets_module.config, "solution_folder_path", tmp_path, raising=False)
+    return ["-s", str(solution), "secrets"]
+
+
+@pytest.mark.parametrize("prefix", ["", "ref://"])
+def test_secret_cli_set_and_check_resolve_the_same_path(
+    prefix: str, secret_cli_args: list[str], fake_secret_backend
+) -> None:
+    path = "datasources/SecretCliFixture/bearer_token"
+    token = "secret-cli-test-token"
+    runner = CliRunner()
+
+    stored = runner.invoke(
+        app, [*secret_cli_args, "set", prefix + path, "--file", "-", "--json"], input=token
+    )
+    assert stored.exit_code == 0, stored.output
+    assert json.loads(stored.stdout) == {"ok": True, "path": path, "stored": True}
+
+    for argument in (path, f"ref://{path}"):
+        checked = runner.invoke(app, [*secret_cli_args, "check", argument, "--json"])
+        assert checked.exit_code == 0, checked.output
+        assert json.loads(checked.stdout) == {
+            "ok": True,
+            "item": {"path": path, "available": True},
+        }
+
+    resolver = SecretResolver()
+    assert resolver.get_secret(f"ref://{path}") == token
+    assert resolver.list_secrets() == [PurePosixPath(path)]
+
+
+def test_secret_cli_add_and_unset_keep_legacy_key_addressable(
+    secret_cli_args: list[str], fake_secret_backend
+) -> None:
+    path = "datasources/SecretCliFixture/bearer_token"
+    legacy_path = f"ref:/{path}"
+    resolver = SecretResolver()
+    resolver.set_secret(legacy_path, "legacy-secret")
+    runner = CliRunner()
+
+    added = runner.invoke(app, [*secret_cli_args, "add", f"ref://{path}"], input="new-secret\n")
+    assert added.exit_code == 0, added.output
+    assert resolver.get_secret(path) == "new-secret"
+    assert resolver.get_secret(legacy_path) == "legacy-secret"
+
+    removed_legacy = runner.invoke(app, [*secret_cli_args, "unset", legacy_path])
+    assert removed_legacy.exit_code == 0, removed_legacy.output
+    assert resolver.get_secret(f"ref://{path}") == "new-secret"
+    assert resolver.list_secrets() == [PurePosixPath(path)]
+
+    removed = runner.invoke(app, [*secret_cli_args, "unset", f"ref://{path}"])
+    assert removed.exit_code == 0, removed.output
+    assert resolver.get_secret(path) is None
+    assert resolver.list_secrets() == []
 
 
 def test_secret_route_upserts_without_duplicate_registry_entries(fake_secret_backend) -> None:

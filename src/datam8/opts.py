@@ -271,4 +271,12 @@ ColLimit = Annotated[
 SchemaName = Annotated[str | None, typer.Option(help="Name of a source schema")]
 TableName = Annotated[str, typer.Argument(help="Name of table in source")]
 
-SecretPath = Annotated[Path, typer.Argument(help="Path to store the secret in the keyring backend")]
+
+def _parse_secret_path(value: str) -> Path:
+    return Path(value.strip().removeprefix("ref://"))
+
+
+SecretPath = Annotated[
+    Path,
+    typer.Argument(parser=_parse_secret_path, help="Secret path, optionally prefixed with ref://"),
+]

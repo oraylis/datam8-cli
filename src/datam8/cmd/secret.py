@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-from pathlib import Path, PurePosixPath
+from pathlib import PurePosixPath
 from typing import Annotated
 
 import typer
@@ -56,7 +56,7 @@ def list(
 
 @app.command()
 def add(
-    path: Annotated[Path, typer.Argument(help="Path to store the secret in the keyring backend")],
+    path: opts.SecretPath,
     solution_path: opts.SolutionPath,
     log_level: opts.LogLevel = opts.LogLevels.WARNING,
     version: opts.Version = False,
@@ -107,7 +107,7 @@ def check(
     from datam8.errors import Datam8NotFoundError
 
     common.main_callback(solution_path, log_level, version)
-    if SecretResolver().get_secret(path.as_posix()) is None:
+    if SecretResolver().get_secret(PurePosixPath(path)) is None:
         raise Datam8NotFoundError(message="Secret is not available")
     if not json_output:
         typer.echo("Secret is available")
@@ -128,7 +128,7 @@ def set_(
     """Set a secret without prompting or echoing the value."""
     common.main_callback(solution_path, log_level, version)
     SecretResolver().set_secret(
-        path.as_posix(), common.input_value(file=file, text=True), force=force
+        PurePosixPath(path), common.input_value(file=file, text=True), force=force
     )
     if not json_output:
         typer.echo(f"Stored secret '{path.as_posix()}'")
