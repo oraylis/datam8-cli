@@ -326,15 +326,17 @@ Invalid candidate edits do not change entity state. Model-wide validation checks
 active reference IDs. Source refresh preserves local quality. Attribute renames
 require review of SQL column references; they do not rewrite SQL automatically.
 
-Only TRUE passes an expression; FALSE and NULL violate it. Targets validate the
-original Boolean type, including for empty inputs. A monitoring query returns
+Expressions reach the target engine unchanged. NULL behavior follows the engine;
+models must express any desired NULL failure, for example `COALESCE(value > 0, FALSE)`.
+SQL validity is not part of core structural validation. A monitoring query returns
 exactly one row with exactly `checked_rows` (nonnegative BIGINT-compatible integer)
 and `measured_value` (finite number or NULL). `onEmpty` tests `checked_rows = 0`;
 empty row checks remain NO_DATA. Its table placeholders are `{target}` and declared
 `{references.alias}` bindings.
 
 Generation validates common requirements before cleaning output. The solution's
-payloads and templates own SQL capabilities, dialect translation, native rule
-metadata and runtime libraries. Unsupported SQL must fail explicitly. The core
+payloads and templates own table bindings, native rule metadata and runtime
+libraries. SQL errors may surface only at execution; empty inputs may not expose
+every invalid rule. The core
 has no DQX mapping, native function catalogue or SQL execution. A second target
 can consume the same fixed SQL contract through its own payloads/templates.

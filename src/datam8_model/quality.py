@@ -89,7 +89,7 @@ class Severity(Enum):
 
 class OnEmpty(Enum):
     """
-    Only with sql. Defaults to evaluate; no_data reports NO_DATA when checked_rows is zero after technical validation.
+    Only with sql. Defaults to evaluate; no_data reports NO_DATA when checked_rows is zero after result validation.
     """
 
     EVALUATE = "evaluate"
@@ -107,7 +107,7 @@ class QualityCheck(BaseModel):
     execution: Execution
     expression: Annotated[str, Field(min_length=1, pattern="\\S")]
     """
-    Boolean SQL expression. Only TRUE passes; FALSE and NULL are violations.
+    Boolean SQL expression passed unchanged to the target engine. Define NULL handling explicitly, for example COALESCE(Amount >= 0, FALSE).
     """
     severity: Severity | None = None
     """
@@ -120,7 +120,7 @@ class QualityCheck(BaseModel):
     """
     onEmpty: OnEmpty | None = None
     """
-    Only with sql. Defaults to evaluate; no_data reports NO_DATA when checked_rows is zero after technical validation.
+    Only with sql. Defaults to evaluate; no_data reports NO_DATA when checked_rows is zero after result validation.
     """
 
     def to_dict(self) -> dict:
@@ -162,7 +162,7 @@ class QualityCheck(BaseModel):
 
 class Quality(BaseModel):
     """
-    Fixed SQL quality contract. Solutions translate expressions and queries to their target runtime.
+    Fixed SQL quality contract. Solutions configure their target runtime and table bindings.
     """
 
     model_config = ConfigDict(
