@@ -77,6 +77,7 @@ def init(
     name: opts.SolutionName,
     solution_path: opts.SolutionPath,
     type_: Annotated[opts.SolutionTypes | None, typer.Option("--type", "-t")] = None,
+    settings: Annotated[str | None, typer.Option("--settings", help="JSON object with initial solution settings.")] = None,
     log_level: opts.LogLevel = opts.LogLevels.INFO,
     version: opts.Version = False,
     json_output: opts.JsonOutput = False,
@@ -86,6 +87,8 @@ def init(
     """
     config.log_level = log_level
     common.version_callback(version)
+    if not name.strip() or name in {".", ".."} or "/" in name or "\\" in name or "\0" in name:
+        raise errors.Datam8ValidationError(message="Solution name must be a valid directory name")
     if type_ is None:
         type_ = (
             opts.SolutionTypes.EMPTY
@@ -107,12 +110,23 @@ def init(
 
     from datam8 import solution
 
+    initial_settings = None
+    if settings is not None:
+        try:
+            initial_settings = json.loads(settings)
+        except json.JSONDecodeError as err:
+            raise errors.Datam8ValidationError(message="--settings must contain valid JSON") from err
+        if not isinstance(initial_settings, dict):
+            raise errors.Datam8ValidationError(message="--settings must be a JSON object")
+
     if type_ == opts.SolutionTypes.EMPTY:
-        solution.init_solution(new_solution_path)
+        solution.init_solution(new_solution_path, initial_settings)
         if not json_output:
             typer.echo(f"Blank solution created at {new_solution_path}")
 
     if type_ == opts.SolutionTypes.SAMPLE:
+        if initial_settings:
+            raise errors.Datam8ValidationError(message="--settings is only supported for empty solutions")
         created_version = solution.init_solution_from_sample(new_solution_path)
         if not json_output:
             typer.echo(f"Sample Solution in version {created_version} created")

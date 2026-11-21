@@ -538,18 +538,35 @@ class ModelSession:
         if op.op == "functions.create":
             assert op.source_code is not None
             transformation = m.ModelTransformation.model_validate(op.data)
-            if any(
-                t.stepNo == transformation.stepNo or t.name == transformation.name
-                for t in wrapper.entity.transformations
-            ):
-                raise errors.Datam8ValidationError(
-                    message="Transformation stepNo or name already exists"
-                )
+            same_step = [
+                (index, item)
+                for index, item in enumerate(wrapper.entity.transformations)
+                if item.stepNo == transformation.stepNo
+            ]
+            same_name = [
+                item for item in wrapper.entity.transformations if item.name == transformation.name
+            ]
+            replace_index = None
+            if same_step or same_name:
+                if (
+                    len(same_step) == 1
+                    and same_step[0][1].name == transformation.name
+                    and same_step[0][1].kind != m.TransformationKind.FUNCTION
+                    and same_name == [same_step[0][1]]
+                ):
+                    replace_index = same_step[0][0]
+                else:
+                    raise errors.Datam8ValidationError(
+                        message="Transformation stepNo or name already exists"
+                    )
             path = self.function_source(wrapper, transformation)
             if path.exists():
                 raise FileExistsError("Function source already exists")
             data = wrapper.entity.model_dump(mode="json")
-            data["transformations"].append(transformation.model_dump(mode="json"))
+            if replace_index is None:
+                data["transformations"].append(transformation.model_dump(mode="json"))
+            else:
+                data["transformations"][replace_index] = transformation.model_dump(mode="json")
             validated = m.ModelEntity.model_validate(data)
             path.parent.mkdir(parents=True, exist_ok=True)
             with path.open("x", encoding="utf-8") as stream:

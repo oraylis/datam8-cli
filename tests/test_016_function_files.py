@@ -268,6 +268,25 @@ def test_api_function_create_and_delete_use_cli_operations(function_solution):
     assert not any(item["name"] == "Created" for item in saved["transformations"])
 
 
+def test_api_function_create_converts_existing_non_function_step(function_solution):
+    client, root, _ = function_solution("clean.py", missing=True)
+    response = client.post(
+        "/functions/1",
+        json={
+            "stepNo": 3,
+            "name": "Builtin",
+            "source": "builtin.py",
+            "sourceCode": "def transform(df):\n    return df\n",
+        },
+    )
+    assert response.status_code == 204, response.text
+    entity = json.loads((root / "Model/Core/Customer.json").read_text(encoding="utf-8"))
+    converted = next(item for item in entity["transformations"] if item["stepNo"] == 3)
+    assert converted["kind"] == "function"
+    assert converted["function"]["source"] == "builtin.py"
+    assert (root / "Model/Core/builtin.py").is_file()
+
+
 def test_api_function_create_rejects_collision_and_non_python_source(function_solution):
     client, root, _ = function_solution("clean.py", missing=True)
     source = root / "Model/Core/created.py"
