@@ -16,18 +16,59 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-from fastapi import APIRouter
-from pydantic import BaseModel
+from pathlib import Path
+from typing import Any
 
-from datam8 import factory, model
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, ConfigDict, Field
+
+from datam8 import config, factory, model, solution
+from datam8.errors import Datam8ValidationError
+from datam8.operations import update_solution_file
 from datam8_model import base as b
 from datam8_model import solution as s
 
 solution_router = APIRouter(prefix="/solution")
 
 
+class CreateSolutionBody(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    save_dir: Path = Field(alias="saveDir")
+    solution_name: str = Field(alias="solutionName", min_length=1)
+    settings: dict[str, Any] = Field(default_factory=dict)
+
+
+@solution_router.post("/new-project")
+async def create_solution(body: CreateSolutionBody) -> dict[str, str]:
+    name = body.solution_name.strip()
+    if not body.save_dir.is_absolute():
+        raise Datam8ValidationError(message="saveDir must be an absolute path")
+    if not name or name in {".", ".."} or "/" in name or "\\" in name or "\0" in name:
+        raise Datam8ValidationError(message="solutionName must be a valid directory name")
+
+    save_dir = body.save_dir.resolve()
+    if save_dir.exists() and (not save_dir.is_dir() or any(save_dir.iterdir())):
+        raise Datam8ValidationError(message="Solution creation needs an empty directory")
+    solution_path = save_dir / f"{name}.dm8s"
+    solution.init_solution(solution_path, body.settings)
+    return {"solutionPath": str(solution_path)}
+
+
 @solution_router.get("")
 async def get_solution() -> s.Solution:
+    return factory.get_model().solution
+
+
+@solution_router.patch("")
+async def update_solution(body: dict[str, Any]) -> s.Solution:
+    model_ = factory.get_model()
+    changed, deleted = model_.get_unsaved_entities()
+    if changed or deleted:
+        raise HTTPException(status_code=409, detail="Save or discard pending model changes first")
+
+    update_solution_file(config.solution_path, body)
+    factory._model = await factory.load_model(config.solution_path)
+    factory._plugin_manager = None
     return factory.get_model().solution
 
 

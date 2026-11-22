@@ -42,14 +42,14 @@ Conversion failures identify the affected path and stop loading.
 The current `create_app().openapi()` exposes these domains (no `/api` prefix):
 
 - `GET /health` (204), `GET /version` (`schemaVersion`, `appVersion`), `GET /config`.
-- `GET /solution`, `GET /solution/full`.
+- `GET|PATCH /solution`, `GET /solution/full`, `POST /solution/new-project`.
 - `GET /entities`, `GET|PUT|PATCH|DELETE /entities/{locator}`, `PUT /entities/clone`,
   `POST /entities/rename`, `POST /entities/move`, `POST /entities/move-single`.
 - `POST /model/save`, `POST /model/reload`, `GET /model/unsaved`.
 - `POST /model/generate`: optional body `{ "target": "...", "cleanOutput": true,
   "payloads": [] }`; synchronous response `{ "target": "...", "outputPath": "...",
   "message": null }`. Uses the currently loaded solution.
-- `/functions/*` for function retrieval, updates and moves.
+- `/functions/*` for function retrieval, creation, updates, deletion and moves.
 - `GET /plugins`, `POST /plugins/reload`, `GET /plugins/{plugin_id}` and its
   `/ui-schema`, `/data-type-mappings`, `/connection-properties` subpaths.
 - `POST /secrets/check`, `PUT /secrets/set`.
@@ -59,6 +59,13 @@ The current `create_app().openapi()` exposes these domains (no `/api` prefix):
 The implemented route surface is authoritative. Workspace selection in browser
 mode reads the solution bound at server startup; entering another path does not
 switch workspaces.
+
+`POST /solution/new-project` creates an empty solution through the backend and
+returns `{ "solutionPath": "..." }`. It accepts an absolute `saveDir`, a
+`solutionName`, and optional initial solution settings (`basePath`, `modelPath`,
+`pluginsPath`, `diagramPath`, and `generatorTargets`). The backend validates the
+settings and creates the referenced directories and default Base entities before
+returning. `schemaVersion` is managed by the backend.
 
 ## Desktop workspace switching
 
@@ -133,6 +140,17 @@ editor. Runtime configuration changes and process failure may require a restart.
   a deleted folder does not remain solely because it contained empty subdirectories.
 - Function source paths are relative to their model entity. Absolute/drive-qualified
   paths, traversal, empty segments and symlink escapes are rejected.
+- `POST /functions/{modelEntityId}` accepts `{ "stepNo": 1, "name": "Clean",
+  "source": "clean.py", "sourceCode": "..." }`; it creates the transformation and
+  source file, or converts a matching non-function step in place, then persists the
+  model. Sources must be relative `.py` paths inside the entity directory, and an
+  existing file is never overwritten.
+- `DELETE /functions/{modelEntityId}/{stepNo|name}` removes the selected transformation,
+  persists the model and deletes its local source file only when no remaining function
+  references it.
+- `PATCH /solution` accepts a partial solution object and writes the validated settings
+  to the `.dm8s` file. `schemaVersion` is managed by migrations. The API reloads the
+  active solution after a successful update and returns 409 when model changes are pending.
 - A bare function filename first resolves beside the entity JSON, then in its
   same-named subdirectory for older solutions. Renaming an entity keeps function
   files in place and persists an explicit relative path when that fallback was used.
@@ -140,9 +158,9 @@ editor. Runtime configuration changes and process failure may require a restart.
   no surviving entity uses. Missing files are tolerated; shared files, sources
   outside the entity directory and unrelated files are retained. Rename/move copies
   count as surviving entities. Only empty directories are removed afterwards.
-- Desktop function creation remains beside the entity JSON and uses the existing
-  file bridge with `createOnly: true`. Existing direct or legacy source files cause
-  a conflict without overwriting content or committing the transformation change.
+- Desktop function source creation, update, move and deletion use the Function API.
+  Existing direct or legacy source files cause a conflict without overwriting
+  content or committing the transformation change.
 - Built-in plugin IDs use `builtin:*`, for example `builtin:SQLServer`.
 - Preview requires the plugin capability `previewData`.
 

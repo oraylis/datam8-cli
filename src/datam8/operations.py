@@ -25,15 +25,16 @@ import json
 from pathlib import Path, PureWindowsPath
 from typing import Any, Literal, cast
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from datam8 import config, errors, factory, functions, source
 from datam8.model import EntityWrapper
-from datam8.model.model import class_from_type
+from datam8.model.model import Model, class_from_type
 from datam8.plugins.navigation import normalize_source_item
 from datam8_model import base as b
 from datam8_model import folder as f
 from datam8_model import model as m
+from datam8_model import solution as s
 
 
 class Operation(BaseModel):
@@ -140,6 +141,30 @@ class Batch(BaseModel):
     operations: list[Operation]
 
 
+def update_solution_file(solution_path: Path, patch: Any) -> s.Solution:
+    """Validate and persist a partial solution descriptor update."""
+    if not isinstance(patch, dict) or not patch:
+        raise errors.Datam8ValidationError(message="Solution update requires a non-empty object")
+    if "schemaVersion" in patch or "schema_version" in patch:
+        raise errors.Datam8ValidationError(message="schemaVersion is managed by migrations")
+
+    from datam8 import parser
+    from datam8.model.model import MODEL_DUMP_OPTIONS
+
+    current = parser.parse_solution_file(solution_path)
+    data = current.model_dump(mode="json", by_alias=True, exclude_unset=True)
+    data.update(patch)
+    try:
+        updated = s.Solution.model_validate(data)
+    except ValidationError as err:
+        raise errors.Datam8ValidationError(
+            message="Invalid solution update",
+            details=err.errors(include_input=False, include_url=False),
+        ) from err
+    updated.to_json_file(solution_path, "w", MODEL_DUMP_OPTIONS)
+    return updated
+
+
 def select_key(value: Any, segment: str | int | dict[str, Any]) -> str | int:
     if isinstance(segment, dict):
         if not isinstance(value, list):
@@ -219,11 +244,16 @@ def schema_for(entity_type: str, at: list | None = None) -> dict:
 
 
 class ModelSession:
-    def __init__(self, solution: Path):
-        config.set_solution(solution)
-        config.lazy = True
-        self.model = factory.create_model()
-        factory._plugin_manager = None
+    def __init__(self, solution: Path | None = None, *, model: Model | None = None):
+        if model is None:
+            if solution is None:
+                raise ValueError("A solution path or loaded model is required")
+            config.set_solution(solution)
+            config.lazy = True
+            self.model = factory.create_model()
+            factory._plugin_manager = None
+        else:
+            self.model = model
 
     def show(self, selector: str, by="locator", at=None, fields: str | None = None):
         from datam8 import opts
@@ -471,9 +501,10 @@ class ModelSession:
             PureWindowsPath(name).drive
             or Path(name).is_absolute()
             or any(p in ("", ".", "..") for p in parts)
+            or Path(name.replace("\\", "/")).suffix.lower() != ".py"
         ):
             raise errors.Datam8ValidationError(
-                message="Function source must be relative to its entity directory"
+                message="Function source must be a relative .py path inside its entity directory"
             )
         path = functions._build_source_file_path(wrapper, transformation)
         if not path.is_relative_to(wrapper.source_file.parent.resolve()):
@@ -507,18 +538,35 @@ class ModelSession:
         if op.op == "functions.create":
             assert op.source_code is not None
             transformation = m.ModelTransformation.model_validate(op.data)
-            if any(
-                t.stepNo == transformation.stepNo or t.name == transformation.name
-                for t in wrapper.entity.transformations
-            ):
-                raise errors.Datam8ValidationError(
-                    message="Transformation stepNo or name already exists"
-                )
+            same_step = [
+                (index, item)
+                for index, item in enumerate(wrapper.entity.transformations)
+                if item.stepNo == transformation.stepNo
+            ]
+            same_name = [
+                item for item in wrapper.entity.transformations if item.name == transformation.name
+            ]
+            replace_index = None
+            if same_step or same_name:
+                if (
+                    len(same_step) == 1
+                    and same_step[0][1].name == transformation.name
+                    and same_step[0][1].kind != m.TransformationKind.FUNCTION
+                    and same_name == [same_step[0][1]]
+                ):
+                    replace_index = same_step[0][0]
+                else:
+                    raise errors.Datam8ValidationError(
+                        message="Transformation stepNo or name already exists"
+                    )
             path = self.function_source(wrapper, transformation)
             if path.exists():
                 raise FileExistsError("Function source already exists")
             data = wrapper.entity.model_dump(mode="json")
-            data["transformations"].append(transformation.model_dump(mode="json"))
+            if replace_index is None:
+                data["transformations"].append(transformation.model_dump(mode="json"))
+            else:
+                data["transformations"][replace_index] = transformation.model_dump(mode="json")
             validated = m.ModelEntity.model_validate(data)
             path.parent.mkdir(parents=True, exist_ok=True)
             with path.open("x", encoding="utf-8") as stream:

@@ -23,6 +23,7 @@ connector plugins and Jinja2 generation. Use `uv`; the CLI entry point is `datam
 
 ## Relevant entry points
 
+- Name new branches with the `feature/` prefix.
 - `src/datam8/cmd/`, `app.py`: CLI commands and registration.
 - `src/datam8/api/`: app/server construction, routes and response envelopes.
 - `src/datam8/source.py`, `plugins/base.py`, `plugins/manager.py`: source metadata,

@@ -254,8 +254,141 @@ def test_noninteractive_init_root_options_and_missing_solution(tmp_path, monkeyp
     )
     assert result.exit_code == 0
     assert json.loads(result.stdout)["item"] == {"basePath": "base"}
+    configured_path = tmp_path / "configured/CLI.dm8s"
+    configured = run(
+        configured_path,
+        "init",
+        "CLI",
+        "--settings",
+        json.dumps({"basePath": "Metadata", "modelPath": "Entities"}),
+    )
+    assert Path(configured["item"]["solutionFile"]).is_file()
+    configured_solution = json.loads(configured_path.read_text(encoding="utf-8"))
+    assert configured_solution["basePath"] == "Metadata"
+    assert configured_solution["modelPath"] == "Entities"
+    assert (configured_path.parent / "Metadata" / "DataSources.json").is_file()
     run(tmp_path / "absent.dm8s", "list", code=3)
     run(path, "init", "CLI", code=2)
+    run(tmp_path / "bad.dm8s", "init", "../bad", code=2)
+
+
+def test_solution_update_cli_and_api_share_validation(workspace, monkeypatch):
+    patch = {
+        "generatorTargets": [
+            {"name": "secondary", "sourcePath": "Generate2", "outputPath": "Output2"}
+        ]
+    }
+    cli_result = run(workspace, "solution", "update", "--data", json.dumps(patch))
+    assert cli_result["item"]["generatorTargets"][0]["name"] == "secondary"
+    original = workspace.read_text(encoding="utf-8")
+    invalid = run(
+        workspace,
+        "solution",
+        "update",
+        "--data",
+        '{"schemaVersion":"invalid"}',
+        code=2,
+    )
+    assert invalid["error"]["code"] == "validation_error"
+    assert workspace.read_text(encoding="utf-8") == original
+
+    config.set_solution(workspace)
+    config.lazy = True
+    monkeypatch.setattr(factory, "_model", None)
+    factory.create_model()
+    client = TestClient(create_app())
+    response = client.patch("/solution", json={"schemaVersion": "invalid"})
+    assert response.status_code == 400
+    assert workspace.read_text(encoding="utf-8") == original
+
+    response = client.patch(
+        "/solution",
+        json={
+            "generatorTargets": [
+                {"name": "api", "sourcePath": "GenerateApi", "outputPath": "OutputApi"}
+            ]
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["generatorTargets"][0]["name"] == "api"
+    assert factory.get_model().solution.generatorTargets[0].name == "api"
+    assert json.loads(workspace.read_text(encoding="utf-8"))["generatorTargets"][0]["name"] == "api"
+
+
+def test_api_create_solution_uses_initial_settings_and_backend_defaults(workspace, tmp_path):
+    config.set_solution(workspace)
+    config.lazy = True
+    factory._model = None
+    client = TestClient(create_app())
+    save_dir = tmp_path / "NewSolution"
+    response = client.post(
+        "/solution/new-project",
+        json={
+            "saveDir": str(save_dir),
+            "solutionName": "Analytics",
+            "settings": {
+                "basePath": "Metadata",
+                "modelPath": "Entities",
+                "pluginsPath": "Connectors",
+                "diagramPath": "Diagrams",
+                "generatorTargets": [
+                    {
+                        "name": "warehouse",
+                        "isDefault": True,
+                        "sourcePath": "Templates/Warehouse",
+                        "outputPath": "Generated/Warehouse",
+                    }
+                ],
+            },
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    solution_path = Path(response.json()["solutionPath"])
+    persisted = json.loads(solution_path.read_text(encoding="utf-8"))
+    assert persisted["basePath"] == "Metadata"
+    assert persisted["modelPath"] == "Entities"
+    assert persisted["pluginsPath"] == "Connectors"
+    assert persisted["diagramPath"] == "Diagrams"
+    assert Path(persisted["generatorTargets"][0]["sourcePath"]).as_posix() == "Templates/Warehouse"
+    assert (save_dir / "Metadata" / "DataSources.json").is_file()
+    assert (save_dir / "Entities").is_dir()
+    assert (save_dir / "Connectors").is_dir()
+    assert (save_dir / "Diagrams").is_dir()
+    assert (save_dir / "Templates/Warehouse").is_dir()
+    assert (save_dir / "Generated/Warehouse").is_dir()
+
+
+@pytest.mark.parametrize(
+    ("settings", "message"),
+    [
+        ({"schemaVersion": "invalid"}, "managed by migrations"),
+        ({"modelPath": "../outside"}, "stay inside the solution directory"),
+    ],
+)
+def test_api_create_solution_rejects_invalid_settings_without_writing(tmp_path, settings, message):
+    client = TestClient(create_app())
+    save_dir = tmp_path / "NewSolution"
+    response = client.post(
+        "/solution/new-project",
+        json={"saveDir": str(save_dir), "solutionName": "Analytics", "settings": settings},
+    )
+    assert response.status_code == 400
+    assert message in response.text
+    assert not save_dir.exists()
+
+
+def test_api_create_solution_requires_empty_directory(tmp_path):
+    client = TestClient(create_app())
+    save_dir = tmp_path / "Existing"
+    save_dir.mkdir()
+    (save_dir / "keep.txt").write_text("keep", encoding="utf-8")
+    response = client.post(
+        "/solution/new-project",
+        json={"saveDir": str(save_dir), "solutionName": "Analytics"},
+    )
+    assert response.status_code == 400
+    assert (save_dir / "keep.txt").read_text(encoding="utf-8") == "keep"
 
 
 def test_secret_stdin_batch_and_plugin_json(workspace, monkeypatch):
