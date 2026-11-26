@@ -313,7 +313,14 @@ optional `references`. Checks may be empty. Each reference is exactly
 `alias: {"entityId": integer}` and refers to an active model entity.
 
 A check requires `id`, `execution` (`enforcement` or `monitoring`) and a nonblank
-SQL `expression`. Optional fields are `severity` (`error` by default, or `warning`),
+SQL `expression` or native `function`, exclusively. Native checks optionally carry
+an `arguments` JSON object, which preserves all nested JSON values; omission means
+an empty argument object at execution. Arguments without a function are rejected.
+Function names and arguments are opaque to core validation and pass unchanged to
+the target runtime. No DQX function list or argument schema is enforced.
+Quality serialization omits absent optional fields rather than emitting null
+definitions. Null values nested inside native arguments are preserved.
+Optional shared fields are `severity` (`error` by default, or `warning`),
 `description`, monitoring-only `sql`, and `onEmpty` (`evaluate` by default, or
 `no_data`, only with `sql`). Unknown fields and old open definition/settings
 formats are rejected. There is no conversion or implicit compatibility.
@@ -339,4 +346,5 @@ payloads and templates own table bindings, native rule metadata and runtime
 libraries. SQL errors may surface only at execution; empty inputs may not expose
 every invalid rule. The core
 has no DQX mapping, native function catalogue or SQL execution. A second target
-can consume the same fixed SQL contract through its own payloads/templates.
+can consume the declarative contract through its own payloads/templates. Native
+DQX names are platform-specific and are not automatically translated to Fabric.

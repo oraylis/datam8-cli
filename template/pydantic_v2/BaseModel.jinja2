@@ -47,6 +47,12 @@ class {{ class_name }}({{ base_class }}):{% if comment is defined %}  # {{ comme
 {%- endfor -%}
 
  {{ "" | indent(4) }}
+{%- if class_name in ("Quality", "QualityCheck") %}
+    @model_serializer(mode="wrap")
+    def serialize_quality_contract(self, handler: Any) -> dict[str, Any]:
+        # Omit absent model fields, but keep opaque nested JSON null arguments.
+        return {key: getattr(item, "value", item) for key, item in handler(self).items() if item is not None}
+{%- endif %}
 {%- if class_name == "Quality" %}
     @model_validator(mode="before")
     @classmethod
@@ -58,6 +64,21 @@ class {{ class_name }}({{ base_class }}):{% if comment is defined %}  # {{ comme
             # Assignment includes defaults, whereas raw JSON must reject explicit nulls.
             value = {key: item for key, item in value.items() if item is not None}
         return validate_quality_value(value)
+{%- endif %}
+{%- if class_name == "QualityCheck" %}
+    @model_validator(mode="before")
+    @classmethod
+    def validate_quality_contract(cls, value: Any, info: ValidationInfo) -> Any:
+        from datam8.quality import validate_quality_value
+
+        if isinstance(value, dict) and info.field_name in cls.model_fields:
+            candidate = {key: item for key, item in value.items() if item is not None}
+            for key in ("execution", "severity", "onEmpty"):
+                if key in candidate:
+                    candidate[key] = getattr(candidate[key], "value", candidate[key])
+            validate_quality_value({"checks": [candidate]})
+            return value
+        return validate_quality_value({"checks": [value]})["checks"][0]
 {%- endif %}
 {%- if class_name == "ModelRelationship" %}
     @model_validator(mode="after")

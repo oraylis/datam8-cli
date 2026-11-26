@@ -24,7 +24,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, model_serializer, model_validator
 
 
 class QualityReference(BaseModel):
@@ -105,9 +105,17 @@ class QualityCheck(BaseModel):
     )
     id: Annotated[str, Field(pattern="^[A-Za-z][A-Za-z0-9_]*$")]
     execution: Execution
-    expression: Annotated[str, Field(min_length=1, pattern="\\S")]
+    expression: Annotated[str | None, Field(min_length=1, pattern="\\S")] = None
     """
     Boolean SQL expression passed unchanged to the target engine. Define NULL handling explicitly, for example COALESCE(Amount >= 0, FALSE).
+    """
+    function: Annotated[str | None, Field(min_length=1, pattern="\\S")] = None
+    """
+    Native function name passed unchanged to the target engine. Mutually exclusive with expression; function availability is validated by the runtime.
+    """
+    arguments: Mapping[str, Any] | None = None
+    """
+    Opaque native function arguments, including nested JSON values. Only with function; omitted arguments execute as an empty object.
     """
     severity: Severity | None = None
     """
@@ -122,6 +130,29 @@ class QualityCheck(BaseModel):
     """
     Only with sql. Defaults to evaluate; no_data reports NO_DATA when checked_rows is zero after result validation.
     """
+
+    @model_serializer(mode="wrap")
+    def serialize_quality_contract(self, handler: Any) -> dict[str, Any]:
+        # Omit absent model fields, but keep opaque nested JSON null arguments.
+        return {
+            key: getattr(item, "value", item)
+            for key, item in handler(self).items()
+            if item is not None
+        }
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_quality_contract(cls, value: Any, info: ValidationInfo) -> Any:
+        from datam8.quality import validate_quality_value
+
+        if isinstance(value, dict) and info.field_name in cls.model_fields:
+            candidate = {key: item for key, item in value.items() if item is not None}
+            for key in ("execution", "severity", "onEmpty"):
+                if key in candidate:
+                    candidate[key] = getattr(candidate[key], "value", candidate[key])
+            validate_quality_value({"checks": [candidate]})
+            return value
+        return validate_quality_value({"checks": [value]})["checks"][0]
 
     def to_dict(self) -> dict:
         return self.model_dump(by_alias=True, exclude_unset=True, mode="json")
@@ -162,7 +193,7 @@ class QualityCheck(BaseModel):
 
 class Quality(BaseModel):
     """
-    Fixed SQL quality contract. Solutions configure their target runtime and table bindings.
+    Declarative SQL or native function quality checks. Solutions configure their target runtime and table bindings.
     """
 
     model_config = ConfigDict(
@@ -180,6 +211,15 @@ class Quality(BaseModel):
     """
     Named active model entities, used in monitoring SQL as {references.alias}.
     """
+
+    @model_serializer(mode="wrap")
+    def serialize_quality_contract(self, handler: Any) -> dict[str, Any]:
+        # Omit absent model fields, but keep opaque nested JSON null arguments.
+        return {
+            key: getattr(item, "value", item)
+            for key, item in handler(self).items()
+            if item is not None
+        }
 
     @model_validator(mode="before")
     @classmethod

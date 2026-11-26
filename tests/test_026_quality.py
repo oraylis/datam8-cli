@@ -25,6 +25,104 @@ def check(**patch):
     }
 
 
+def test_native_json_schema_and_pydantic_roundtrip():
+    from pathlib import Path
+
+    from jsonschema import Draft7Validator
+
+    from datam8.errors import Datam8ValidationError
+    from datam8_model.quality import Quality, QualityCheck
+
+    schema = json.loads(
+        (Path(__file__).parents[1] / "datam8-model/schema/quality.json").read_text()
+    )
+    validator = Draft7Validator(schema)
+    native = {"id": "native", "execution": "enforcement", "function": "future_dqx_function"}
+    nested = {
+        "flag": False,
+        "number": 2.5,
+        "text": "keep  spaces",
+        "list": [None, {"nested": [True, 0]}],
+    }
+    valid = [
+        check(),
+        native,
+        {**native, "arguments": nested},
+        {**native, "arguments": {}},
+        {**native, "execution": "monitoring", "sql": "SELECT 1", "onEmpty": "no_data"},
+    ]
+    invalid = [
+        {**native, "expression": "Id > 0"},
+        {"id": "missing", "execution": "enforcement"},
+        check(arguments={}),
+        {**native, "function": " "},
+        {**native, "function": None},
+        {**native, "arguments": None},
+        {**native, "arguments": []},
+        {**native, "unknown": 1},
+    ]
+    for rule in valid + invalid:
+        value = {"checks": [rule]}
+        assert validator.is_valid(value) == (rule in valid)
+        if rule in valid:
+            parsed = Quality.model_validate_json(json.dumps(value))
+            assert parsed.model_dump(mode="json", exclude_unset=True) == value
+            assert Quality.from_dict(parsed.to_dict()).to_dict() == value
+            assert QualityCheck.from_dict(rule).to_dict() == rule
+            assert Quality.model_validate(parsed.model_dump()).to_dict() == value
+            parsed.checks[0].description = "Updated metadata"
+            assert parsed.checks[0].description == "Updated metadata"
+            assert parsed.checks[0].execution.value == rule["execution"]
+        else:
+            with pytest.raises((ValueError, Datam8ValidationError)):
+                Quality.model_validate(value)
+            with pytest.raises((ValueError, Datam8ValidationError)):
+                QualityCheck.model_validate(rule)
+
+
+def test_native_save_reload_clone_and_unrelated_patch_preserve_arguments(quality_workspace):
+    factory.get_model()
+    native = {
+        "id": "unique",
+        "execution": "enforcement",
+        "function": "is_unique",
+        "arguments": {
+            "columns": ["Id"],
+            "nulls_distinct": True,
+            "opaque": {"null": None, "list": [False, 2.5, "x"]},
+        },
+    }
+    quality = {"checks": [check(), native]}
+    with TestClient(create_app()) as client:
+        url = "/entities/modelEntities/Raw/Existing"
+        response = client.patch(url, json={"quality": quality})
+        assert response.status_code == 200, response.text
+        assert response.json()["item"]["entity"]["quality"] == quality
+        assert client.post("/model/save").status_code == 204
+        assert client.post("/model/reload").status_code == 200
+        loaded = client.get("/solution/full")
+        assert loaded.status_code == 200, loaded.text
+        assert (
+            next(
+                w["entity"]["quality"]
+                for w in loaded.json()["model_entities"]
+                if w["entity"]["name"] == "Existing"
+            )
+            == quality
+        )
+        assert client.patch(url, json={"description": "Preserve quality"}).status_code == 200
+        response = client.put(
+            "/entities/clone",
+            json={"locator": "modelEntities/Raw/Existing", "newLocator": "modelEntities/Raw/Copy"},
+        )
+        assert response.status_code == 200, response.text
+        assert factory.get_model().modelEntities.get("Raw/Copy").entity.quality.to_dict() == quality
+    assert (
+        json.loads((quality_workspace.parent / "model/Raw/Existing.json").read_text())["quality"]
+        == quality
+    )
+
+
 def test_fixed_quality_validation_is_atomic_before_coercion(quality_workspace):
     model = factory.get_model()
     quality = {"checks": [check()], "maxFailureRatePct": 5}
@@ -35,6 +133,18 @@ def test_fixed_quality_validation_is_atomic_before_coercion(quality_workspace):
             {"checks": [check(), check()]},
             {"checks": [check(expression="  ")]},
             {"checks": [check(definition={})]},
+            {"checks": [check(function="is_not_null")]},
+            {"checks": [check(arguments={})]},
+            {
+                "checks": [
+                    {
+                        "id": "native",
+                        "execution": "enforcement",
+                        "function": "is_not_null",
+                        "arguments": [],
+                    }
+                ]
+            },
             {"checks": [check(severity="warn")]},
             {"checks": [check(severity=None)]},
             {"checks": [check(execution="unknown")]},

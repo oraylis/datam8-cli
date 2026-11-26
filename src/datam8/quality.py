@@ -1,4 +1,4 @@
-"""Fixed SQL quality contract; solutions own SQL capabilities and native mapping."""
+"""Structural quality contract; target engines interpret SQL and native functions."""
 
 from __future__ import annotations
 
@@ -57,7 +57,17 @@ def validate_quality_value(value: Any, locator: str | None = None) -> dict[str, 
             if isinstance(entity_id, bool) or not isinstance(entity_id, int) or entity_id < 0:
                 reject("Reference entityId must be a nonnegative integer", field)
     seen: set[str] = set()
-    allowed = {"id", "execution", "expression", "severity", "description", "sql", "onEmpty"}
+    allowed = {
+        "id",
+        "execution",
+        "expression",
+        "function",
+        "arguments",
+        "severity",
+        "description",
+        "sql",
+        "onEmpty",
+    }
     for check in value["checks"]:
         if hasattr(check, "model_dump"):
             check = check.model_dump(mode="json", exclude_unset=True)
@@ -75,10 +85,20 @@ def validate_quality_value(value: Any, locator: str | None = None) -> dict[str, 
             reject("Unsupported check fields: " + ", ".join(sorted(unknown)), field, check_id)
         if check.get("execution") not in ("enforcement", "monitoring"):
             reject("Execution must be enforcement or monitoring", field + ".execution", check_id)
-        for key in ("expression", "sql"):
-            if key == "expression" or key in check:
+        if ("expression" in check) == ("function" in check):
+            reject("Exactly one of expression or function is required", field, check_id)
+        if "arguments" in check and (
+            "function" not in check or not isinstance(check["arguments"], dict)
+        ):
+            reject(
+                "arguments requires function and must be a JSON object",
+                field + ".arguments",
+                check_id,
+            )
+        for key in ("expression", "function", "sql"):
+            if key in check:
                 if not isinstance(check.get(key), str) or not check[key].strip():
-                    reject(key + " must be a nonblank SQL string", field + "." + key, check_id)
+                    reject(key + " must be a nonblank string", field + "." + key, check_id)
         if "severity" in check and check["severity"] not in ("error", "warning"):
             reject("Severity must be error or warning", field + ".severity", check_id)
         if "description" in check and not isinstance(check["description"], str):
